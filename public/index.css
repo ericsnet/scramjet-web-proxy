@@ -1,0 +1,435 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap");
+
+:root {
+	--bg: #0b0f14;
+	--panel: #111821;
+	--panel-2: #0d141c;
+	--border: #24303f;
+	--border-strong: #334155;
+	--text: #e6edf5;
+	--muted: #94a7bd;
+	--dim: #6b7f95;
+	--accent: #3b82f6;
+	--accent-2: #60a5fa;
+	--error: #f87171;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	min-height: 100%;
+	margin: 0;
+}
+
+body {
+	font-family: "Inter", system-ui, -apple-system, sans-serif;
+	background: var(--bg);
+	color: var(--text);
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+}
+
+::selection {
+	background: rgba(59, 130, 246, 0.35);
+}
+
+#landing {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+}
+
+.hero {
+	width: min(720px, calc(100% - 40px));
+	margin: clamp(56px, 13vh, 120px) auto 56px;
+	text-align: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.brand-mark {
+	width: 60px;
+	height: 60px;
+	border-radius: 14px;
+	overflow: hidden;
+	margin-bottom: 22px;
+	background: #0f1722;
+	border: 1px solid var(--border);
+}
+
+.brand-mark svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+h1 {
+	font-size: clamp(38px, 6vw, 58px);
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	line-height: 1.05;
+	margin: 0 0 14px;
+}
+
+h1 span {
+	color: var(--accent-2);
+}
+
+.subtitle {
+	color: var(--muted);
+	font-size: 15px;
+	line-height: 1.65;
+	margin: 0 auto 30px;
+	max-width: 520px;
+}
+
+.search {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	max-width: 640px;
+	padding: 7px;
+	border-radius: 12px;
+	background: var(--panel);
+	border: 1px solid var(--border);
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search:focus-within {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+
+.search-icon {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	flex: 0 0 auto;
+	color: var(--dim);
+}
+
+.search-icon svg {
+	width: 18px;
+	height: 18px;
+}
+
+.search input {
+	flex: 1;
+	min-width: 0;
+	background: none;
+	border: none;
+	outline: none;
+	color: var(--text);
+	font-family: inherit;
+	font-size: 15px;
+	padding: 10px 2px;
+}
+
+.search input::placeholder {
+	color: #5e7188;
+}
+
+.search button {
+	flex: 0 0 auto;
+	height: 40px;
+	padding: 0 22px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--accent);
+	color: #fff;
+	font-family: inherit;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.search button:hover {
+	background: #2f6fdd;
+}
+
+.quick {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 18px;
+}
+
+.quick a {
+	color: var(--muted);
+	text-decoration: none;
+	font-size: 13px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 6px 11px;
+	background: var(--panel-2);
+}
+
+.quick a:hover {
+	color: var(--text);
+	border-color: var(--border-strong);
+}
+
+.error {
+	color: var(--error);
+	font-size: 14px;
+	white-space: pre-wrap;
+	margin: 20px 0 0;
+	max-width: 640px;
+}
+
+#sj-error-code {
+	display: none;
+}
+
+.notice {
+	color: var(--dim);
+	font-size: 12.5px;
+	line-height: 1.6;
+	margin: 30px auto 0;
+	max-width: 520px;
+}
+
+/* ------------------------------ sesión ------------------------------ */
+
+.session-bar {
+	position: fixed;
+	top: 14px;
+	right: 16px;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 13px;
+	color: var(--muted);
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 6px 10px;
+}
+
+.session-bar[hidden] {
+	display: none;
+}
+
+.session-bar .avatar {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 6px;
+	background: var(--accent);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.session-bar .divider {
+	width: 1px;
+	height: 14px;
+	background: var(--border);
+}
+
+.session-bar a {
+	color: var(--accent-2);
+	text-decoration: none;
+}
+
+.session-bar a:hover {
+	text-decoration: underline;
+}
+
+.session-bar .inline-form {
+	margin: 0;
+}
+
+.session-bar button {
+	background: none;
+	border: 0;
+	padding: 0;
+	color: var(--accent-2);
+	font: inherit;
+	cursor: pointer;
+}
+
+.session-bar button:hover {
+	text-decoration: underline;
+}
+
+/* ------------------------------ navegación ------------------------------ */
+
+#sj-frame-wrapper {
+	position: fixed;
+	inset: 0;
+	z-index: 20;
+	display: none;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px;
+	background: #080c11;
+}
+
+.toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px;
+	border-radius: 10px;
+	background: var(--panel);
+	border: 1px solid var(--border);
+	flex-wrap: wrap;
+}
+
+.toolbar .home {
+	width: 38px;
+	height: 38px;
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--panel-2);
+	color: var(--text);
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.toolbar .home:hover {
+	border-color: var(--border-strong);
+}
+
+.search.compact {
+	flex: 1;
+	min-width: 220px;
+	max-width: none;
+	padding: 3px;
+	border-radius: 8px;
+}
+
+.search.compact .search-icon {
+	width: 28px;
+}
+
+.search.compact .search-icon svg {
+	width: 15px;
+	height: 15px;
+}
+
+.search.compact input {
+	font-size: 14px;
+	padding: 8px 2px;
+}
+
+.search.compact button {
+	height: 32px;
+	padding: 0 15px;
+	font-size: 13px;
+	border-radius: 6px;
+}
+
+#sj-frame-url {
+	flex: 1 1 100%;
+	font-family: "JetBrains Mono", monospace;
+	font-size: 11.5px;
+	color: var(--dim);
+	padding: 1px 5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#sj-frame {
+	flex: 1;
+	width: 100%;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: #0b0f14;
+}
+
+/* ------------------------------ pie ------------------------------ */
+
+footer {
+	margin-top: auto;
+	padding: 24px 20px;
+}
+
+footer > div {
+	display: flex;
+	justify-content: center;
+	gap: 18px;
+	flex-wrap: wrap;
+}
+
+footer a,
+footer span {
+	color: var(--dim);
+	font-size: 12px;
+	text-decoration: none;
+}
+
+footer a:hover {
+	color: var(--muted);
+	text-decoration: underline;
+}
+
+/* ------------------------------ responsive ------------------------------ */
+
+@media (max-width: 640px) {
+	.hero {
+		margin-top: 32px;
+		width: calc(100% - 28px);
+	}
+
+	.brand-mark {
+		width: 52px;
+		height: 52px;
+		margin-bottom: 16px;
+	}
+
+	h1 {
+		font-size: clamp(36px, 12vw, 48px);
+	}
+
+	.search button {
+		padding: 0 17px;
+	}
+
+	.session-bar {
+		position: static;
+		margin: 12px auto 0;
+		width: max-content;
+		max-width: calc(100% - 24px);
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	#sj-frame-wrapper {
+		padding: 5px;
+		gap: 5px;
+	}
+
+	.toolbar {
+		padding: 5px;
+		gap: 5px;
+	}
+
+	.toolbar .home {
+		width: 34px;
+		height: 34px;
+	}
+
+	.search.compact {
+		min-width: 140px;
+	}
+}

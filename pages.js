@@ -1,0 +1,956 @@
+export function esc(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
+}
+
+const LOGO = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <rect width="64" height="64" rx="16" fill="#0b1017"/>
+  <path d="M14 19c7-3 13-2 18 2v26c-5-4-11-5-18-2z" fill="#3b82f6"/>
+  <path d="M50 19c-7-3-13-2-18 2v26c5-4 11-5 18-2z" fill="#60a5fa"/>
+  <path d="M32 21v26" stroke="#0b1017" stroke-width="3"/>
+  <path d="M18 25c4-1 8-1 11 1" stroke="#0b1017" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+  <path d="M46 25c-4-1-8-1-11 1" stroke="#0b1017" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+</svg>`;
+
+const CSS = `
+:root {
+  --bg:#0b0f14; --soft:#111821; --input:#151e29; --border:#243244;
+  --text:#e6edf5; --muted:#8b9bb0; --accent:#3b82f6; --accent2:#1d4ed8;
+  --error:#f87171; --ok:#4ade80;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{min-height:100%;margin:0}
+body{
+  font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;
+  background:radial-gradient(900px 500px at 50% -10%,#16324f 0,transparent 60%),var(--bg);
+  color:var(--text); display:flex; flex-direction:column; min-height:100vh;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.topbar{
+  display:flex;align-items:center;gap:14px;justify-content:flex-end;
+  padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(10,15,21,.7);
+  font-size:14px;flex-wrap:wrap;
+}
+.topbar .brand{margin-right:auto;font-weight:700;letter-spacing:-.02em}
+.topbar .brand span{color:var(--accent)}
+.topbar .who{color:var(--muted)}
+.inline{display:inline;margin:0}
+.link{background:none;border:0;color:var(--accent);font:inherit;cursor:pointer;padding:0}
+.link:hover{text-decoration:underline}
+.wrap{width:min(860px,calc(100% - 32px));margin:40px auto 60px;flex:1}
+.card{
+  background:var(--soft);border:1px solid var(--border);border-radius:16px;
+  padding:28px;box-shadow:0 18px 50px rgba(0,0,0,.25);
+}
+.card + .card{margin-top:22px}
+h1{font-size:26px;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:17px;margin:0 0 14px}
+p{line-height:1.6}
+.muted{color:var(--muted);font-size:14px;margin:0 0 22px}
+label{display:block;font-size:13px;color:var(--muted);margin:16px 0 7px}
+input,select{
+  width:100%;background:var(--input);border:1px solid var(--border);border-radius:10px;
+  color:var(--text);font:inherit;font-size:15px;padding:11px 13px;outline:none;
+}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.16)}
+button.primary{
+  width:100%;margin-top:22px;background:var(--accent);color:#fff;border:0;border-radius:10px;
+  font:inherit;font-weight:600;font-size:15px;padding:12px 16px;cursor:pointer;
+}
+button.primary:hover{background:var(--accent2)}
+button.small{
+  background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:8px;
+  font:inherit;font-size:13px;padding:7px 11px;cursor:pointer;white-space:nowrap;
+}
+a.small{
+  display:inline-flex;align-items:center;background:var(--input);color:var(--text);
+  border:1px solid var(--border);border-radius:8px;font-size:13px;padding:7px 11px;
+  white-space:nowrap;text-decoration:none;
+}
+a.small:hover{text-decoration:none;border-color:#3b4d66}
+button.small:hover{border-color:#3b4d66}
+button.danger{color:#fecaca;border-color:#7f1d1d;background:#1f1113}
+button.danger:hover{border-color:#b91c1c}
+button:disabled{opacity:.45;cursor:not-allowed}
+.msg{margin:18px 0 0;font-size:14px}
+.msg.error{color:var(--error)}
+.msg.ok{color:var(--ok)}
+.hint{font-size:12.5px;color:#6f7f93;margin-top:10px}
+.badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  border-radius:999px;padding:3px 9px;border:1px solid var(--border);color:var(--muted)}
+.badge.admin{color:#bfdbfe;border-color:#1e40af;background:#101c33}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{color:var(--muted);font-weight:500;text-align:left;font-size:12px;text-transform:uppercase;
+  letter-spacing:.06em;padding:0 10px 10px}
+td{padding:12px 10px;border-top:1px solid var(--border);vertical-align:middle}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.actions form{display:flex;gap:6px;align-items:center}
+.actions input{width:150px;padding:7px 9px;font-size:13px}
+.actions select{width:auto;padding:7px 9px;font-size:13px}
+.pw-row{display:flex;gap:8px;align-items:center}
+.pw-row input{flex:1;min-width:0}
+.scroll{overflow-x:auto}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.badge.blocked{color:#fecaca;border-color:#7f1d1d;background:#1f1113}
+.user{border:1px solid var(--border);border-radius:12px;padding:14px;background:rgba(21,30,41,.5)}
+.user + .user{margin-top:12px}
+.user-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.user-head .meta{color:var(--muted);font-size:12.5px;margin-left:auto}
+.user .actions input{width:160px}
+.activity{list-style:none;margin:0;padding:0}
+.activity li{display:flex;gap:14px;padding:11px 0;border-top:1px solid var(--border);font-size:14px;align-items:baseline}
+.activity li:first-child{border-top:0}
+.activity .when{color:var(--muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.activity .who{color:var(--accent);font-size:12.5px;font-weight:600;white-space:nowrap}
+.activity .what{min-width:0;word-break:break-all}
+.activity .query{color:var(--ok);font-size:12.5px;display:block}
+.filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.filter select{width:auto;min-width:180px}
+.empty{color:var(--muted);padding:20px 0}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{margin-top:24px}.card{padding:20px}
+  .activity li{flex-wrap:wrap;gap:4px}.user-head .meta{margin-left:0;width:100%}}
+footer{padding:0 20px 22px;text-align:center;color:#5b6b80;font-size:12px}
+
+/* ---- acabado visual ---- */
+body{
+  position:relative;overflow-x:hidden;
+  background:var(--bg);
+}
+body::before{display:none}
+.topbar,.wrap,footer{position:relative;z-index:1}
+.topbar{
+  background:var(--soft);
+  border-bottom:1px solid var(--border);
+  font-size:13.5px;
+}
+.topbar .brand{display:flex;align-items:center;gap:9px;font-size:15px;letter-spacing:-.02em}
+.topbar .brand-icon{display:inline-flex;width:24px;height:24px;border-radius:6px;overflow:hidden}
+.topbar .brand-icon svg{width:100%;height:100%;display:block}
+.topbar a{color:var(--muted);transition:color .15s}
+.topbar a:hover{color:var(--text);text-decoration:none}
+.topbar .who{color:var(--muted)}
+.topbar .link{color:var(--accent)}
+.card{
+  background:var(--soft);
+  border:1px solid var(--border);
+  border-radius:14px;
+  box-shadow:none;
+}
+h1{letter-spacing:-.03em}
+.login-card{max-width:430px;margin:0 auto;text-align:center}
+.login-card form{text-align:left}
+.login-logo{width:58px;height:58px;margin:0 auto 16px;border-radius:14px;overflow:hidden;
+  border:1px solid var(--border)}
+.login-logo svg{display:block;width:100%;height:100%}
+input,select{background:var(--input);transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus{box-shadow:0 0 0 3px rgba(59,130,246,.14)}
+button.primary{
+  background:var(--accent);
+  transition:background .15s;
+}
+button.primary:hover{background:#2f6fdd}
+button.small,a.small{background:var(--input);transition:border-color .15s}
+button.small:hover,a.small:hover{border-color:var(--border-strong)}
+.msg{padding:10px 13px;border-radius:8px;border:1px solid transparent}
+.msg.error{background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25)}
+.msg.ok{background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.22)}
+.user{background:var(--soft);transition:border-color .15s}
+.user:hover{border-color:var(--border-strong)}
+.badge.admin{box-shadow:none}
+a{color:var(--accent-2)}
+footer{color:var(--dim)}
+@media(prefers-reduced-motion:reduce){button.primary,.user{transition:none}}
+
+/* ---- paneles nuevos ---- */
+.tabs{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 20px;padding:6px;border:1px solid var(--border);
+  border-radius:14px;background:rgba(17,25,35,.55);backdrop-filter:blur(10px)}
+.tabs a{padding:8px 13px;border-radius:9px;color:var(--muted);font-size:13px;text-decoration:none;
+  transition:background .15s,color .15s}
+.tabs a:hover{color:var(--text);background:rgba(59,130,246,.08)}
+.tabs a.active{color:#fff;background:linear-gradient(180deg,#3b82f6,#2563eb);
+  box-shadow:0 8px 18px -10px rgba(37,99,235,.9)}
+textarea{width:100%;background:linear-gradient(180deg,#141e29,#111923);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font:inherit;font-size:14px;padding:10px 12px;outline:none;
+  resize:vertical;min-height:80px}
+textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.13)}
+.check{display:flex;align-items:center;gap:9px;margin:14px 0;color:var(--muted);font-size:14px}
+.check input{width:16px;height:16px;accent-color:var(--accent)}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.mono{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#94a9c1}
+.warn{margin:14px 0;padding:11px 13px;border-radius:10px;border:1px solid rgba(251,191,36,.25);
+  background:rgba(251,191,36,.07);color:#fcd34d;font-size:13px}
+.user-stats{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;margin:2px 0 12px}
+.user-stats b{color:var(--text);font-weight:600}
+details.more{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+details.more summary{cursor:pointer;color:var(--accent-2,#60a5fa);font-size:13px}
+details.more[open] summary{margin-bottom:10px}
+.link-row{display:grid;grid-template-columns:1fr 1.5fr auto;gap:8px;align-items:center;margin-bottom:8px}
+.link-row input{padding:8px 10px;font-size:13px}
+.session-list{list-style:none;margin:0;padding:0}
+.session-list li{display:flex;gap:14px;align-items:center;justify-content:space-between;
+  padding:12px 0;border-top:1px solid var(--border);flex-wrap:wrap}
+.session-list li:first-child{border-top:0}
+.session-list .info{min-width:0;flex:1}
+.session-list .meta{color:var(--muted);font-size:12px;margin-top:3px;display:flex;gap:12px;flex-wrap:wrap}
+.badge.current{color:#bbf7d0;border-color:#166534;background:#0d1f14}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat{border:1px solid var(--border);border-radius:14px;padding:14px 16px;
+  background:linear-gradient(180deg,rgba(21,30,41,.6),rgba(13,20,28,.6))}
+.stat .k{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.07em}
+.stat .v{font-size:21px;font-weight:700;letter-spacing:-.02em;margin-top:5px}
+.stat .v small{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;padding:12px;
+  overflow:auto;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#93a7bd;max-height:260px}
+.section{margin-top:26px;padding-top:4px}
+.section h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+  margin:0 0 6px;font-weight:600}
+@media(max-width:640px){.field-grid{grid-template-columns:1fr}.link-row{grid-template-columns:1fr}
+  .tabs a{font-size:12px;padding:7px 10px}}
+`;
+
+function shell(title, body, { topbar = "" } = {}) {
+	return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${esc(title)}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>${CSS}</style>
+</head>
+<body>
+${topbar}
+<main class="wrap">${body}</main>
+<footer>Proxy Web</footer>
+</body>
+</html>`;
+}
+
+function topbar(user) {
+	const admin = user?.role === "admin"
+		? '<a href="/admin">Administración</a>'
+		: "";
+	return `<header class="topbar">
+  <div class="brand"><span class="brand-icon">${LOGO}</span>Proxy <span>Web</span></div>
+  <a href="/">Proxy</a>
+  <a href="/account">Mi cuenta</a>
+  ${admin}
+  <span class="who">${esc(user?.username || "")} · ${user?.role === "admin" ? "administrador" : "usuario"}</span>
+  <form method="post" action="/logout" class="inline"><button class="link" type="submit">Salir</button></form>
+</header>`;
+}
+
+const ADMIN_TABS = [
+	["users", "/admin", "Usuarios"],
+	["sessions", "/admin/sessions", "Sesiones"],
+	["activity", "/admin/activity", "Actividad"],
+	["audit", "/admin/audit", "Auditoría"],
+	["settings", "/admin/settings", "Ajustes"],
+	["system", "/admin/system", "Sistema"],
+];
+
+function adminTabs(active) {
+	const links = ADMIN_TABS.map(
+		([key, href, label]) =>
+			`<a href="${href}"${key === active ? ' class="active"' : ""}>${label}</a>`,
+	).join("");
+	return `<nav class="tabs">${links}</nav>`;
+}
+
+function fmtBytes(bytes) {
+	const n = Number(bytes) || 0;
+	if (n < 1024) return `${n} B`;
+	const units = ["KB", "MB", "GB", "TB"];
+	let value = n / 1024;
+	let i = 0;
+	while (value >= 1024 && i < units.length - 1) {
+		value /= 1024;
+		i++;
+	}
+	return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[i]}`;
+}
+
+function fmtDuration(seconds) {
+	const s = Math.max(0, Math.floor(Number(seconds) || 0));
+	const days = Math.floor(s / 86400);
+	const hours = Math.floor((s % 86400) / 3600);
+	const mins = Math.floor((s % 3600) / 60);
+	if (days) return `${days} d ${hours} h`;
+	if (hours) return `${hours} h ${mins} min`;
+	return `${mins} min`;
+}
+
+function toLocalInput(iso) {
+	if (!iso) return "";
+	try {
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime())) return "";
+		const pad = (n) => String(n).padStart(2, "0");
+		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+			d.getHours(),
+		)}:${pad(d.getMinutes())}`;
+	} catch {
+		return "";
+	}
+}
+
+export function loginPage({ next = "/", error = "", maintenance = "" } = {}) {
+	const body = `<div class="card login-card">
+  <div class="login-logo">${LOGO}</div>
+  <h1>Proxy <span style="color:var(--accent)">Web</span></h1>
+  <p class="muted">Acceso privado. Identifícate para usar el proxy.</p>
+  ${maintenance ? `<p class="warn">${esc(maintenance)}</p>` : ""}
+  <form method="post" action="/api/login">
+    <input type="hidden" name="next" value="${esc(next)}">
+    <label for="username">Usuario</label>
+    <input id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Contraseña</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button class="primary" type="submit">Entrar</button>
+  </form>
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+</div>`;
+	return shell("Entrar · Proxy Web", body);
+}
+
+export function accountPage({
+	user,
+	sessions = [],
+	currentId = "",
+	allowPasswordChange = true,
+	forced = false,
+	notice = "",
+	error = "",
+} = {}) {
+	const sessionItems = sessions
+		.map((s) => {
+			const current = s.id === currentId;
+			return `<li>
+  <div class="info">
+    <span class="badge${current ? " current" : ""}">${current ? "esta sesión" : "sesión"}</span>
+    <div class="meta">
+      <span>${esc(s.ip || "IP desconocida")}</span>
+      <span>${esc((s.userAgent || "navegador desconocido").slice(0, 80))}</span>
+      <span>desde ${esc(fmtDate(s.createdAt))}</span>
+      <span>último acceso ${esc(fmtDate(s.lastSeenAt))}</span>
+    </div>
+  </div>
+  ${
+		current
+			? ""
+			: `<form method="post" action="/api/account/sessions/${encodeURIComponent(s.id)}/revoke">
+      <button class="small danger" type="submit">Cerrar</button>
+    </form>`
+	}
+</li>`;
+		})
+		.join("");
+
+	const body = `
+${
+	forced
+		? '<p class="msg error" style="margin-top:0">Debes cambiar tu contraseña antes de seguir usando el proxy.</p>'
+		: ""
+}
+<div class="card" style="max-width:620px;margin:0 auto">
+  <h1>Mi cuenta</h1>
+  <p class="muted">
+    Usuario <strong>${esc(user.username)}</strong> ·
+    ${user.role === "admin" ? "administrador" : "usuario normal"}
+  </p>
+  ${
+		allowPasswordChange || forced
+			? `<h2>Cambiar contraseña</h2>
+  <form method="post" action="/api/account/password">
+    <label for="current">Contraseña actual</label>
+    <input id="current" name="current" type="password" autocomplete="current-password" required>
+    <div class="grid">
+      <div>
+        <label for="password">Nueva contraseña</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div>
+        <label for="confirm">Repetir nueva contraseña</label>
+        <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="8" required>
+      </div>
+    </div>
+    <button class="primary" type="submit">Guardar nueva contraseña</button>
+  </form>
+  <p class="hint">Mínimo 8 caracteres. Al cambiarla se cierran las demás sesiones de tu usuario.</p>`
+			: '<p class="warn">El administrador ha desactivado el cambio de contraseña.</p>'
+	}
+  <p class="hint">El administrador puede ver las direcciones y búsquedas que realices con el proxy.</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+</div>
+
+<div class="card" style="max-width:620px;margin:18px auto 0">
+  <h2>Sesiones activas</h2>
+  <p class="muted">Estos son los navegadores con sesión iniciada en tu cuenta.</p>
+  <ul class="session-list">${sessionItems || '<li class="empty">No hay sesiones activas.</li>'}</ul>
+</div>`;
+	return shell("Mi cuenta · Proxy Web", body, { topbar: topbar(user) });
+}
+
+function fmtDate(at) {
+	try {
+		return new Date(at).toLocaleString("es-ES", {
+			dateStyle: "short",
+			timeStyle: "medium",
+			timeZone: "Europe/Madrid",
+		});
+	} catch {
+		return String(at || "");
+	}
+}
+
+export function adminPage({ user, users, counts = {}, notice = "", error = "" } = {}) {
+	const cards = users
+		.map((u) => {
+			const self = u.username.toLowerCase() === user.username.toLowerCase();
+			const visits = counts[u.username] || 0;
+			const tempBlocked = !!u.blockedUntil;
+			const blocked = u.blocked || tempBlocked;
+			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role">
+        <select name="role" aria-label="Rol de ${esc(u.username)}">
+          <option value="user"${u.role === "user" ? " selected" : ""}>usuario</option>
+          <option value="admin"${u.role === "admin" ? " selected" : ""}>admin</option>
+        </select>
+        <button class="small" type="submit">Guardar rol</button>
+      </form>`;
+			const blockForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block">
+        <input type="hidden" name="blocked" value="${u.blocked ? "0" : "1"}">
+        ${
+					u.blocked
+						? ""
+						: `<input name="message" value="${esc(u.blockMessage || "")}" placeholder="Mensaje al bloquear (opcional)" aria-label="Mensaje de bloqueo">`
+				}
+        <button class="small${u.blocked ? "" : " danger"}" type="submit"${
+					self ? " disabled title='No puedes bloquear tu propia cuenta'" : ""
+				}>${u.blocked ? "Quitar bloqueo" : "Bloquear"}</button>
+      </form>`;
+			const tempForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block-until">
+        <input type="datetime-local" name="until" value="${esc(toLocalInput(u.blockedUntil))}" required aria-label="Bloquear hasta">
+        <input name="message" value="${esc(u.blockMessage || "")}" placeholder="Mensaje (opcional)" aria-label="Mensaje de bloqueo temporal">
+        <button class="small" type="submit"${self ? " disabled" : ""}>Bloquear hasta</button>
+      </form>${
+				tempBlocked
+					? `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block-until">
+        <input type="hidden" name="until" value="">
+        <button class="small" type="submit">Quitar temporal</button>
+      </form>`
+					: ""
+			}`;
+			const deleteForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/delete"
+        onsubmit="return confirm('¿Eliminar el usuario ${esc(u.username)}?')">
+        <button class="small danger" type="submit"${
+					self ? " disabled title='No puedes eliminarte a ti mismo'" : ""
+				}>Eliminar</button>
+      </form>`;
+			const mustChangeForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/must-change">
+        <input type="hidden" name="value" value="${u.mustChangePassword ? "0" : "1"}">
+        <button class="small" type="submit">${u.mustChangePassword ? "Quitar cambio obligatorio" : "Exigir cambio de contraseña"}</button>
+      </form>`;
+			return `<div class="user">
+  <div class="user-head">
+    <strong>${esc(u.username)}</strong>
+    <span class="badge${u.role === "admin" ? " admin" : ""}">${u.role === "admin" ? "admin" : "usuario"}</span>
+    ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
+    ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
+    ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
+    ${self ? '<span class="badge">tú</span>' : ""}
+  </div>
+  <div class="user-stats">
+    <span><b>${visits}</b> visitas</span>
+    <span><b>${u.sessionCount || 0}</b> sesiones</span>
+    <span><b>${u.loginCount || 0}</b> logins</span>
+    <span>creado ${esc((u.createdAt || "").slice(0, 10))}</span>
+    <span>último login ${esc(u.lastLoginAt ? fmtDate(u.lastLoginAt) : "nunca")}</span>
+    <span>última actividad ${esc(u.lastSeenAt ? fmtDate(u.lastSeenAt) : "—")}</span>
+  </div>
+  <div class="actions">
+    <a class="small" href="/admin/activity?user=${encodeURIComponent(u.username)}">Ver actividad</a>
+    <a class="small" href="/admin/sessions?user=${encodeURIComponent(u.username)}">Ver sesiones</a>
+    ${
+			u.sessionCount
+				? `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/logout" onsubmit="return confirm('¿Cerrar todas las sesiones de ${esc(u.username)}?')">
+      <button class="small" type="submit"${self ? " disabled title='Usa Salir para cerrar tu propia sesión'" : ""}>Forzar logout</button>
+    </form>`
+				: ""
+		}
+    ${blockForm}
+    ${deleteForm}
+  </div>
+  <details class="more">
+    <summary>Más acciones</summary>
+    <div class="actions">
+      <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/password">
+        <input name="password" type="password" placeholder="Nueva contraseña" minlength="8" required aria-label="Nueva contraseña de ${esc(u.username)}">
+        <button class="small" type="submit">Cambiar contraseña</button>
+      </form>
+      ${roleForm}
+      ${mustChangeForm}
+      ${tempForm}
+    </div>
+    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block-message" style="margin-top:12px">
+      <label for="blockmsg-${esc(u.username)}">Mensaje de bloqueo</label>
+      <textarea id="blockmsg-${esc(u.username)}" name="message" maxlength="500" placeholder="Se mostrará al usuario cuando intente entrar bloqueado">${esc(u.blockMessage || "")}</textarea>
+      <button class="small" type="submit" style="margin-top:8px">Guardar mensaje</button>
+    </form>
+    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/notes" style="margin-top:12px">
+      <label for="notes-${esc(u.username)}">Notas internas</label>
+      <textarea id="notes-${esc(u.username)}" name="notes" maxlength="500" placeholder="Solo visibles para administradores">${esc(u.notes || "")}</textarea>
+      <button class="small" type="submit" style="margin-top:8px">Guardar notas</button>
+    </form>
+  </details>
+</div>`;
+		})
+		.join("\n");
+
+	const body = `
+${adminTabs("users")}
+<div class="card">
+  <h1>Usuarios</h1>
+  <p class="muted">
+    Gestiona usuarios, contraseñas, roles, bloqueos y sesiones.
+    <a href="/admin/activity">Ver toda la actividad</a>.
+  </p>
+  <h2>Crear usuario</h2>
+  <form method="post" action="/api/admin/users">
+    <div class="grid">
+      <div>
+        <label for="new-user">Usuario</label>
+        <input id="new-user" name="username" pattern="[A-Za-z0-9._-]{3,32}" title="3-32 caracteres: letras, números, punto, guion o guion bajo" required>
+      </div>
+      <div>
+        <label for="new-pass">Contraseña</label>
+        <div class="pw-row">
+          <input id="new-pass" name="password" type="password" minlength="8" required>
+          <button class="small" type="button" onclick="genPass()">Generar</button>
+        </div>
+      </div>
+    </div>
+    <label for="new-role">Rol</label>
+    <select id="new-role" name="role">
+      <option value="user">usuario normal</option>
+      <option value="admin">administrador</option>
+    </select>
+    <button class="primary" type="submit">Crear usuario</button>
+  </form>
+  <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar. Si usas “Generar”, copia la contraseña antes de crear el usuario.</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+</div>
+
+<div class="card">
+  <h2>Usuarios (${users.length})</h2>
+  ${cards}
+</div>
+<script>
+function genPass() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_";
+  const values = new Uint32Array(16);
+  crypto.getRandomValues(values);
+  const input = document.getElementById("new-pass");
+  input.value = [...values].map((n) => chars[n % chars.length]).join("");
+  input.type = "text";
+  input.focus();
+  input.select();
+}
+</script>`;
+	return shell("Usuarios · Administración", body, { topbar: topbar(user) });
+}
+
+export function activityPage({
+	user,
+	users,
+	counts = {},
+	activity = [],
+	filter = "",
+	notice = "",
+	retention = 500,
+	activityEnabled = true,
+} = {}) {
+	const options = users
+		.map(
+			(u) =>
+				`<option value="${esc(u.username)}"${filter.toLowerCase() === u.username.toLowerCase() ? " selected" : ""}>${esc(
+					u.username,
+				)}${u.blocked ? " (bloqueado)" : ""} · ${counts[u.username] || 0}</option>`,
+		)
+		.join("");
+
+	const items = activity
+		.map(
+			(e) => `<li>
+  <span class="when">${esc(fmtDate(e.at))}</span>
+  ${filter ? "" : `<span class="who">${esc(e.username)}</span>`}
+  <span class="what">
+    ${e.query ? `<span class="query">Búsqueda: ${esc(e.query)}</span>` : ""}
+    ${e.url ? `<span class="url">${esc(e.url)}</span>` : ""}
+  </span>
+</li>`,
+		)
+		.join("\n");
+
+	const body = `
+${adminTabs("activity")}
+<div class="card">
+  <h1>Actividad</h1>
+  <p class="muted">
+    Direcciones y búsquedas introducidas por cada usuario. Se guardan las últimas
+    ${esc(retention)} por usuario. Las redirecciones internas de las webs no se registran.
+  </p>
+  ${!activityEnabled ? '<p class="warn">El registro de actividad está desactivado en Ajustes.</p>' : ""}
+  <form method="get" action="/admin/activity" class="filter">
+    <select name="user" aria-label="Filtrar por usuario">
+      <option value="">Todos los usuarios</option>
+      ${options}
+    </select>
+    <button class="small" type="submit">Filtrar</button>
+    <a href="/admin/activity">Quitar filtro</a>
+    <a class="small" href="/admin/activity.csv${filter ? `?user=${encodeURIComponent(filter)}` : ""}" style="margin-left:auto">Exportar CSV</a>
+  </form>
+  <form method="post" action="/api/admin/activity/clear" class="filter"
+    onsubmit="return confirm('¿Vaciar ${filter ? `el historial de ${esc(filter)}` : "todo el historial"}?')">
+    <input type="hidden" name="user" value="${esc(filter)}">
+    <button class="small danger" type="submit">Vaciar ${filter ? `historial de ${esc(filter)}` : "todo el historial"}</button>
+  </form>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${
+		items
+			? `<ul class="activity">${items}</ul>`
+			: '<p class="empty">Todavía no hay actividad registrada.</p>'
+	}
+</div>`;
+	return shell("Actividad · Administración", body, { topbar: topbar(user) });
+}
+
+export function sessionsPage({
+	user,
+	users = [],
+	sessions = [],
+	filter = "",
+	currentId = "",
+	notice = "",
+	error = "",
+} = {}) {
+	const options = users
+		.map(
+			(u) =>
+				`<option value="${esc(u.username)}"${filter.toLowerCase() === u.username.toLowerCase() ? " selected" : ""}>${esc(u.username)}</option>`,
+		)
+		.join("");
+	const rows = sessions
+		.map(
+			(s) => `<tr>
+  <td><strong>${esc(s.username)}</strong>${s.id === currentId ? ' <span class="badge current">actual</span>' : ""}</td>
+  <td class="mono">${esc(s.ip || "—")}</td>
+  <td>${esc((s.userAgent || "—").slice(0, 70))}</td>
+  <td class="mono">${esc(fmtDate(s.createdAt))}</td>
+  <td class="mono">${esc(fmtDate(s.lastSeenAt))}</td>
+  <td>${
+		s.id === currentId
+			? ""
+			: `<form method="post" action="/api/admin/sessions/${encodeURIComponent(s.id)}/revoke">
+      <button class="small danger" type="submit">Cerrar</button>
+    </form>`
+	}</td>
+</tr>`,
+		)
+		.join("");
+
+	const body = `
+${adminTabs("sessions")}
+<div class="card">
+  <h1>Sesiones activas</h1>
+  <p class="muted">Sesiones iniciadas ahora mismo. Se pierden al reiniciar el servicio.</p>
+  <form method="get" action="/admin/sessions" class="filter">
+    <select name="user" aria-label="Filtrar por usuario">
+      <option value="">Todos los usuarios</option>
+      ${options}
+    </select>
+    <button class="small" type="submit">Filtrar</button>
+    <a href="/admin/sessions">Quitar filtro</a>
+  </form>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  ${
+		rows
+			? `<div class="scroll"><table>
+    <thead><tr><th>Usuario</th><th>IP</th><th>Navegador</th><th>Creada</th><th>Último acceso</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`
+			: '<p class="empty">No hay sesiones activas.</p>'
+	}
+</div>`;
+	return shell("Sesiones · Administración", body, { topbar: topbar(user) });
+}
+
+export function settingsPage({ user, settings, notice = "", error = "" } = {}) {
+	const linkRows = settings.quickLinks
+		.map(
+			(link) => `<div class="link-row">
+  <input name="linkLabel" value="${esc(link.label)}" maxlength="40" placeholder="Nombre" aria-label="Nombre">
+  <input name="linkUrl" value="${esc(link.url)}" placeholder="https://…" aria-label="URL">
+  <button class="small danger" type="button" onclick="this.parentElement.remove()">Quitar</button>
+</div>`,
+		)
+		.join("");
+
+	const body = `
+${adminTabs("settings")}
+<form method="post" action="/api/admin/settings">
+<div class="card">
+  <h1>Ajustes</h1>
+  <p class="muted">Los cambios se aplican sin reiniciar la aplicación.</p>
+
+  <div class="section">
+    <h3>Seguridad y sesiones</h3>
+    <div class="field-grid">
+      <div>
+        <label for="sessionHours">Duración de sesión (horas)</label>
+        <input id="sessionHours" name="sessionHours" type="number" min="1" max="8760" value="${settings.sessionHours}" required>
+      </div>
+      <div>
+        <label for="maxSessionsPerUser">Máximo de sesiones por usuario (admins exentos)</label>
+        <input id="maxSessionsPerUser" name="maxSessionsPerUser" type="number" min="1" max="50" value="${settings.maxSessionsPerUser}" required>
+      </div>
+      <div>
+        <label for="maxLoginAttempts">Intentos de login antes de bloquear</label>
+        <input id="maxLoginAttempts" name="maxLoginAttempts" type="number" min="3" max="20" value="${settings.maxLoginAttempts}" required>
+      </div>
+      <div>
+        <label for="lockoutMinutes">Minutos de bloqueo por intentos</label>
+        <input id="lockoutMinutes" name="lockoutMinutes" type="number" min="1" max="1440" value="${settings.lockoutMinutes}" required>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" name="allowUserPasswordChange"${settings.allowUserPasswordChange ? " checked" : ""}> Permitir que los usuarios cambien su contraseña (los admins siempre pueden)</label>
+  </div>
+
+  <div class="section">
+    <h3>Actividad</h3>
+    <label class="check"><input type="checkbox" name="activityEnabled"${settings.activityEnabled ? " checked" : ""}> Registrar actividad de navegación</label>
+    <div class="field-grid">
+      <div>
+        <label for="activityPerUser">Máximo por usuario</label>
+        <input id="activityPerUser" name="activityPerUser" type="number" min="50" max="2000" value="${settings.activityPerUser}" required>
+      </div>
+      <div>
+        <label for="activityTotal">Máximo total</label>
+        <input id="activityTotal" name="activityTotal" type="number" min="100" max="10000" value="${settings.activityTotal}" required>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Mantenimiento</h3>
+    <label class="check"><input type="checkbox" name="maintenanceMode"${settings.maintenanceMode ? " checked" : ""}> Activar modo mantenimiento (solo administradores)</label>
+    <label for="maintenanceMessage">Mensaje para los usuarios</label>
+    <textarea id="maintenanceMessage" name="maintenanceMessage" maxlength="300" style="min-height:60px">${esc(settings.maintenanceMessage)}</textarea>
+  </div>
+
+  <div class="section">
+    <h3>Sitios prohibidos</h3>
+    <label for="blockedSites">Dominios bloqueados (uno por línea)</label>
+    <textarea id="blockedSites" name="blockedSites" style="min-height:100px" placeholder="ejemplo.com&#10;otro-sitio.org">${esc((settings.blockedSites || []).join("\n"))}</textarea>
+    <p class="hint">Se bloquea el dominio completo y sus subdominios. Los administradores pueden acceder.</p>
+  </div>
+
+  <div class="section">
+    <h3>Portada y búsqueda</h3>
+    <div class="field-grid">
+      <div>
+        <label for="landingTitle">Título</label>
+        <input id="landingTitle" name="landingTitle" value="${esc(settings.landingTitle)}" maxlength="60" required>
+      </div>
+      <div>
+        <label for="defaultSearchEngine">Buscador por defecto</label>
+        <select id="defaultSearchEngine" name="defaultSearchEngine">
+          <option value="duckduckgo"${settings.defaultSearchEngine === "duckduckgo" ? " selected" : ""}>DuckDuckGo</option>
+          <option value="google"${settings.defaultSearchEngine === "google" ? " selected" : ""}>Google</option>
+          <option value="bing"${settings.defaultSearchEngine === "bing" ? " selected" : ""}>Bing</option>
+        </select>
+      </div>
+    </div>
+    <label for="landingSubtitle">Subtítulo</label>
+    <textarea id="landingSubtitle" name="landingSubtitle" maxlength="200" style="min-height:60px">${esc(settings.landingSubtitle)}</textarea>
+    <label>Enlaces rápidos (máximo 8)</label>
+    <div id="links-editor">${linkRows}</div>
+    <button class="small" type="button" onclick="addLink()">Añadir enlace</button>
+  </div>
+
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <button class="primary" type="submit">Guardar ajustes</button>
+</div>
+</form>
+
+<div class="card">
+  <h2>Restablecer</h2>
+  <p class="muted">Vuelve a los valores de fábrica. No afecta a usuarios ni contraseñas.</p>
+  <form method="post" action="/api/admin/settings/reset" onsubmit="return confirm('¿Restablecer todos los ajustes?')">
+    <button class="small danger" type="submit">Restablecer ajustes</button>
+  </form>
+</div>
+<script>
+function addLink() {
+  const row = document.createElement("div");
+  row.className = "link-row";
+  row.innerHTML = '<input name="linkLabel" maxlength="40" placeholder="Nombre" aria-label="Nombre">' +
+    '<input name="linkUrl" placeholder="https://…" aria-label="URL">' +
+    '<button class="small danger" type="button">Quitar</button>';
+  row.querySelector("button").addEventListener("click", () => row.remove());
+  document.getElementById("links-editor").appendChild(row);
+}
+</script>`;
+	return shell("Ajustes · Administración", body, { topbar: topbar(user) });
+}
+
+export function auditPage({
+	user,
+	events = [],
+	users = [],
+	actions = [],
+	filters = {},
+	notice = "",
+} = {}) {
+	const actorOptions = users
+		.map(
+			(u) =>
+				`<option value="${esc(u.username)}"${filters.actor?.toLowerCase() === u.username.toLowerCase() ? " selected" : ""}>${esc(u.username)}</option>`,
+		)
+		.join("");
+	const actionOptions = actions
+		.map(
+			(a) =>
+				`<option value="${esc(a)}"${filters.action === a ? " selected" : ""}>${esc(a)}</option>`,
+		)
+		.join("");
+	const query = new URLSearchParams();
+	if (filters.actor) query.set("actor", filters.actor);
+	if (filters.action) query.set("action", filters.action);
+	const csvQuery = query.toString() ? `?${query}` : "";
+
+	const rows = events
+		.map(
+			(e) => `<tr>
+  <td class="mono">${esc(fmtDate(e.at))}</td>
+  <td><strong>${esc(e.actor)}</strong></td>
+  <td class="mono">${esc(e.action)}</td>
+  <td>${esc(e.target || "—")}</td>
+  <td>${esc(e.detail || "")}</td>
+  <td class="mono">${esc(e.ip || "—")}</td>
+  <td>${esc((e.userAgent || "").slice(0, 60))}</td>
+</tr>`,
+		)
+		.join("");
+
+	const body = `
+${adminTabs("audit")}
+<div class="card">
+  <h1>Auditoría</h1>
+  <p class="muted">Registro de accesos y acciones de administración. Últimos 300 eventos filtrados.</p>
+  <form method="get" action="/admin/audit" class="filter">
+    <select name="actor" aria-label="Filtrar por usuario">
+      <option value="">Todos los usuarios</option>
+      ${actorOptions}
+    </select>
+    <select name="action" aria-label="Filtrar por acción">
+      <option value="">Todas las acciones</option>
+      ${actionOptions}
+    </select>
+    <button class="small" type="submit">Filtrar</button>
+    <a href="/admin/audit">Quitar filtros</a>
+    <a class="small" href="/admin/audit.csv${csvQuery}" style="margin-left:auto">Exportar CSV</a>
+  </form>
+  <form method="post" action="/api/admin/audit/clear" class="filter" onsubmit="return confirm('¿Vaciar toda la auditoría?')">
+    <button class="small danger" type="submit">Vaciar auditoría</button>
+  </form>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${
+		rows
+			? `<div class="scroll"><table>
+    <thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Objetivo</th><th>Detalle</th><th>IP</th><th>Navegador</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`
+			: '<p class="empty">No hay eventos para estos filtros.</p>'
+	}
+</div>`;
+	return shell("Auditoría · Administración", body, { topbar: topbar(user) });
+}
+
+export function systemPage({ user, stats, services = {}, funnel = {}, counts = {}, url = "" } = {}) {
+	const serviceRow = (name, state) =>
+		`<tr><td><strong>${esc(name)}</strong></td><td><span class="badge${state === "active" ? " current" : " blocked"}">${esc(state)}</span></td></tr>`;
+	const diskPercent = stats.disk.total
+		? Math.round((stats.disk.used / stats.disk.total) * 100)
+		: 0;
+
+	const body = `
+${adminTabs("system")}
+<div class="card">
+  <h1>Sistema</h1>
+  <p class="muted">Estado del servidor y del proxy.</p>
+  <div class="stats">
+    <div class="stat"><div class="k">Uptime</div><div class="v">${esc(fmtDuration(stats.uptime))}</div></div>
+    <div class="stat"><div class="k">Memoria del proceso</div><div class="v">${esc(fmtBytes(stats.procRss))}</div></div>
+    <div class="stat"><div class="k">Memoria libre</div><div class="v">${esc(fmtBytes(stats.memFree))} <small>/ ${esc(fmtBytes(stats.memTotal))}</small></div></div>
+    <div class="stat"><div class="k">Carga</div><div class="v">${stats.load.map((n) => n.toFixed(2)).join(" · ")}</div></div>
+    <div class="stat"><div class="k">Disco</div><div class="v">${diskPercent}% <small>${esc(fmtBytes(stats.disk.free))} libres</small></div></div>
+    <div class="stat"><div class="k">Node</div><div class="v">${esc(stats.node)}</div></div>
+  </div>
+  <div class="grid">
+    <div>
+      <h2>Servicios</h2>
+      <table><tbody>${serviceRow("webproxy", services.webproxy || "desconocido")}${serviceRow("apache2", services.apache2 || "desconocido")}</tbody></table>
+    </div>
+    <div>
+      <h2>Datos</h2>
+      <div class="stats" style="grid-template-columns:1fr 1fr">
+        <div class="stat"><div class="k">Usuarios</div><div class="v">${counts.users || 0}</div></div>
+        <div class="stat"><div class="k">Sesiones</div><div class="v">${counts.sessions || 0}</div></div>
+        <div class="stat"><div class="k">Actividad</div><div class="v">${counts.activity || 0}</div></div>
+        <div class="stat"><div class="k">Auditoría</div><div class="v">${counts.audit || 0}</div></div>
+      </div>
+    </div>
+  </div>
+  <h2>Tailscale Funnel</h2>
+  <p class="muted">URL pública: <a href="${esc(url)}">${esc(url)}</a></p>
+  <pre class="panel">${esc(funnel.output || "Sin información")}</pre>
+  <h2>Copias de seguridad</h2>
+  <p class="muted">Incluye usuarios (con hashes), actividad, ajustes y auditoría. Guárdala en un sitio seguro.</p>
+  <a class="small" href="/admin/backup.json">Descargar copia JSON</a>
+</div>`;
+	return shell("Sistema · Administración", body, { topbar: topbar(user) });
+}
+
+export function maintenancePage({ settings, user = null } = {}) {
+	const body = `<div class="card login-card">
+  <div class="login-logo">${LOGO}</div>
+  <h1>En mantenimiento</h1>
+  <p class="muted">${esc(settings.maintenanceMessage)}</p>
+  ${
+		user
+			? `<form method="post" action="/logout"><button class="primary" type="submit">Cerrar sesión</button></form>`
+			: '<a class="small" href="/login">Volver al login</a>'
+	}
+</div>`;
+	return shell("En mantenimiento · Proxy Web", body);
+}
+
+export function blockedPage({ message = "" } = {}) {
+	const body = `<div class="card login-card">
+  <div class="login-logo">${LOGO}</div>
+  <h1>Cuenta bloqueada</h1>
+  <p class="muted">${esc(message || "Esta cuenta está bloqueada. Contacta con el administrador.")}</p>
+  <a class="small" href="/login">Volver al login</a>
+</div>`;
+	return shell("Cuenta bloqueada · Proxy Web", body);
+}

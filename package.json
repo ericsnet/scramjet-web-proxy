@@ -1,0 +1,23 @@
+{
+	"name": "scramjet-web-proxy",
+	"version": "1.0.0",
+	"description": "Self-hosted web proxy with Scramjet, sessions, roles and admin controls",
+	"main": "server.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node server.js",
+		"start": "node server.js",
+		"postinstall": "node scripts/patch-wisp.mjs"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "AGPL-3.0-only",
+	"dependencies": {
+		"@mercuryworkshop/libcurl-transport": "2.0.6",
+		"@mercuryworkshop/scramjet": "2.0.67-alpha.1",
+		"@mercuryworkshop/scramjet-controller": "0.0.13",
+		"@mercuryworkshop/scramjet-utils": "0.0.3",
+		"@mercuryworkshop/wisp-js": "0.5.3",
+		"express": "^4.21.2"
+	}
+}

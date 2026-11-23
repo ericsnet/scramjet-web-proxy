@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Proxy Web</title>
+		<meta name="robots" content="noindex" />
+		<meta name="theme-color" content="#0b0f14" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="stylesheet" href="/index.css" />
+	</head>
+	<body>
+		<div id="session-bar" class="session-bar" hidden>
+			<span id="session-avatar" class="avatar" aria-hidden="true">?</span>
+			<span id="session-who"></span>
+			<span class="divider" aria-hidden="true"></span>
+			<a href="/account">Cuenta</a>
+			<a id="admin-link" href="/admin" hidden>Admin</a>
+			<form method="post" action="/logout" class="inline-form">
+				<button type="submit">Salir</button>
+			</form>
+		</div>
+
+		<main id="landing">
+			<div class="hero">
+				<div class="brand-mark" aria-hidden="true">
+					<svg viewBox="0 0 64 64">
+						<rect width="64" height="64" rx="16" fill="#0f1722" />
+						<path d="M14 19c7-3 13-2 18 2v26c-5-4-11-5-18-2z" fill="#3b82f6" />
+						<path d="M50 19c-7-3-13-2-18 2v26c5-4 11-5 18-2z" fill="#60a5fa" />
+						<path d="M32 21v26" stroke="#0f1722" stroke-width="3" />
+					</svg>
+				</div>
+
+				<h1 id="hero-title">Proxy <span>Web</span></h1>
+				<p class="subtitle" id="hero-subtitle">
+					Escribe una dirección o busca en la web. El tráfico sale por el
+					servidor del proxy.
+				</p>
+
+				<form id="sj-form" class="search" autocomplete="off">
+					<span class="search-icon" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+							<circle cx="11" cy="11" r="7" />
+							<path d="m20 20-3.5-3.5" />
+						</svg>
+					</span>
+					<input
+						id="sj-address"
+						type="text"
+						inputmode="url"
+						placeholder="https://es.wikipedia.org"
+						aria-label="Dirección web o búsqueda"
+						autofocus
+					/>
+					<button type="submit">Ir</button>
+				</form>
+
+				<div class="quick" id="quick-links">
+					<a href="#" data-url="https://es.wikipedia.org">Wikipedia</a>
+					<a href="#" data-url="https://www.google.com">Google</a>
+					<a href="#" data-url="https://www.youtube.com">YouTube</a>
+					<a href="#" data-url="https://www.reddit.com">Reddit</a>
+					<a href="#" data-url="https://news.ycombinator.com">Hacker News</a>
+				</div>
+
+				<p id="sj-error" class="error"></p>
+				<pre id="sj-error-code"></pre>
+
+				<p class="notice">
+					Algunas webs (login de Google, Cloudflare, DRM o bancos) no funcionan
+					a través de un proxy.
+				</p>
+			</div>
+		</main>
+
+		<section id="sj-frame-wrapper">
+			<div class="toolbar">
+				<button id="home-btn" class="home" type="button" title="Inicio">
+					⌂
+				</button>
+				<a class="home" href="/account" title="Mi cuenta">👤</a>
+				<form id="frame-form" class="search compact" autocomplete="off">
+					<span class="search-icon" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+							<circle cx="11" cy="11" r="7" />
+							<path d="m20 20-3.5-3.5" />
+						</svg>
+					</span>
+					<input
+						id="frame-address"
+						type="text"
+						inputmode="url"
+						placeholder="Dirección…"
+						aria-label="Dirección web"
+					/>
+					<button type="submit">Ir</button>
+				</form>
+				<span id="sj-frame-url" title="URL proxificada"></span>
+			</div>
+			<iframe id="sj-frame" title="Contenido proxificado"></iframe>
+		</section>
+
+		<footer>
+			<div>
+				<a href="https://github.com/MercuryWorkshop/scramjet" target="_blank" rel="noreferrer">Scramjet</a>
+				<a href="credits.html">Créditos</a>
+				<span>Proxy Web</span>
+			</div>
+		</footer>
+
+		<script src="/scramjet/scramjet.js"></script>
+		<script src="/controller/controller.api.js"></script>
+		<script src="/scramjet-utils.js"></script>
+		<script src="/libcurl/index.js"></script>
+		<script src="/index.js"></script>
+	</body>
+</html>

@@ -1,0 +1,20 @@
+# systemd unit for the proxy app.
+# Adjust User, Group and paths to your installation.
+
+[Unit]
+Description=Scramjet Web Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=proxy
+Group=proxy
+WorkingDirectory=/opt/web-proxy
+ExecStart=/usr/bin/node /opt/web-proxy/server.js
+Environment=NODE_ENV=production
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Proxy">
+	<rect width="64" height="64" rx="14" fill="#0b0f14"/>
+	<path d="M14 19c7-3 13-2 18 2v26c-5-4-11-5-18-2z" fill="#3b82f6"/>
+	<path d="M50 19c-7-3-13-2-18 2v26c5-4 11-5 18-2z" fill="#60a5fa"/>
+	<path d="M32 21v26" stroke="#0b0f14" stroke-width="3"/>
+	<path d="M18 25c4-1 8-1 11 1" stroke="#0b0f14" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+	<path d="M46 25c-4-1-8-1-11 1" stroke="#0b0f14" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+</svg>
