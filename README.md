@@ -38,7 +38,7 @@ administración.
 ## Instalación
 
 ```bash
-git clone https://github.com/TU_USUARIO/scramjet-web-proxy.git
+git clone https://github.com/ericsnet/scramjet-web-proxy.git
 cd scramjet-web-proxy
 npm install
 ```
