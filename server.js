@@ -34,6 +34,9 @@ import {
 	setBlockMessage,
 	setNotes,
 	setMustChangePassword,
+	setUserBlockedSites,
+	setUserSchedule,
+	isWithinSchedule,
 	recordLoginSuccess,
 	listSessions,
 	sessionsForUser,
@@ -56,10 +59,13 @@ import {
 	systemPage,
 	maintenancePage,
 	blockedPage,
+	bookmarksPage,
+	historyPage,
 } from "./pages.js";
 import {
 	recordActivity,
 	getActivity,
+	countActivity,
 	activityCounts,
 	clearActivity,
 	trimActivity,
@@ -77,6 +83,23 @@ import {
 	flushAudit,
 } from "./audit.js";
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
+import {
+	listBookmarks,
+	addBookmark,
+	updateBookmark,
+	deleteBookmark,
+	deleteUserBookmarks,
+	exportBookmarks,
+} from "./bookmarks.js";
+import {
+	createBackup,
+	listBackups,
+	backupPath,
+	restoreBackup,
+	pruneBackups,
+	backupCount,
+} from "./backup.js";
+import { count as metric, metricsSnapshot } from "./metrics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nm = (pkg, sub) => path.join(__dirname, "node_modules/@mercuryworkshop", pkg, sub);
@@ -87,6 +110,10 @@ app.set("trust proxy", true);
 app.disable("x-powered-by");
 app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(express.json({ limit: "64kb" }));
+app.use((req, res, next) => {
+	metric("requests_total");
+	next();
+});
 
 /* ------------------------------- utilidades ------------------------------- */
 
@@ -96,12 +123,16 @@ function escapeRegExp(value) {
 
 function applyWispBlocklist() {
 	if (!wisp.options) return;
-	const hosts = getSettings().blockedSites || [];
-	wisp.options.hostname_blacklist = hosts.length
+	const settings = getSettings();
+	const allowlist = settings.accessMode === "allowlist";
+	const hosts = allowlist ? settings.allowedSites || [] : settings.blockedSites || [];
+	const list = hosts.length
 		? hosts.map(
 				(host) => new RegExp(`^(.+\\.)?${escapeRegExp(host)}$`, "i"),
 			)
 		: null;
+	wisp.options.hostname_whitelist = allowlist ? list : null;
+	wisp.options.hostname_blacklist = allowlist ? null : list;
 }
 
 applyWispBlocklist();
@@ -159,6 +190,16 @@ function requireAuth(req, res, next) {
 		return res.redirect(303, "/maintenance");
 	}
 
+	if (
+		session.role !== "admin" &&
+		!isWithinSchedule(getUser(session.username), settings.timezone)
+	) {
+		if (req.path.startsWith("/api/")) {
+			return res.status(403).json({ error: "outside_hours" });
+		}
+		return res.redirect(303, "/denied?reason=schedule");
+	}
+
 	if (session.mustChangePassword) {
 		const allowed = ["/account", "/api/account/password", "/api/me", "/logout"];
 		if (!allowed.includes(req.path)) {
@@ -184,8 +225,15 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-	if (req.user?.role !== "admin") {
+	if (!req.user || req.user.role !== "admin") {
 		return res.status(403).type("text/plain").send("Solo administradores.");
+	}
+	next();
+}
+
+function requireStaff(req, res, next) {
+	if (!req.user || !["admin", "moderator"].includes(req.user.role)) {
+		return res.status(403).type("text/plain").send("Solo administradores o moderadores.");
 	}
 	next();
 }
@@ -335,8 +383,10 @@ const ADMIN_ERRORS = {
 	"invalid-password": "La contraseña debe tener entre 8 y 128 caracteres.",
 	"invalid-role": "Rol no válido.",
 	"invalid-date": "La fecha de bloqueo no es válida o ya ha pasado.",
+	"invalid-schedule": "Horario no válido: elige al menos un día y horas correctas.",
 	notfound: "Usuario no encontrado.",
 	"last-admin": "Debe quedar al menos un administrador activo.",
+	forbidden: "No tienes permisos sobre un administrador.",
 };
 
 const ADMIN_OK = {
@@ -351,6 +401,8 @@ const ADMIN_OK = {
 	logout: "Sesiones del usuario cerradas.",
 	notes: "Notas guardadas.",
 	blockmessage: "Mensaje de bloqueo guardado.",
+	sites: "Sitios del usuario actualizados.",
+	schedule: "Horario actualizado.",
 	mustchange: "Se exigirá cambio de contraseña en el próximo acceso.",
 	mustchange_off: "Ya no se exigirá cambio de contraseña.",
 	revoked: "Sesión cerrada.",
@@ -384,7 +436,39 @@ app.get("/api/config", (req, res) => {
 		maintenanceMode: settings.maintenanceMode,
 		maintenanceMessage: settings.maintenanceMessage,
 		blockedSites: settings.blockedSites || [],
+		allowedSites: settings.allowedSites || [],
+		accessMode: settings.accessMode,
 	});
+});
+
+app.get("/metrics", (req, res) => {
+	const settings = getSettings();
+	const token = settings.metricsToken;
+	if (!token) return res.status(404).end();
+	const provided =
+		String(req.query.token || "") ||
+		String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+	const a = crypto.createHash("sha256").update(String(provided)).digest();
+	const b = crypto.createHash("sha256").update(String(token)).digest();
+	if (!crypto.timingSafeEqual(a, b)) return res.status(404).end();
+
+	const snap = metricsSnapshot();
+	let wisp = 0;
+	for (const set of wispConnections.values()) wisp += set.size;
+	const lines = [
+		`webproxy_uptime_seconds ${Math.floor(process.uptime())}`,
+		`webproxy_users_total ${listUsers().length}`,
+		`webproxy_sessions_active ${sessionCount()}`,
+		`webproxy_activity_entries ${exportActivity().length}`,
+		`webproxy_audit_events ${auditCount()}`,
+		`webproxy_backups_total ${backupCount()}`,
+		`webproxy_wisp_connections ${wisp}`,
+		`webproxy_blocked_sites ${(settings.blockedSites || []).length}`,
+		`webproxy_allowed_sites ${(settings.allowedSites || []).length}`,
+		`webproxy_memory_rss_bytes ${process.memoryUsage().rss}`,
+		...Object.entries(snap).map(([name, value]) => `webproxy_${name} ${value}`),
+	];
+	res.type("text/plain; version=0.0.4; charset=utf-8").send(lines.join("\n") + "\n");
 });
 
 app.get("/login", (req, res) => {
@@ -429,6 +513,23 @@ app.get("/blocked", (req, res) => {
 	);
 });
 
+app.get("/denied", (req, res) => {
+	const session = getSession(req);
+	const settings = getSettings();
+	if (session?.role === "admin") return res.redirect(303, "/");
+	const reason = String(req.query.reason || "schedule");
+	const schedule = reason === "schedule";
+	res.status(403).set("Cache-Control", "no-store").type("html").send(
+		blockedPage({
+			title: schedule ? "Fuera de horario" : "Acceso denegado",
+			message: schedule
+				? "El acceso a tu cuenta está fuera del horario permitido. Vuelve a intentarlo dentro de tu horario."
+				: "No tienes acceso en este momento.",
+			user: session || null,
+		}),
+	);
+});
+
 app.post("/api/login", sameOrigin, (req, res) => {
 	const username = String(req.body.username || "").trim();
 	const password = String(req.body.password || "");
@@ -437,6 +538,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 	const ip = clientIp(req);
 
 	if (isRateLimited(username) || isIpRateLimited(ip)) {
+		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
 			action: "login.rate",
@@ -450,6 +552,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 	if (!user) {
 		recordFailedLogin(username);
 		recordIpFailure(ip);
+		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
 			action: "login.fail",
@@ -459,6 +562,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		return res.redirect(303, `/login?error=1&next=${encodeURIComponent(next)}`);
 	}
 	if (user.blocked) {
+		metric("logins_blocked_total");
 		addAudit({
 			actor: user.username,
 			action: "login.blocked",
@@ -482,9 +586,22 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		});
 		return res.redirect(303, `/login?error=maintenance&next=${encodeURIComponent(next)}`);
 	}
+	if (
+		user.role !== "admin" &&
+		!isWithinSchedule(getUser(user.username), settings.timezone)
+	) {
+		addAudit({
+			actor: user.username,
+			action: "login.schedule",
+			ip,
+			userAgent: clientUa(req),
+		});
+		return res.redirect(303, "/denied?reason=schedule");
+	}
 
 	clearFailedLogins(username);
 	clearIpFailures(ip);
+	metric("logins_success_total");
 	const session = createSession(user.username, {
 		ip,
 		userAgent: clientUa(req),
@@ -522,11 +639,14 @@ app.post("/logout", sameOrigin, (req, res) => {
 app.use(requireAuth);
 
 app.get("/api/me", (req, res) => {
+	const user = getUser(req.user.username);
 	res.set("Cache-Control", "no-store");
 	res.json({
 		username: req.user.username,
 		role: req.user.role,
 		mustChangePassword: req.user.mustChangePassword,
+		blockedSites: user?.blockedSites || [],
+		schedule: user?.schedule || null,
 	});
 });
 
@@ -536,6 +656,63 @@ app.post("/api/activity", sameOrigin, (req, res) => {
 		query: typeof req.body.query === "string" ? req.body.query : "",
 	});
 	res.status(204).end();
+});
+
+/* -------------------------------- favoritos -------------------------------- */
+
+app.get("/api/bookmarks", (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.json({ bookmarks: listBookmarks(req.user.username) });
+});
+
+app.post("/api/bookmarks", sameOrigin, (req, res) => {
+	const result = addBookmark(req.user.username, {
+		label: String(req.body.label || ""),
+		url: String(req.body.url || ""),
+	});
+	if (result.error === "invalid-url") return res.status(400).json({ error: result.error });
+	if (result.error === "limit") return res.status(409).json({ error: result.error });
+	if (result.error === "exists") return res.status(409).json({ error: result.error });
+	audit(req, "bookmark.create", result.bookmark.url);
+	res.status(201).json({ bookmark: result.bookmark });
+});
+
+app.post("/api/bookmarks/:id/update", sameOrigin, (req, res) => {
+	const result = updateBookmark(req.user.username, req.params.id, {
+		label: req.body.label === undefined ? undefined : String(req.body.label),
+		url: req.body.url === undefined ? undefined : String(req.body.url),
+	});
+	if (result.error) return res.status(404).json({ error: result.error });
+	audit(req, "bookmark.update", result.bookmark.url);
+	res.json({ bookmark: result.bookmark });
+});
+
+app.post("/api/bookmarks/:id/delete", sameOrigin, (req, res) => {
+	const result = deleteBookmark(req.user.username, req.params.id);
+	if (result.error) return res.status(404).json({ error: result.error });
+	audit(req, "bookmark.delete", req.params.id);
+	res.status(204).end();
+});
+
+app.get("/api/history", (req, res) => {
+	const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+	res.set("Cache-Control", "no-store");
+	res.json({
+		history: getActivity({
+			username: req.user.username,
+			limit,
+			search: String(req.query.q || ""),
+		}),
+	});
+});
+
+app.post("/api/account/history/clear", sameOrigin, (req, res) => {
+	if (!getSettings().allowUserHistoryClear) {
+		return res.redirect(303, "/history?error=disabled");
+	}
+	clearActivity(req.user.username);
+	audit(req, "history.clear_self");
+	res.redirect(303, "/history?ok=cleared");
 });
 
 /* --------------------------------- cuenta --------------------------------- */
@@ -560,6 +737,45 @@ app.get("/account", (req, res) => {
 			forced: req.user.mustChangePassword || req.query.force === "1",
 			notice,
 			error,
+		}),
+	);
+});
+
+app.get("/bookmarks", (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		bookmarksPage({
+			user: req.user,
+			bookmarks: listBookmarks(req.user.username),
+			notice: req.query.ok === "created" ? "Favorito guardado." : "",
+			error: "",
+		}),
+	);
+});
+
+app.get("/history", (req, res) => {
+	const settings = getSettings();
+	const page = Math.max(1, Number(req.query.page) || 1);
+	const limit = 25;
+	const search = String(req.query.q || "").slice(0, 100);
+	const total = countActivity({ username: req.user.username, search });
+	const activity = getActivity({
+		username: req.user.username,
+		limit,
+		offset: (page - 1) * limit,
+		search,
+	});
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		historyPage({
+			user: req.user,
+			activity,
+			total,
+			page,
+			pages: Math.max(1, Math.ceil(total / limit)),
+			search,
+			canClear: settings.allowUserHistoryClear,
+			notice: req.query.ok === "cleared" ? "Historial vaciado." : "",
 		}),
 	);
 });
@@ -608,7 +824,7 @@ app.post("/api/account/sessions/:id/revoke", sameOrigin, (req, res) => {
 
 /* ------------------------------ administración ------------------------------ */
 
-app.get("/admin", requireAdmin, (req, res) => {
+app.get("/admin", requireStaff, (req, res) => {
 	const error = ADMIN_ERRORS[req.query.error] || "";
 	const notice = ADMIN_OK[req.query.ok] || "";
 	res.set("Cache-Control", "no-store");
@@ -617,13 +833,14 @@ app.get("/admin", requireAdmin, (req, res) => {
 			user: req.user,
 			users: listUsers(),
 			counts: activityCounts(),
+			canManage: req.user.role === "admin",
 			error,
 			notice,
 		}),
 	);
 });
 
-app.get("/admin/sessions", requireAdmin, (req, res) => {
+app.get("/admin/sessions", requireStaff, (req, res) => {
 	const users = listUsers();
 	const wanted = String(req.query.user || "");
 	const filter = users.some(
@@ -647,7 +864,13 @@ app.get("/admin/sessions", requireAdmin, (req, res) => {
 	);
 });
 
-app.post("/api/admin/sessions/:id/revoke", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/sessions/:id/revoke", requireStaff, sameOrigin, (req, res) => {
+	const info = listSessions().find((s) => s.id === req.params.id);
+	if (!info) return res.redirect(303, "/admin/sessions?error=notfound");
+	const targetUser = getUser(info.username);
+	if (targetUser?.role === "admin" && req.user.role !== "admin") {
+		return res.redirect(303, "/admin/sessions?error=forbidden");
+	}
 	const session = revokeSessionById(req.params.id);
 	if (!session) return res.redirect(303, "/admin/sessions?error=notfound");
 	audit(req, "session.revoke", session.username, `sesión ${session.id}`);
@@ -659,7 +882,7 @@ app.post("/api/admin/sessions/:id/revoke", requireAdmin, sameOrigin, (req, res) 
 	res.redirect(303, "/admin/sessions?ok=revoked");
 });
 
-app.get("/admin/activity", requireAdmin, (req, res) => {
+app.get("/admin/activity", requireStaff, (req, res) => {
 	const users = listUsers();
 	const wanted = String(req.query.user || "");
 	const filter = users.some(
@@ -680,6 +903,7 @@ app.get("/admin/activity", requireAdmin, (req, res) => {
 			notice,
 			retention: settings.activityPerUser,
 			activityEnabled: settings.activityEnabled,
+			canManage: req.user.role === "admin",
 		}),
 	);
 });
@@ -745,7 +969,11 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		.filter((link) => String(link.label).trim() || String(link.url).trim());
 
 	const wasMaintenance = getSettings().maintenanceMode;
-	const oldBlocked = JSON.stringify(getSettings().blockedSites || []);
+	const oldBlocked = JSON.stringify({
+		mode: getSettings().accessMode,
+		blocked: getSettings().blockedSites || [],
+		allowed: getSettings().allowedSites || [],
+	});
 	const payload = {
 		sessionHours: req.body.sessionHours,
 		maxSessionsPerUser: req.body.maxSessionsPerUser,
@@ -762,6 +990,13 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		quickLinks,
 		allowUserPasswordChange: req.body.allowUserPasswordChange === "on",
 		blockedSites: req.body.blockedSites,
+		allowedSites: req.body.allowedSites,
+		accessMode: req.body.accessMode,
+		timezone: req.body.timezone,
+		backupEnabled: req.body.backupEnabled === "on",
+		backupRetentionDays: req.body.backupRetentionDays,
+		metricsToken: req.body.metricsToken,
+		allowUserHistoryClear: req.body.allowUserHistoryClear === "on",
 	};
 	const result = saveSettings(payload);
 	if (result.error) {
@@ -777,7 +1012,12 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		closeNonAdminConnections();
 	}
 	applyWispBlocklist();
-	if (JSON.stringify(result.settings?.blockedSites || []) !== oldBlocked) {
+	const newBlocked = JSON.stringify({
+		mode: result.settings?.accessMode,
+		blocked: result.settings?.blockedSites || [],
+		allowed: result.settings?.allowedSites || [],
+	});
+	if (newBlocked !== oldBlocked) {
 		closeNonAdminConnections();
 	}
 	trimActivity();
@@ -786,10 +1026,19 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 });
 
 app.post("/api/admin/settings/reset", requireAdmin, sameOrigin, (req, res) => {
-	const oldBlocked = JSON.stringify(getSettings().blockedSites || []);
+	const oldBlocked = JSON.stringify({
+		mode: getSettings().accessMode,
+		blocked: getSettings().blockedSites || [],
+		allowed: getSettings().allowedSites || [],
+	});
 	resetSettings();
 	applyWispBlocklist();
-	if (JSON.stringify(getSettings().blockedSites || []) !== oldBlocked) {
+	const newBlocked = JSON.stringify({
+		mode: getSettings().accessMode,
+		blocked: getSettings().blockedSites || [],
+		allowed: getSettings().allowedSites || [],
+	});
+	if (newBlocked !== oldBlocked) {
 		closeNonAdminConnections();
 	}
 	trimActivity();
@@ -797,7 +1046,7 @@ app.post("/api/admin/settings/reset", requireAdmin, sameOrigin, (req, res) => {
 	res.redirect(303, "/admin/settings?ok=reset_settings");
 });
 
-app.get("/admin/audit", requireAdmin, (req, res) => {
+app.get("/admin/audit", requireStaff, (req, res) => {
 	const filters = {
 		actor: String(req.query.actor || ""),
 		action: String(req.query.action || ""),
@@ -811,6 +1060,7 @@ app.get("/admin/audit", requireAdmin, (req, res) => {
 			users: listUsers(),
 			actions: auditActions(),
 			filters,
+			canManage: req.user.role === "admin",
 			notice: req.query.ok === "cleared" ? "Auditoría vaciada." : "",
 		}),
 	);
@@ -888,7 +1138,15 @@ app.get("/admin/system", requireAdmin, async (req, res) => {
 	const url = `${req.protocol}://${req.headers.host}/`;
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
-		systemPage({ user: req.user, stats, services, funnel, counts, url }),
+		systemPage({
+			user: req.user,
+			stats,
+			services,
+			funnel,
+			counts,
+			url,
+			backups: listBackups(),
+		}),
 	);
 });
 
@@ -904,6 +1162,7 @@ app.get("/admin/backup.json", requireAdmin, (req, res) => {
 		activity: exportActivity(),
 		settings: getSettings(),
 		audit: exportAudit(),
+		bookmarks: exportBookmarks(),
 	};
 	res.setHeader("Content-Type", "application/json; charset=utf-8");
 	res.setHeader(
@@ -911,6 +1170,39 @@ app.get("/admin/backup.json", requireAdmin, (req, res) => {
 		`attachment; filename="proxy-backup-${new Date().toISOString().slice(0, 10)}.json"`,
 	);
 	res.send(JSON.stringify(backup, null, 2));
+});
+
+app.post("/api/admin/backup/create", requireAdmin, sameOrigin, (req, res) => {
+	const info = createBackup("manual");
+	audit(req, "backup.create", info.name);
+	res.redirect(303, "/admin/system?ok=backup");
+});
+
+app.get("/admin/backup/download/:name", requireAdmin, sameSiteRequest, (req, res) => {
+	const full = backupPath(req.params.name);
+	if (!full) return res.status(404).type("text/plain").send("Copia no encontrada.");
+	audit(req, "backup.download", req.params.name);
+	res.download(full, path.basename(full));
+});
+
+app.post("/api/admin/backup/restore", requireAdmin, sameOrigin, (req, res) => {
+	const name = String(req.body.name || "");
+	const password = String(req.body.password || "");
+	const confirm = String(req.body.confirm || "");
+	if (confirm !== "RESTAURAR") {
+		return res.status(400).type("html").send("Confirmación incorrecta. Escribe RESTAURAR.");
+	}
+	if (!verifyUserPassword(req.user.username, password)) {
+		return res.status(403).type("html").send("Contraseña incorrecta.");
+	}
+	const result = restoreBackup(name);
+	if (result.error) return res.status(400).type("html").send("Copia no válida o inexistente.");
+	audit(req, "backup.restore", name);
+	res
+		.status(200)
+		.type("html")
+		.send("Copia restaurada. Reiniciando el servicio para aplicar los datos…");
+	setTimeout(() => process.exit(0), 800);
 });
 
 app.post("/api/admin/users", requireAdmin, sameOrigin, (req, res) => {
@@ -956,9 +1248,12 @@ app.post("/api/admin/users/:username/role", requireAdmin, sameOrigin, (req, res)
 	res.redirect(303, "/admin?ok=role");
 });
 
-app.post("/api/admin/users/:username/block", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/users/:username/block", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
+	if (target.role === "admin" && req.user.role !== "admin") {
+		return res.redirect(303, "/admin?error=forbidden");
+	}
 	if (target.username.toLowerCase() === req.user.username.toLowerCase()) {
 		return res.redirect(303, "/admin?error=self-block");
 	}
@@ -979,9 +1274,12 @@ app.post("/api/admin/users/:username/block", requireAdmin, sameOrigin, (req, res
 	res.redirect(303, `/admin?ok=${blocked ? "blocked" : "unblocked"}`);
 });
 
-app.post("/api/admin/users/:username/block-until", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/users/:username/block-until", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
+	if (target.role === "admin" && req.user.role !== "admin") {
+		return res.redirect(303, "/admin?error=forbidden");
+	}
 	if (target.username.toLowerCase() === req.user.username.toLowerCase()) {
 		return res.redirect(303, "/admin?error=self-block");
 	}
@@ -1015,6 +1313,37 @@ app.post("/api/admin/users/:username/block-message", requireAdmin, sameOrigin, (
 	res.redirect(303, "/admin?ok=blockmessage");
 });
 
+app.post("/api/admin/users/:username/sites", requireAdmin, sameOrigin, (req, res) => {
+	const target = getUser(req.params.username);
+	if (!target) return res.redirect(303, "/admin?error=notfound");
+	const result = setUserBlockedSites(target.username, String(req.body.sites || ""));
+	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
+	closeUserConnections(target.username);
+	audit(req, "user.sites", target.username, `${result.blockedSites.length} sitios`);
+	res.redirect(303, "/admin?ok=sites");
+});
+
+app.post("/api/admin/users/:username/schedule", requireAdmin, sameOrigin, (req, res) => {
+	const target = getUser(req.params.username);
+	if (!target) return res.redirect(303, "/admin?error=notfound");
+	const enabled = String(req.body.enabled) === "1";
+	const days = req.body.days === undefined
+		? []
+		: Array.isArray(req.body.days)
+			? req.body.days
+			: [req.body.days];
+	const result = setUserSchedule(target.username, {
+		enabled,
+		days,
+		start: String(req.body.start || ""),
+		end: String(req.body.end || ""),
+	});
+	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
+	closeUserConnections(target.username);
+	audit(req, "user.schedule", target.username, enabled ? `${result.schedule.start}-${result.schedule.end}` : "desactivado");
+	res.redirect(303, "/admin?ok=schedule");
+});
+
 app.post("/api/admin/users/:username/must-change", requireAdmin, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
@@ -1026,9 +1355,12 @@ app.post("/api/admin/users/:username/must-change", requireAdmin, sameOrigin, (re
 	res.redirect(303, `/admin?ok=${value ? "mustchange" : "mustchange_off"}`);
 });
 
-app.post("/api/admin/users/:username/logout", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/users/:username/logout", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
+	if (target.role === "admin" && req.user.role !== "admin") {
+		return res.redirect(303, "/admin?error=forbidden");
+	}
 	if (target.username.toLowerCase() === req.user.username.toLowerCase()) {
 		return res.redirect(303, "/admin?error=self-logout");
 	}
@@ -1045,6 +1377,7 @@ app.post("/api/admin/users/:username/delete", requireAdmin, sameOrigin, (req, re
 	}
 	const result = deleteUser(target);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
+	deleteUserBookmarks(target);
 	closeUserConnections(target);
 	audit(req, "user.delete", target);
 	res.redirect(303, "/admin?ok=deleted");
@@ -1080,10 +1413,40 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const server = http.createServer(app);
 
+let lastBackupDay = "";
+function scheduledBackup() {
+	const settings = getSettings();
+	if (!settings.backupEnabled) return;
+	const now = new Date();
+	if (now.getHours() !== 3) return;
+	const day = now.toISOString().slice(0, 10);
+	if (lastBackupDay === day) return;
+	lastBackupDay = day;
+	try {
+		createBackup("scheduled");
+	} catch (err) {
+		console.error("No se pudo crear la copia automática:", err.message);
+	}
+}
+pruneBackups();
+setInterval(scheduledBackup, 60 * 60 * 1000).unref();
+
 setInterval(() => {
 	const active = new Set(listSessions().map((s) => s.id));
-	for (const id of wispConnections.keys()) {
-		if (!active.has(id)) closeSessionConnections(id);
+	const tz = getSettings().timezone;
+	for (const [id, set] of wispConnections) {
+		if (!active.has(id)) {
+			closeSessionConnections(id);
+			continue;
+		}
+		let close = false;
+		for (const entry of set) {
+			const user = getUser(entry.username);
+			if (user && user.role !== "admin" && !isWithinSchedule(user, tz)) {
+				close = true;
+			}
+		}
+		if (close) closeSessionConnections(id);
 	}
 }, 60_000).unref();
 
@@ -1117,22 +1480,36 @@ server.on("upgrade", (req, socket, head) => {
 	}
 	const session = getSession(req);
 	const settings = getSettings();
+	const currentUser = session ? getUser(session.username) : null;
 	if (
 		!session ||
 		(settings.maintenanceMode && session.role !== "admin") ||
-		session.mustChangePassword
+		session.mustChangePassword ||
+		(session.role !== "admin" &&
+			!isWithinSchedule(currentUser, settings.timezone))
 	) {
 		socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
 		socket.destroy();
 		return;
 	}
 	trackWisp(session.id, session.username, socket);
+	metric("wisp_connections_total");
 	wisp.routeRequest(req, socket, head, {
 		username: session.username,
 		isAdmin: () => getUser(session.username)?.role === "admin",
+		isHostBlocked: (hostname) => {
+			const user = getUser(session.username);
+			if (!user || user.role === "admin") return false;
+			const hosts = user.blockedSites || [];
+			const host = String(hostname || "").toLowerCase();
+			return hosts.some(
+				(item) => host === item || host.endsWith(`.${item}`),
+			);
+		},
 	});
 });
 
-server.listen(3030, "127.0.0.1", () => {
-	console.log("Proxy web escuchando en http://127.0.0.1:3030");
+const HOST = process.env.HOST || "127.0.0.1";
+server.listen(3030, HOST, () => {
+	console.log(`Proxy web escuchando en http://${HOST}:3030`);
 });

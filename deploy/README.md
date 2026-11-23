@@ -3,10 +3,31 @@
 Estos archivos son plantillas genéricas. Ajusta rutas, usuario, dominio y
 puertos antes de usarlas.
 
+## Docker Compose (recomendado para el repo)
+
+El `docker-compose.yml` de la raíz levanta la app y **Caddy** con HTTPS
+automático:
+
+```bash
+cp .env.example .env
+# edita DOMAIN=tu-dominio.com
+mkdir -p data backups
+chown -R 1000:1000 data backups
+
+# crea los usuarios iniciales (solo la primera vez)
+docker compose run --rm -e PROXY_INITIAL_USERS='{"admin":{"role":"admin","password":"CAMBIAME-1234"}}' \
+  proxy node --input-type=module -e 'await import("./auth.js")'
+
+docker compose up -d
+```
+
+La app escucha en `3030` dentro de la red de Docker; Caddy publica 80/443 y
+reenvía `/wisp/` con WebSocket.
+
+## systemd + Apache
+
 - `webproxy.service`: unidad systemd para `/opt/web-proxy` y usuario `proxy`.
 - `apache-webproxy.conf`: reverse proxy HTTPS/WebSocket en el puerto local 8082.
-
-Pasos habituales:
 
 ```bash
 sudo useradd --system --home /opt/web-proxy --shell /usr/sbin/nologin proxy

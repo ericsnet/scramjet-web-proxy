@@ -12,18 +12,23 @@ administración.
 ## Funciones
 
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
+- **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar y atajos de teclado.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
-- Roles `admin` y `usuario`.
+- Roles `admin`, `moderador` y `usuario`.
 - Los administradores pueden:
   - crear usuarios y resetear contraseñas,
   - bloquear cuentas (permanente o temporal) **con mensaje personalizado**,
   - forzar logout y revocar sesiones,
   - ver actividad (URLs y búsquedas), auditoría y sesiones activas,
   - exigir cambio de contraseña y dejar notas internas,
-  - configurar sesiones, actividad, mantenimiento, buscador, portada y
-    **sitios prohibidos**,
-  - descargar copias de seguridad.
-- Bloqueo real de dominios en la capa Wisp (no solo en la interfaz).
+  - configurar sesiones, actividad, mantenimiento, buscador, portada,
+    **modo lista blanca/negra**, **sitios por usuario** y **horarios**,
+  - crear/restaurar copias y consultar métricas.
+- Los **moderadores** pueden ver usuarios, sesiones, actividad y auditoría, y
+  bloquear o cerrar sesiones; no pueden cambiar ajustes ni gestionar admins.
+- Bloqueo real de dominios en la capa Wisp, con listas globales y por usuario.
+- Copias automáticas diarias locales, métricas Prometheus y despliegue con
+  Docker + Caddy.
 - Protección CSRF, límite de intentos por usuario e IP, cookies `HttpOnly` y
   `Secure`, y cierre de conexiones al bloquear o revocar sesiones.
 - Los administradores están exentos de las restricciones configurables.
@@ -71,6 +76,19 @@ npm start
 Para desarrollo en local, `http://localhost:3030` es un origen seguro y los
 service workers funcionan. Para acceso por IP o dominio hace falta HTTPS.
 
+## Docker (rápido)
+
+```bash
+cp .env.example .env
+# edita DOMAIN=tu-dominio.com
+mkdir -p data backups
+chown -R 1000:1000 data backups
+docker compose up -d --build
+```
+
+Caddy obtiene el certificado HTTPS y reenvía WebSocket. Los datos y copias
+quedan en `data/` y `backups/`. Más detalles en `deploy/README.md`.
+
 ## Producción
 
 1. Copia el proyecto a `/opt/web-proxy` (o la ruta que uses).
@@ -108,20 +126,36 @@ Requisitos importantes:
 
 Todo se gestiona desde `/admin`:
 
-- **Usuarios**: crear, rol, contraseña, bloqueo temporal/permanente con mensaje,
-  forzar logout, notas, cambio obligatorio.
+- **Usuarios**: crear, rol (`admin`/`moderador`/`usuario`), contraseña, bloqueo
+  temporal/permanente con mensaje, forzar logout, notas, cambio obligatorio,
+  sitios por usuario y horario de acceso.
 - **Sesiones**: IP, navegador, fechas y revocación.
 - **Actividad**: URLs y búsquedas introducidas, exportación CSV.
 - **Auditoría**: logins, acciones de administración y exportación CSV.
 - **Ajustes**: sesión, actividad, mantenimiento, buscador, portada, enlaces
-  rápidos y sitios prohibidos.
-- **Sistema**: salud, servicios, Funnel y copia de seguridad.
+  rápidos, lista negra/blanca, zona horaria, copias y token de métricas.
+- **Sistema**: salud, servicios, Funnel, copias automáticas y restauración.
 
-### Sitios prohibidos
+### Sitios y horarios
 
-Un dominio por línea. Se bloquea el dominio completo y sus subdominios. El
-bloqueo se aplica en el servidor Wisp; la interfaz muestra el aviso y los
-administradores pueden acceder.
+- **Lista negra** (por defecto): se permite todo salvo los dominios indicados.
+- **Lista blanca**: solo se permiten los dominios indicados.
+- Se bloquea el dominio completo y sus subdominios, en el servidor Wisp.
+- Cada usuario puede tener **dominios prohibidos adicionales**.
+- Cada usuario puede tener **días y franjas horarias** de acceso.
+- Los administradores están exentos de listas y horarios.
+
+### Favoritos e historial
+
+Cada usuario tiene favoritos propios, historial con búsqueda y atajos
+(`Alt+←`, `Alt+→`, `Ctrl+R`, `Ctrl+L`, `/`). El administrador decide si el
+usuario puede vaciar su propio historial.
+
+### Copias y métricas
+
+- Copia automática diaria sobre las 03:00 y retención configurable.
+- Descarga y restauración desde `Sistema` (la restauración reinicia el servicio).
+- `/metrics` se activa con un token en Ajustes y expone métricas Prometheus.
 
 ## Datos y seguridad
 
@@ -130,11 +164,13 @@ administradores pueden acceder.
 - `data/settings.json`: ajustes.
 - `data/activity.json`: historial de actividad.
 - `data/audit.json`: auditoría.
+- `data/bookmarks.json`: favoritos por usuario.
+- `backups/`: copias automáticas.
 
-Todo se guarda con permisos `600`. **No subas `data/` a Git**: contiene datos
-personales. El `.gitignore` ya lo excluye.
+Todo se guarda con permisos `600`. **No subas `data/` ni `backups/` a Git**:
+contienen datos personales. El `.gitignore` ya los excluye.
 
-Copia de seguridad desde `/admin/backup.json` o manualmente. Protege la copia:
+Copia de seguridad desde `Sistema` o con el botón de descarga. Protege la copia:
 incluye hashes, IPs y navegadores.
 
 ## Desarrollo
@@ -148,14 +184,18 @@ Archivos principales:
 | Ruta | Contenido |
 | --- | --- |
 | `server.js` | Express: rutas, auth, sesiones, ajustes, auditoría, Wisp |
-| `auth.js` | Usuarios, hashes, sesiones persistentes, bloqueos y límites |
+| `auth.js` | Usuarios, hashes, sesiones persistentes, bloqueos, horarios y límites |
 | `settings.js` | Ajustes y validación |
 | `activity.js` | Historial por usuario |
 | `audit.js` | Auditoría y CSV |
+| `bookmarks.js` | Favoritos por usuario |
+| `backup.js` | Copias automáticas, listado y restauración |
+| `metrics.js` | Contadores Prometheus |
 | `pages.js` | Páginas de login, cuenta y administración |
 | `public/` | Interfaz del proxy |
 | `sw.js` | Service worker de Scramjet |
-| `scripts/patch-wisp.mjs` | Excepción de admins en el bloqueo Wisp |
+| `Dockerfile`, `docker-compose.yml`, `Caddyfile` | Despliegue con Docker + Caddy |
+| `scripts/patch-wisp.mjs` | Excepción de admins y listas por usuario en Wisp |
 
 ## Versiones fijadas
 

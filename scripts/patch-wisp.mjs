@@ -32,11 +32,23 @@ function patch(file, marker, transform) {
 patch("connection.mjs", "this.isAdmin", (text) =>
 	text.replace(
 		"constructor(ws, path, {TCPSocket, UDPSocket, ping_interval, wisp_version, wisp_extensions} = {}) {",
-		"constructor(ws, path, {TCPSocket, UDPSocket, ping_interval, wisp_version, wisp_extensions, username, isAdmin} = {}) {",
+		"constructor(ws, path, {TCPSocket, UDPSocket, ping_interval, wisp_version, wisp_extensions, username, isAdmin, isHostBlocked} = {}) {",
 	).replace(
 		"    this.path = path;",
-		"    this.path = path;\n    this.username = username || \"\";\n    this.isAdmin = typeof isAdmin === \"function\" ? isAdmin : () => false;",
+		"    this.path = path;\n    this.username = username || \"\";\n    this.isAdmin = typeof isAdmin === \"function\" ? isAdmin : () => false;\n    this.isHostBlocked = typeof isHostBlocked === \"function\" ? isHostBlocked : () => false;",
 	),
+);
+
+patch("connection.mjs", "this.isHostBlocked", (text) =>
+	text
+		.replace(
+			"wisp_extensions, username, isAdmin} = {}) {",
+			"wisp_extensions, username, isAdmin, isHostBlocked} = {}) {",
+		)
+		.replace(
+			"this.isAdmin = typeof isAdmin === \"function\" ? isAdmin : () => false;",
+			"this.isAdmin = typeof isAdmin === \"function\" ? isAdmin : () => false;\n    this.isHostBlocked = typeof isHostBlocked === \"function\" ? isHostBlocked : () => false;",
+		),
 );
 
 patch("filter.mjs", "const isAdmin = !!(connection", (text) =>
@@ -49,4 +61,11 @@ patch("filter.mjs", "const isAdmin = !!(connection", (text) =>
 			"  else if (options.hostname_blacklist) {",
 			"  else if (options.hostname_blacklist && !isAdmin) {",
 		),
+);
+
+patch("filter.mjs", "connection.isHostBlocked", (text) =>
+	text.replace(
+		"  //check if the port is blocked",
+		"  if (!isAdmin && connection && typeof connection.isHostBlocked === \"function\" && connection.isHostBlocked(hostname))\n    return close_reasons.HostBlocked;\n\n  //check if the port is blocked",
+	),
 );

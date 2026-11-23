@@ -14,6 +14,8 @@
 			<span id="session-avatar" class="avatar" aria-hidden="true">?</span>
 			<span id="session-who"></span>
 			<span class="divider" aria-hidden="true"></span>
+			<a href="/bookmarks">Favoritos</a>
+			<a href="/history">Historial</a>
 			<a href="/account">Cuenta</a>
 			<a id="admin-link" href="/admin" hidden>Admin</a>
 			<form method="post" action="/logout" class="inline-form">
@@ -51,10 +53,12 @@
 						inputmode="url"
 						placeholder="https://es.wikipedia.org"
 						aria-label="Dirección web o búsqueda"
+						list="url-suggestions"
 						autofocus
 					/>
 					<button type="submit">Ir</button>
 				</form>
+				<datalist id="url-suggestions"></datalist>
 
 				<div class="quick" id="quick-links">
 					<a href="#" data-url="https://es.wikipedia.org">Wikipedia</a>
@@ -62,6 +66,11 @@
 					<a href="#" data-url="https://www.youtube.com">YouTube</a>
 					<a href="#" data-url="https://www.reddit.com">Reddit</a>
 					<a href="#" data-url="https://news.ycombinator.com">Hacker News</a>
+				</div>
+
+				<div id="favorites-wrap" class="favorites-wrap" hidden>
+					<h2 class="favorites-title">Favoritos</h2>
+					<div class="quick" id="favorites"></div>
 				</div>
 
 				<p id="sj-error" class="error"></p>
@@ -79,6 +88,10 @@
 				<button id="home-btn" class="home" type="button" title="Inicio">
 					⌂
 				</button>
+				<button id="back-btn" class="home" type="button" title="Atrás">←</button>
+				<button id="forward-btn" class="home" type="button" title="Adelante">→</button>
+				<button id="reload-btn" class="home" type="button" title="Recargar">⟳</button>
+				<button id="bookmark-btn" class="home" type="button" title="Guardar en favoritos">☆</button>
 				<a class="home" href="/account" title="Mi cuenta">👤</a>
 				<form id="frame-form" class="search compact" autocomplete="off">
 					<span class="search-icon" aria-hidden="true">
@@ -93,6 +106,7 @@
 						inputmode="url"
 						placeholder="Dirección…"
 						aria-label="Dirección web"
+						list="url-suggestions"
 					/>
 					<button type="submit">Ir</button>
 				</form>
@@ -100,6 +114,21 @@
 			</div>
 			<iframe id="sj-frame" title="Contenido proxificado"></iframe>
 		</section>
+
+		<dialog id="bookmark-dialog">
+			<form id="bookmark-form" method="dialog">
+				<h2>Guardar favorito</h2>
+				<label for="bookmark-label">Nombre</label>
+				<input id="bookmark-label" maxlength="60" required>
+				<label for="bookmark-url">URL</label>
+				<input id="bookmark-url" required>
+				<p id="bookmark-error" class="error" style="margin-top:10px"></p>
+				<div class="dialog-actions">
+					<button type="button" id="bookmark-cancel" class="secondary">Cancelar</button>
+					<button type="submit" class="primary">Guardar</button>
+				</div>
+			</form>
+		</dialog>
 
 		<footer>
 			<div>

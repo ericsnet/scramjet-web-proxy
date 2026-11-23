@@ -32,6 +32,13 @@ export const DEFAULTS = Object.freeze({
 	],
 	allowUserPasswordChange: true,
 	blockedSites: [],
+	allowedSites: [],
+	accessMode: "blacklist",
+	timezone: "Europe/Madrid",
+	backupEnabled: true,
+	backupRetentionDays: 14,
+	metricsToken: "",
+	allowUserHistoryClear: false,
 });
 
 const LIMITS = {
@@ -81,6 +88,42 @@ function toInt(value, fallback) {
 	return Number.isFinite(n) ? n : fallback;
 }
 
+function parseSiteList(input, label) {
+	const raw = Array.isArray(input) ? input.join("\n") : String(input || "");
+	const lines = raw
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line && !line.startsWith("#"));
+	const errors = [];
+	const hosts = [];
+	if (lines.length > 100) {
+		return { hosts: [], errors: [`Máximo 100 sitios ${label}.`] };
+	}
+	for (const line of lines) {
+		if (line.length > 200) {
+			errors.push(`Sitio demasiado largo: ${line.slice(0, 40)}…`);
+			continue;
+		}
+		const cleaned = line.replace(/^\*\./, "");
+		const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned)
+			? cleaned
+			: `https://${cleaned}`;
+		let host;
+		try {
+			host = new URL(candidate).hostname.toLowerCase().replace(/\.$/, "");
+		} catch {
+			errors.push(`Sitio no válido: ${line}`);
+			continue;
+		}
+		if (!host || !/^[a-z0-9.-]+$/.test(host) || !host.includes(".")) {
+			errors.push(`Sitio no válido: ${line}`);
+			continue;
+		}
+		hosts.push(host);
+	}
+	return { hosts: [...new Set(hosts)], errors };
+}
+
 function normalize(input, silent = false) {
 	const next = clone(settings);
 	const errors = [];
@@ -109,41 +152,53 @@ function normalize(input, silent = false) {
 	}
 
 	if (input.blockedSites !== undefined) {
-		const raw = Array.isArray(input.blockedSites)
-			? input.blockedSites.join("\n")
-			: String(input.blockedSites);
-		const lines = raw
-			.split(/\r?\n/)
-			.map((line) => line.trim())
-			.filter((line) => line && !line.startsWith("#"));
-		if (lines.length > 100) {
-			errors.push("Máximo 100 sitios prohibidos.");
-		} else {
-			const hosts = [];
-			for (const line of lines) {
-				if (line.length > 200) {
-					errors.push(`Sitio demasiado largo: ${line.slice(0, 40)}…`);
-					continue;
-				}
-				const cleaned = line.replace(/^\*\./, "");
-				const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned)
-					? cleaned
-					: `https://${cleaned}`;
-				let host;
-				try {
-					host = new URL(candidate).hostname.toLowerCase().replace(/\.$/, "");
-				} catch {
-					errors.push(`Sitio no válido: ${line}`);
-					continue;
-				}
-				if (!host || !/^[a-z0-9.-]+$/.test(host) || !host.includes(".")) {
-					errors.push(`Sitio no válido: ${line}`);
-					continue;
-				}
-				hosts.push(host);
-			}
-			if (!errors.length) next.blockedSites = [...new Set(hosts)];
+		const result = parseSiteList(input.blockedSites, "prohibidos");
+		if (result.errors.length) errors.push(...result.errors);
+		else next.blockedSites = result.hosts;
+	}
+	if (input.allowedSites !== undefined) {
+		const result = parseSiteList(input.allowedSites, "permitidos");
+		if (result.errors.length) errors.push(...result.errors);
+		else next.allowedSites = result.hosts;
+	}
+	if (input.accessMode !== undefined) {
+		const value = String(input.accessMode);
+		if (!["blacklist", "allowlist"].includes(value)) errors.push("Modo de acceso no válido.");
+		else next.accessMode = value;
+	}
+	if (input.timezone !== undefined) {
+		const value = String(input.timezone).trim();
+		try {
+			new Intl.DateTimeFormat("en-GB", { timeZone: value }).format(new Date());
+			next.timezone = value;
+		} catch {
+			errors.push("Zona horaria no válida.");
 		}
+	}
+	if (input.backupEnabled !== undefined) {
+		next.backupEnabled =
+			input.backupEnabled === true ||
+			input.backupEnabled === "1" ||
+			input.backupEnabled === "on";
+	}
+	if (input.backupRetentionDays !== undefined) {
+		const n = toInt(input.backupRetentionDays, NaN);
+		if (!Number.isFinite(n) || n < 1 || n > 90) errors.push("Retención de copias: entre 1 y 90 días.");
+		else next.backupRetentionDays = n;
+	}
+	if (input.metricsToken !== undefined) {
+		const value = String(input.metricsToken).trim();
+		if (value.length > 64 || (value && !/^[A-Za-z0-9._-]+$/.test(value))) {
+			errors.push("Token de métricas no válido (máx. 64, letras/números/._-).");
+		} else {
+			next.metricsToken = value;
+		}
+	}
+	if (input.allowUserHistoryClear !== undefined) {
+		next.allowUserHistoryClear =
+			input.allowUserHistoryClear === true ||
+			input.allowUserHistoryClear === "1" ||
+			input.allowUserHistoryClear === "on";
 	}
 
 	if (input.maintenanceMessage !== undefined) {

@@ -94,6 +94,9 @@ td{padding:12px 10px;border-top:1px solid var(--border);vertical-align:middle}
 .actions select{width:auto;padding:7px 9px;font-size:13px}
 .pw-row{display:flex;gap:8px;align-items:center}
 .pw-row input{flex:1;min-width:0}
+.days{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0}
+.day{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);margin:0}
+.day input{width:auto}
 .scroll{overflow-x:auto}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
 .badge.blocked{color:#fecaca;border-color:#7f1d1d;background:#1f1113}
@@ -233,17 +236,24 @@ ${topbar}
 }
 
 function topbar(user) {
-	const admin = user?.role === "admin"
-		? '<a href="/admin">Administración</a>'
-		: "";
+	const staff = user?.role === "admin" || user?.role === "moderator";
+	const admin = staff ? '<a href="/admin">Administración</a>' : "";
 	return `<header class="topbar">
   <div class="brand"><span class="brand-icon">${LOGO}</span>Proxy <span>Web</span></div>
   <a href="/">Proxy</a>
+  <a href="/bookmarks">Favoritos</a>
+  <a href="/history">Historial</a>
   <a href="/account">Mi cuenta</a>
   ${admin}
-  <span class="who">${esc(user?.username || "")} · ${user?.role === "admin" ? "administrador" : "usuario"}</span>
+  <span class="who">${esc(user?.username || "")} · ${roleLabel(user?.role)}</span>
   <form method="post" action="/logout" class="inline"><button class="link" type="submit">Salir</button></form>
 </header>`;
+}
+
+function roleLabel(role) {
+	if (role === "admin") return "administrador";
+	if (role === "moderator") return "moderador";
+	return "usuario";
 }
 
 const ADMIN_TABS = [
@@ -255,11 +265,15 @@ const ADMIN_TABS = [
 	["system", "/admin/system", "Sistema"],
 ];
 
-function adminTabs(active) {
-	const links = ADMIN_TABS.map(
-		([key, href, label]) =>
-			`<a href="${href}"${key === active ? ' class="active"' : ""}>${label}</a>`,
-	).join("");
+function adminTabs(active, role = "admin") {
+	const visible =
+		role === "admin" ? ADMIN_TABS : ADMIN_TABS.filter(([key]) => !["settings", "system"].includes(key));
+	const links = visible
+		.map(
+			([key, href, label]) =>
+				`<a href="${href}"${key === active ? ' class="active"' : ""}>${label}</a>`,
+		)
+		.join("");
 	return `<nav class="tabs">${links}</nav>`;
 }
 
@@ -362,7 +376,10 @@ ${
   <h1>Mi cuenta</h1>
   <p class="muted">
     Usuario <strong>${esc(user.username)}</strong> ·
-    ${user.role === "admin" ? "administrador" : "usuario normal"}
+    ${roleLabel(user.role)}
+  </p>
+  <p class="muted">
+    <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a>
   </p>
   ${
 		allowPasswordChange || forced
@@ -410,16 +427,135 @@ function fmtDate(at) {
 	}
 }
 
-export function adminPage({ user, users, counts = {}, notice = "", error = "" } = {}) {
+export function bookmarksPage({ user, bookmarks = [], notice = "", error = "" } = {}) {
+	const rows = bookmarks
+		.map(
+			(b) => `<div class="user">
+  <div class="user-head">
+    <strong>${esc(b.label)}</strong>
+    <span class="meta">${esc(fmtDate(b.createdAt))}</span>
+  </div>
+  <form method="post" action="/api/bookmarks/${encodeURIComponent(b.id)}/update" class="actions" style="margin-bottom:8px">
+    <input name="label" value="${esc(b.label)}" maxlength="60" aria-label="Nombre">
+    <input name="url" value="${esc(b.url)}" aria-label="URL">
+    <button class="small" type="submit">Guardar</button>
+  </form>
+  <div class="actions">
+    <a class="small" href="/?goto=${encodeURIComponent(b.url)}">Abrir</a>
+    <form method="post" action="/api/bookmarks/${encodeURIComponent(b.id)}/delete" onsubmit="return confirm('¿Eliminar este favorito?')">
+      <button class="small danger" type="submit">Eliminar</button>
+    </form>
+  </div>
+</div>`,
+		)
+		.join("");
+
+	const body = `
+<div class="card">
+  <h1>Favoritos</h1>
+  <p class="muted">Tus enlaces guardados. Aparecen también en la portada.</p>
+  <form method="post" action="/api/bookmarks" class="grid">
+    <div>
+      <label for="bm-label">Nombre</label>
+      <input id="bm-label" name="label" maxlength="60" placeholder="Mi favorito">
+    </div>
+    <div>
+      <label for="bm-url">URL</label>
+      <input id="bm-url" name="url" placeholder="https://ejemplo.com">
+    </div>
+    <button class="primary" type="submit" style="grid-column:1/-1">Añadir favorito</button>
+  </form>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+</div>
+<div class="card">
+  <h2>Favoritos (${bookmarks.length})</h2>
+  ${rows || '<p class="empty">Todavía no tienes favoritos.</p>'}
+</div>`;
+	return shell("Favoritos · Proxy Web", body, { topbar: topbar(user) });
+}
+
+export function historyPage({
+	user,
+	activity = [],
+	total = 0,
+	page = 1,
+	pages = 1,
+	search = "",
+	canClear = false,
+	notice = "",
+} = {}) {
+	const items = activity
+		.map(
+			(e) => `<li>
+  <span class="when">${esc(fmtDate(e.at))}</span>
+  <span class="what">
+    ${e.query ? `<span class="query">Búsqueda: ${esc(e.query)}</span>` : ""}
+    ${e.url ? `<span class="url">${esc(e.url)}</span>` : ""}
+  </span>
+</li>`,
+		)
+		.join("");
+	const query = search ? `&q=${encodeURIComponent(search)}` : "";
+	const body = `
+<div class="card">
+  <h1>Mi historial</h1>
+  <p class="muted">Direcciones y búsquedas que has introducido. Total: ${esc(total)}.</p>
+  <form method="get" action="/history" class="filter">
+    <input name="q" value="${esc(search)}" placeholder="Buscar en el historial" aria-label="Buscar">
+    <button class="small" type="submit">Buscar</button>
+    ${search ? '<a href="/history">Quitar búsqueda</a>' : ""}
+  </form>
+  ${
+		canClear
+			? `<form method="post" action="/api/account/history/clear" onsubmit="return confirm('¿Vaciar tu historial?')" style="margin-bottom:16px">
+      <button class="small danger" type="submit">Vaciar historial</button>
+    </form>`
+			: ""
+	}
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${items ? `<ul class="activity">${items}</ul>` : '<p class="empty">No hay resultados.</p>'}
+  ${
+		pages > 1
+			? `<div class="filter" style="margin-top:16px">
+    ${page > 1 ? `<a class="small" href="/history?page=${page - 1}${query}">Anterior</a>` : ""}
+    <span class="muted">Página ${page} de ${pages}</span>
+    ${page < pages ? `<a class="small" href="/history?page=${page + 1}${query}">Siguiente</a>` : ""}
+  </div>`
+			: ""
+	}
+</div>`;
+	return shell("Historial · Proxy Web", body, { topbar: topbar(user) });
+}
+
+export function adminPage({ user, users, counts = {}, canManage = false, notice = "", error = "" } = {}) {
+	const dayLabels = [
+		[0, "D"],
+		[1, "L"],
+		[2, "M"],
+		[3, "X"],
+		[4, "J"],
+		[5, "V"],
+		[6, "S"],
+	];
 	const cards = users
 		.map((u) => {
 			const self = u.username.toLowerCase() === user.username.toLowerCase();
 			const visits = counts[u.username] || 0;
 			const tempBlocked = !!u.blockedUntil;
-			const blocked = u.blocked || tempBlocked;
+			const schedule = u.schedule || { enabled: false, days: [1, 2, 3, 4, 5], start: "08:00", end: "20:00" };
+			const dayChecks = dayLabels
+				.map(
+					([value, label]) =>
+						`<label class="day"><input type="checkbox" name="days" value="${value}"${
+							schedule.days?.includes(value) ? " checked" : ""
+						}> ${label}</label>`,
+				)
+				.join("");
 			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role">
         <select name="role" aria-label="Rol de ${esc(u.username)}">
           <option value="user"${u.role === "user" ? " selected" : ""}>usuario</option>
+          <option value="moderator"${u.role === "moderator" ? " selected" : ""}>moderador</option>
           <option value="admin"${u.role === "admin" ? " selected" : ""}>admin</option>
         </select>
         <button class="small" type="submit">Guardar rol</button>
@@ -457,10 +593,49 @@ export function adminPage({ user, users, counts = {}, notice = "", error = "" } 
         <input type="hidden" name="value" value="${u.mustChangePassword ? "0" : "1"}">
         <button class="small" type="submit">${u.mustChangePassword ? "Quitar cambio obligatorio" : "Exigir cambio de contraseña"}</button>
       </form>`;
+			const details = canManage
+				? `<details class="more">
+    <summary>Más acciones</summary>
+    <div class="actions">
+      <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/password">
+        <input name="password" type="password" placeholder="Nueva contraseña" minlength="8" required aria-label="Nueva contraseña de ${esc(u.username)}">
+        <button class="small" type="submit">Cambiar contraseña</button>
+      </form>
+      ${roleForm}
+      ${mustChangeForm}
+      ${tempForm}
+      ${deleteForm}
+    </div>
+    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block-message" style="margin-top:12px">
+      <label for="blockmsg-${esc(u.username)}">Mensaje de bloqueo</label>
+      <textarea id="blockmsg-${esc(u.username)}" name="message" maxlength="500" placeholder="Se mostrará al usuario cuando intente entrar bloqueado">${esc(u.blockMessage || "")}</textarea>
+      <button class="small" type="submit" style="margin-top:8px">Guardar mensaje</button>
+    </form>
+    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/sites" style="margin-top:12px">
+      <label for="sites-${esc(u.username)}">Sitios prohibidos de este usuario</label>
+      <textarea id="sites-${esc(u.username)}" name="sites" placeholder="ejemplo.com&#10;otro-sitio.org">${esc((u.blockedSites || []).join("\n"))}</textarea>
+      <button class="small" type="submit" style="margin-top:8px">Guardar sitios</button>
+    </form>
+    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/schedule" style="margin-top:12px">
+      <label class="check"><input type="checkbox" name="enabled" value="1"${schedule.enabled ? " checked" : ""}> Activar horario de acceso</label>
+      <div class="days">${dayChecks}</div>
+      <div class="field-grid">
+        <div><label for="start-${esc(u.username)}">Desde</label><input id="start-${esc(u.username)}" type="time" name="start" value="${esc(schedule.start)}" required></div>
+        <div><label for="end-${esc(u.username)}">Hasta</label><input id="end-${esc(u.username)}" type="time" name="end" value="${esc(schedule.end)}" required></div>
+      </div>
+      <button class="small" type="submit" style="margin-top:8px">Guardar horario</button>
+    </form>
+    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/notes" style="margin-top:12px">
+      <label for="notes-${esc(u.username)}">Notas internas</label>
+      <textarea id="notes-${esc(u.username)}" name="notes" maxlength="500" placeholder="Solo visibles para administradores">${esc(u.notes || "")}</textarea>
+      <button class="small" type="submit" style="margin-top:8px">Guardar notas</button>
+    </form>
+  </details>`
+				: "";
 			return `<div class="user">
   <div class="user-head">
     <strong>${esc(u.username)}</strong>
-    <span class="badge${u.role === "admin" ? " admin" : ""}">${u.role === "admin" ? "admin" : "usuario"}</span>
+    <span class="badge${u.role === "admin" ? " admin" : ""}">${esc(roleLabel(u.role))}</span>
     ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
     ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
     ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
@@ -485,43 +660,23 @@ export function adminPage({ user, users, counts = {}, notice = "", error = "" } 
 				: ""
 		}
     ${blockForm}
-    ${deleteForm}
   </div>
-  <details class="more">
-    <summary>Más acciones</summary>
-    <div class="actions">
-      <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/password">
-        <input name="password" type="password" placeholder="Nueva contraseña" minlength="8" required aria-label="Nueva contraseña de ${esc(u.username)}">
-        <button class="small" type="submit">Cambiar contraseña</button>
-      </form>
-      ${roleForm}
-      ${mustChangeForm}
-      ${tempForm}
-    </div>
-    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block-message" style="margin-top:12px">
-      <label for="blockmsg-${esc(u.username)}">Mensaje de bloqueo</label>
-      <textarea id="blockmsg-${esc(u.username)}" name="message" maxlength="500" placeholder="Se mostrará al usuario cuando intente entrar bloqueado">${esc(u.blockMessage || "")}</textarea>
-      <button class="small" type="submit" style="margin-top:8px">Guardar mensaje</button>
-    </form>
-    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/notes" style="margin-top:12px">
-      <label for="notes-${esc(u.username)}">Notas internas</label>
-      <textarea id="notes-${esc(u.username)}" name="notes" maxlength="500" placeholder="Solo visibles para administradores">${esc(u.notes || "")}</textarea>
-      <button class="small" type="submit" style="margin-top:8px">Guardar notas</button>
-    </form>
-  </details>
+  ${details}
 </div>`;
 		})
 		.join("\n");
 
 	const body = `
-${adminTabs("users")}
+${adminTabs("users", user.role)}
 <div class="card">
   <h1>Usuarios</h1>
   <p class="muted">
-    Gestiona usuarios, contraseñas, roles, bloqueos y sesiones.
+    ${canManage ? "Gestiona usuarios, contraseñas, roles, bloqueos, sitios y horarios." : "Puedes consultar usuarios, actividad y sesiones, y bloquear cuentas."}
     <a href="/admin/activity">Ver toda la actividad</a>.
   </p>
-  <h2>Crear usuario</h2>
+  ${
+		canManage
+			? `<h2>Crear usuario</h2>
   <form method="post" action="/api/admin/users">
     <div class="grid">
       <div>
@@ -539,11 +694,14 @@ ${adminTabs("users")}
     <label for="new-role">Rol</label>
     <select id="new-role" name="role">
       <option value="user">usuario normal</option>
+      <option value="moderator">moderador</option>
       <option value="admin">administrador</option>
     </select>
     <button class="primary" type="submit">Crear usuario</button>
   </form>
-  <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar. Si usas “Generar”, copia la contraseña antes de crear el usuario.</p>
+  <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar.</p>`
+			: ""
+	}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
 </div>
@@ -558,6 +716,7 @@ function genPass() {
   const values = new Uint32Array(16);
   crypto.getRandomValues(values);
   const input = document.getElementById("new-pass");
+  if (!input) return;
   input.value = [...values].map((n) => chars[n % chars.length]).join("");
   input.type = "text";
   input.focus();
@@ -576,6 +735,7 @@ export function activityPage({
 	notice = "",
 	retention = 500,
 	activityEnabled = true,
+	canManage = false,
 } = {}) {
 	const options = users
 		.map(
@@ -600,7 +760,7 @@ export function activityPage({
 		.join("\n");
 
 	const body = `
-${adminTabs("activity")}
+${adminTabs("activity", user.role)}
 <div class="card">
   <h1>Actividad</h1>
   <p class="muted">
@@ -615,13 +775,13 @@ ${adminTabs("activity")}
     </select>
     <button class="small" type="submit">Filtrar</button>
     <a href="/admin/activity">Quitar filtro</a>
-    <a class="small" href="/admin/activity.csv${filter ? `?user=${encodeURIComponent(filter)}` : ""}" style="margin-left:auto">Exportar CSV</a>
+    ${canManage ? `<a class="small" href="/admin/activity.csv${filter ? `?user=${encodeURIComponent(filter)}` : ""}" style="margin-left:auto">Exportar CSV</a>` : ""}
   </form>
-  <form method="post" action="/api/admin/activity/clear" class="filter"
+  ${canManage ? `<form method="post" action="/api/admin/activity/clear" class="filter"
     onsubmit="return confirm('¿Vaciar ${filter ? `el historial de ${esc(filter)}` : "todo el historial"}?')">
     <input type="hidden" name="user" value="${esc(filter)}">
     <button class="small danger" type="submit">Vaciar ${filter ? `historial de ${esc(filter)}` : "todo el historial"}</button>
-  </form>
+  </form>` : ""}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${
 		items
@@ -667,7 +827,7 @@ export function sessionsPage({
 		.join("");
 
 	const body = `
-${adminTabs("sessions")}
+${adminTabs("sessions", user.role)}
 <div class="card">
   <h1>Sesiones activas</h1>
   <p class="muted">Sesiones iniciadas ahora mismo. Se pierden al reiniciar el servicio.</p>
@@ -730,6 +890,10 @@ ${adminTabs("settings")}
         <label for="lockoutMinutes">Minutos de bloqueo por intentos</label>
         <input id="lockoutMinutes" name="lockoutMinutes" type="number" min="1" max="1440" value="${settings.lockoutMinutes}" required>
       </div>
+      <div>
+        <label for="timezone">Zona horaria</label>
+        <input id="timezone" name="timezone" value="${esc(settings.timezone || "Europe/Madrid")}" placeholder="Europe/Madrid" required>
+      </div>
     </div>
     <label class="check"><input type="checkbox" name="allowUserPasswordChange"${settings.allowUserPasswordChange ? " checked" : ""}> Permitir que los usuarios cambien su contraseña (los admins siempre pueden)</label>
   </div>
@@ -737,6 +901,7 @@ ${adminTabs("settings")}
   <div class="section">
     <h3>Actividad</h3>
     <label class="check"><input type="checkbox" name="activityEnabled"${settings.activityEnabled ? " checked" : ""}> Registrar actividad de navegación</label>
+    <label class="check"><input type="checkbox" name="allowUserHistoryClear"${settings.allowUserHistoryClear ? " checked" : ""}> Permitir que los usuarios vacíen su propio historial</label>
     <div class="field-grid">
       <div>
         <label for="activityPerUser">Máximo por usuario</label>
@@ -757,10 +922,32 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section">
-    <h3>Sitios prohibidos</h3>
-    <label for="blockedSites">Dominios bloqueados (uno por línea)</label>
+    <h3>Sitios y modo de acceso</h3>
+    <label for="accessMode">Modo</label>
+    <select id="accessMode" name="accessMode">
+      <option value="blacklist"${settings.accessMode === "blacklist" ? " selected" : ""}>Lista negra: se permite todo salvo los prohibidos</option>
+      <option value="allowlist"${settings.accessMode === "allowlist" ? " selected" : ""}>Lista blanca: solo se permiten los listados</option>
+    </select>
+    <label for="allowedSites">Dominios permitidos (uno por línea)</label>
+    <textarea id="allowedSites" name="allowedSites" style="min-height:100px" placeholder="ejemplo.com&#10;otro-sitio.org">${esc((settings.allowedSites || []).join("\n"))}</textarea>
+    <label for="blockedSites">Dominios prohibidos (uno por línea)</label>
     <textarea id="blockedSites" name="blockedSites" style="min-height:100px" placeholder="ejemplo.com&#10;otro-sitio.org">${esc((settings.blockedSites || []).join("\n"))}</textarea>
-    <p class="hint">Se bloquea el dominio completo y sus subdominios. Los administradores pueden acceder.</p>
+    <p class="hint">Se bloquea el dominio completo y sus subdominios. En modo lista blanca, la lista de prohibidos se ignora. Los administradores pueden acceder.</p>
+  </div>
+
+  <div class="section">
+    <h3>Copias y métricas</h3>
+    <label class="check"><input type="checkbox" name="backupEnabled"${settings.backupEnabled ? " checked" : ""}> Copia automática diaria (sobre las 03:00)</label>
+    <div class="field-grid">
+      <div>
+        <label for="backupRetentionDays">Días de retención</label>
+        <input id="backupRetentionDays" name="backupRetentionDays" type="number" min="1" max="90" value="${settings.backupRetentionDays}" required>
+      </div>
+      <div>
+        <label for="metricsToken">Token de /metrics (vacío = desactivado)</label>
+        <input id="metricsToken" name="metricsToken" value="${esc(settings.metricsToken || "")}" maxlength="64">
+      </div>
+    </div>
   </div>
 
   <div class="section">
@@ -819,6 +1006,7 @@ export function auditPage({
 	users = [],
 	actions = [],
 	filters = {},
+	canManage = false,
 	notice = "",
 } = {}) {
 	const actorOptions = users
@@ -853,7 +1041,7 @@ export function auditPage({
 		.join("");
 
 	const body = `
-${adminTabs("audit")}
+${adminTabs("audit", user.role)}
 <div class="card">
   <h1>Auditoría</h1>
   <p class="muted">Registro de accesos y acciones de administración. Últimos 300 eventos filtrados.</p>
@@ -868,11 +1056,11 @@ ${adminTabs("audit")}
     </select>
     <button class="small" type="submit">Filtrar</button>
     <a href="/admin/audit">Quitar filtros</a>
-    <a class="small" href="/admin/audit.csv${csvQuery}" style="margin-left:auto">Exportar CSV</a>
+    ${canManage ? `<a class="small" href="/admin/audit.csv${csvQuery}" style="margin-left:auto">Exportar CSV</a>` : ""}
   </form>
-  <form method="post" action="/api/admin/audit/clear" class="filter" onsubmit="return confirm('¿Vaciar toda la auditoría?')">
+  ${canManage ? `<form method="post" action="/api/admin/audit/clear" class="filter" onsubmit="return confirm('¿Vaciar toda la auditoría?')">
     <button class="small danger" type="submit">Vaciar auditoría</button>
-  </form>
+  </form>` : ""}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${
 		rows
@@ -886,7 +1074,15 @@ ${adminTabs("audit")}
 	return shell("Auditoría · Administración", body, { topbar: topbar(user) });
 }
 
-export function systemPage({ user, stats, services = {}, funnel = {}, counts = {}, url = "" } = {}) {
+export function systemPage({
+	user,
+	stats,
+	services = {},
+	funnel = {},
+	counts = {},
+	url = "",
+	backups = [],
+} = {}) {
 	const serviceRow = (name, state) =>
 		`<tr><td><strong>${esc(name)}</strong></td><td><span class="badge${state === "active" ? " current" : " blocked"}">${esc(state)}</span></td></tr>`;
 	const diskPercent = stats.disk.total
@@ -925,8 +1121,42 @@ ${adminTabs("system")}
   <p class="muted">URL pública: <a href="${esc(url)}">${esc(url)}</a></p>
   <pre class="panel">${esc(funnel.output || "Sin información")}</pre>
   <h2>Copias de seguridad</h2>
-  <p class="muted">Incluye usuarios (con hashes), actividad, ajustes y auditoría. Guárdala en un sitio seguro.</p>
-  <a class="small" href="/admin/backup.json">Descargar copia JSON</a>
+  <p class="muted">Incluye usuarios (con hashes), actividad, ajustes, auditoría y favoritos. Guárdala en un sitio seguro.</p>
+  <div class="actions" style="margin-bottom:14px">
+    <a class="small" href="/admin/backup.json">Descargar copia actual</a>
+    <form method="post" action="/api/admin/backup/create">
+      <button class="small" type="submit">Crear copia ahora</button>
+    </form>
+  </div>
+  ${
+		backups.length
+			? `<div class="scroll"><table>
+    <thead><tr><th>Archivo</th><th>Fecha</th><th>Tamaño</th><th></th></tr></thead>
+    <tbody>${backups
+			.map(
+				(b) => `<tr>
+      <td class="mono">${esc(b.name)}</td>
+      <td class="mono">${esc(fmtDate(b.createdAt))}</td>
+      <td>${esc(fmtBytes(b.size))}</td>
+      <td><a class="small" href="/admin/backup/download/${encodeURIComponent(b.name)}">Descargar</a></td>
+    </tr>`,
+			)
+			.join("")}</tbody>
+  </table></div>
+  <form method="post" action="/api/admin/backup/restore" style="margin-top:16px"
+    onsubmit="return confirm('¿Restaurar esta copia? Se sobrescribirán los datos actuales.')">
+    <label for="restore-name">Restaurar copia</label>
+    <select id="restore-name" name="name" required>
+      ${backups.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join("")}
+    </select>
+    <div class="field-grid">
+      <div><label for="restore-pass">Tu contraseña</label><input id="restore-pass" name="password" type="password" required></div>
+      <div><label for="restore-confirm">Escribe RESTAURAR</label><input id="restore-confirm" name="confirm" required></div>
+    </div>
+    <button class="small danger" type="submit" style="margin-top:10px">Restaurar y reiniciar</button>
+  </form>`
+			: '<p class="empty">Todavía no hay copias guardadas.</p>'
+	}
 </div>`;
 	return shell("Sistema · Administración", body, { topbar: topbar(user) });
 }
@@ -945,12 +1175,16 @@ export function maintenancePage({ settings, user = null } = {}) {
 	return shell("En mantenimiento · Proxy Web", body);
 }
 
-export function blockedPage({ message = "" } = {}) {
+export function blockedPage({ title = "Cuenta bloqueada", message = "", user = null } = {}) {
 	const body = `<div class="card login-card">
   <div class="login-logo">${LOGO}</div>
-  <h1>Cuenta bloqueada</h1>
+  <h1>${esc(title)}</h1>
   <p class="muted">${esc(message || "Esta cuenta está bloqueada. Contacta con el administrador.")}</p>
-  <a class="small" href="/login">Volver al login</a>
+  ${
+		user
+			? `<form method="post" action="/logout"><button class="primary" type="submit">Cerrar sesión</button></form>`
+			: '<a class="small" href="/login">Volver al login</a>'
+	}
 </div>`;
-	return shell("Cuenta bloqueada · Proxy Web", body);
+	return shell(`${esc(title)} · Proxy Web`, body);
 }

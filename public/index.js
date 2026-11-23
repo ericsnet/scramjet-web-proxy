@@ -9,9 +9,30 @@ const frameUrl = document.getElementById("sj-frame-url");
 const homeButton = document.getElementById("home-btn");
 const error = document.getElementById("sj-error");
 const errorCode = document.getElementById("sj-error-code");
+const backButton = document.getElementById("back-btn");
+const forwardButton = document.getElementById("forward-btn");
+const reloadButton = document.getElementById("reload-btn");
+const bookmarkButton = document.getElementById("bookmark-btn");
+const bookmarkDialog = document.getElementById("bookmark-dialog");
+const bookmarkForm = document.getElementById("bookmark-form");
+const bookmarkLabel = document.getElementById("bookmark-label");
+const bookmarkUrlInput = document.getElementById("bookmark-url");
+const bookmarkCancel = document.getElementById("bookmark-cancel");
+const favoritesWrap = document.getElementById("favorites-wrap");
+const favoritesBox = document.getElementById("favorites");
+const suggestions = document.getElementById("url-suggestions");
+
+let currentBookmarks = [];
 
 let isAdmin = false;
 let blockedSites = [];
+let allowedSites = [];
+let myBlockedSites = [];
+let accessMode = "blacklist";
+
+function hostMatches(host, list) {
+	return list.some((site) => host === site || host.endsWith(`.${site}`));
+}
 
 function isBlockedUrl(url) {
 	if (isAdmin) return false;
@@ -21,9 +42,14 @@ function isBlockedUrl(url) {
 	} catch {
 		return false;
 	}
-	return blockedSites.some(
-		(site) => host === site || host.endsWith(`.${site}`),
-	);
+	if (accessMode === "allowlist") {
+		if (!allowedSites.length) return true;
+		if (!hostMatches(host, allowedSites)) return true;
+		return false;
+	}
+	if (hostMatches(host, blockedSites)) return true;
+	if (hostMatches(host, myBlockedSites)) return true;
+	return false;
 }
 
 function showBlocked(url) {
@@ -45,6 +71,9 @@ fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" })
 	.then((me) => {
 		if (!me) return;
 		isAdmin = me.role === "admin";
+		myBlockedSites = Array.isArray(me.blockedSites)
+			? me.blockedSites.map((s) => String(s).toLowerCase())
+			: [];
 		const bar = document.getElementById("session-bar");
 		const who = document.getElementById("session-who");
 		const adminLink = document.getElementById("admin-link");
@@ -346,6 +375,159 @@ function setHeroTitle(title) {
 	element.append(span);
 }
 
+/* ------------------------------ favoritos ------------------------------ */
+
+function renderFavorites() {
+	if (!favoritesWrap || !favoritesBox) return;
+	favoritesBox.replaceChildren();
+	if (!currentBookmarks.length) {
+		favoritesWrap.hidden = true;
+		return;
+	}
+	favoritesWrap.hidden = false;
+	for (const bookmark of currentBookmarks) {
+		const a = document.createElement("a");
+		a.href = "#";
+		a.dataset.url = bookmark.url;
+		a.textContent = bookmark.label;
+		favoritesBox.append(a);
+	}
+}
+
+async function loadBookmarks() {
+	try {
+		const res = await fetch("/api/bookmarks", { cache: "no-store" });
+		if (!res.ok) return;
+		const data = await res.json();
+		currentBookmarks = Array.isArray(data.bookmarks) ? data.bookmarks : [];
+		renderFavorites();
+		loadSuggestions();
+	} catch {}
+}
+
+async function loadSuggestions() {
+	if (!suggestions) return;
+	const urls = new Set(currentBookmarks.map((b) => b.url));
+	try {
+		const res = await fetch("/api/history?limit=50", { cache: "no-store" });
+		if (res.ok) {
+			const data = await res.json();
+			for (const item of data.history || []) if (item.url) urls.add(item.url);
+		}
+	} catch {}
+	suggestions.replaceChildren();
+	for (const url of urls) {
+		const option = document.createElement("option");
+		option.value = url;
+		suggestions.append(option);
+	}
+}
+
+function openBookmarkDialog() {
+	if (!bookmarkDialog) return;
+	const raw = lastExternal || frameAddress.value || address.value;
+	let url = raw;
+	try {
+		url = new URL(raw).href;
+	} catch {
+		return;
+	}
+	bookmarkUrlInput.value = url;
+	try {
+		bookmarkLabel.value = new URL(url).hostname;
+	} catch {
+		bookmarkLabel.value = "";
+	}
+	const errorBox = document.getElementById("bookmark-error");
+	if (errorBox) errorBox.textContent = "";
+	if (typeof bookmarkDialog.showModal === "function") bookmarkDialog.showModal();
+}
+
+favoritesBox?.addEventListener("click", (event) => {
+	const link = event.target.closest("a[data-url]");
+	if (!link) return;
+	event.preventDefault();
+	navigate(link.dataset.url);
+});
+
+bookmarkButton?.addEventListener("click", openBookmarkDialog);
+bookmarkCancel?.addEventListener("click", () => bookmarkDialog?.close());
+bookmarkForm?.addEventListener("submit", async (event) => {
+	event.preventDefault();
+	const errorBox = document.getElementById("bookmark-error");
+	if (errorBox) errorBox.textContent = "";
+	try {
+		const res = await fetch("/api/bookmarks", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				label: bookmarkLabel.value,
+				url: bookmarkUrlInput.value,
+			}),
+			});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			const messages = {
+				"invalid-url": "La URL no es válida.",
+				exists: "Ese favorito ya existe.",
+				limit: "Has alcanzado el máximo de favoritos.",
+			};
+			if (errorBox) errorBox.textContent = messages[data.error] || "No se pudo guardar.";
+			return;
+		}
+		bookmarkDialog?.close();
+		await loadBookmarks();
+	} catch {
+		if (errorBox) errorBox.textContent = "No se pudo guardar.";
+	}
+});
+
+backButton?.addEventListener("click", () => {
+	try {
+		frame?.back();
+	} catch {}
+});
+forwardButton?.addEventListener("click", () => {
+	try {
+		frame?.forward();
+	} catch {}
+});
+reloadButton?.addEventListener("click", () => {
+	try {
+		frame?.reload();
+	} catch {}
+});
+for (const input of [address, frameAddress]) {
+	input?.addEventListener("focus", loadSuggestions);
+}
+
+window.addEventListener("keydown", (event) => {
+	const typing =
+		event.target instanceof HTMLInputElement ||
+		event.target instanceof HTMLTextAreaElement ||
+		event.target instanceof HTMLSelectElement;
+	if (event.altKey && event.key === "ArrowLeft") {
+		event.preventDefault();
+		try { frame?.back(); } catch {}
+	} else if (event.altKey && event.key === "ArrowRight") {
+		event.preventDefault();
+		try { frame?.forward(); } catch {}
+	} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "r") {
+		if (frameWrapper.style.display === "flex") {
+			event.preventDefault();
+			try { frame?.reload(); } catch {}
+		}
+	} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
+		event.preventDefault();
+		(frameWrapper.style.display === "flex" ? frameAddress : address).focus();
+	} else if (event.key === "/" && !typing) {
+		event.preventDefault();
+		(frameWrapper.style.display === "flex" ? frameAddress : address).focus();
+	}
+});
+
+loadBookmarks();
+
 fetch("/api/config", { cache: "no-store" })
 	.then((r) => (r.ok ? r.json() : null))
 	.then((config) => {
@@ -355,6 +537,12 @@ fetch("/api/config", { cache: "no-store" })
 		}
 		if (Array.isArray(config.blockedSites)) {
 			blockedSites = config.blockedSites.map((site) => String(site).toLowerCase());
+		}
+		if (Array.isArray(config.allowedSites)) {
+			allowedSites = config.allowedSites.map((site) => String(site).toLowerCase());
+		}
+		if (config.accessMode === "allowlist" || config.accessMode === "blacklist") {
+			accessMode = config.accessMode;
 		}
 		if (config.landingTitle) setHeroTitle(config.landingTitle);
 		const subtitle = document.getElementById("hero-subtitle");

@@ -115,15 +115,46 @@ export function trimActivity() {
 	saveNow();
 }
 
-export function getActivity({ username = "", limit = 200 } = {}) {
+export function getActivity({ username = "", limit = 200, offset = 0, search = "" } = {}) {
 	const wanted = String(username || "").toLowerCase();
+	const query = String(search || "").toLowerCase();
 	const out = [];
+	let skipped = 0;
 	for (let i = entries.length - 1; i >= 0 && out.length < limit; i--) {
 		const e = entries[i];
 		if (wanted && String(e.username).toLowerCase() !== wanted) continue;
+		if (
+			query &&
+			!String(e.url || "").toLowerCase().includes(query) &&
+			!String(e.query || "").toLowerCase().includes(query)
+		) {
+			continue;
+		}
+		if (skipped < offset) {
+			skipped++;
+			continue;
+		}
 		out.push(e);
 	}
 	return out;
+}
+
+export function countActivity({ username = "", search = "" } = {}) {
+	const wanted = String(username || "").toLowerCase();
+	const query = String(search || "").toLowerCase();
+	let count = 0;
+	for (const e of entries) {
+		if (wanted && String(e.username).toLowerCase() !== wanted) continue;
+		if (
+			query &&
+			!String(e.url || "").toLowerCase().includes(query) &&
+			!String(e.query || "").toLowerCase().includes(query)
+		) {
+			continue;
+		}
+		count++;
+	}
+	return count;
 }
 
 export function activityCounts() {

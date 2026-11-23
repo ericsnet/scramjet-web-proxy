@@ -1,0 +1,13 @@
+{$DOMAIN:localhost} {
+	encode zstd gzip
+
+	@wisp path /wisp/*
+	reverse_proxy @wisp proxy:3030
+
+	reverse_proxy proxy:3030
+
+	header /sw.js {
+		Cache-Control "no-store, no-cache, must-revalidate"
+		Service-Worker-Allowed "/"
+	}
+}

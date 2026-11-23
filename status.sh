@@ -42,13 +42,16 @@ for (const [name, u] of Object.entries(users)) {
 	if (u.blocked) states.push("bloqueado");
 	else if (u.blockedUntil) states.push(`bloqueado hasta ${u.blockedUntil.slice(0, 16).replace("T", " ")}`);
 	if (u.mustChangePassword) states.push("cambio obligatorio");
-	console.log(` - ${name}: ${u.role === "admin" ? "administrador" : "usuario"}${states.length ? ` (${states.join(", ")})` : ""}`);
+	const role = u.role === "admin" ? "administrador" : u.role === "moderator" ? "moderador" : "usuario";
+	console.log(` - ${name}: ${role}${states.length ? ` (${states.join(", ")})` : ""}`);
 }
 ' 2>/dev/null || echo "No se pudo leer data/users.json"
 printf 'registros de actividad: '
 node -e 'console.log((require("./data/activity.json").entries || []).length)' 2>/dev/null || echo "0"
 printf 'eventos de auditoría: '
 node -e 'console.log((require("./data/audit.json").events || []).length)' 2>/dev/null || echo "0"
+printf 'copias guardadas: '
+node -e 'const fs=require("fs");console.log(fs.existsSync("./backups")?fs.readdirSync("./backups").filter(f=>f.endsWith(".json")).length:0)' 2>/dev/null || echo "0"
 printf 'sesiones guardadas: '
 node -e 'console.log((require("./data/sessions.json").sessions || []).length)' 2>/dev/null || echo "0"
 

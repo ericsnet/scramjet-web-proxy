@@ -64,6 +64,8 @@ function migrateUsers() {
 			lastLoginAt: null,
 			lastSeenAt: null,
 			loginCount: 0,
+			blockedSites: [],
+			schedule: null,
 		};
 		for (const [key, value] of Object.entries(defaults)) {
 			if (user[key] === undefined) {
@@ -96,7 +98,7 @@ function seedIfNeeded() {
 	const initial = JSON.parse(raw);
 	db = { users: {} };
 	for (const [name, data] of Object.entries(initial)) {
-		if (!["admin", "user"].includes(data.role)) continue;
+		if (!["admin", "moderator", "user"].includes(data.role)) continue;
 		if (!validatePassword(data.password)) {
 			throw new Error(`Contraseña inicial no válida para ${name}`);
 		}
@@ -112,6 +114,8 @@ function seedIfNeeded() {
 			lastLoginAt: null,
 			lastSeenAt: null,
 			loginCount: 0,
+			blockedSites: [],
+			schedule: null,
 		};
 	}
 	save();
@@ -142,6 +146,8 @@ export function listUsers() {
 				blockMessage: u.blockMessage || "",
 				effectivelyBlocked: !!u.blocked || !!until,
 				notes: u.notes || "",
+				blockedSites: Array.isArray(u.blockedSites) ? u.blockedSites : [],
+				schedule: u.schedule || null,
 				mustChangePassword: !!u.mustChangePassword,
 				createdAt: u.createdAt,
 				lastLoginAt: u.lastLoginAt || null,
@@ -195,7 +201,7 @@ export function createUser(username, password, role) {
 	if (!validateUsername(name)) return { error: "invalid-user" };
 	if (!validatePassword(password)) return { error: "invalid-password" };
 	if (getUser(name)) return { error: "exists" };
-	if (!["admin", "user"].includes(role)) return { error: "invalid-role" };
+	if (!["admin", "moderator", "user"].includes(role)) return { error: "invalid-role" };
 	db.users[name] = {
 		role,
 		password: hashPassword(password),
@@ -208,6 +214,8 @@ export function createUser(username, password, role) {
 		lastLoginAt: null,
 		lastSeenAt: null,
 		loginCount: 0,
+		blockedSites: [],
+		schedule: null,
 	};
 	save();
 	return { user: { username: name, role } };
@@ -237,7 +245,7 @@ export function setPassword(username, password) {
 export function setRole(username, role) {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
-	if (!["admin", "user"].includes(role)) return { error: "invalid-role" };
+	if (!["admin", "moderator", "user"].includes(role)) return { error: "invalid-role" };
 	if (
 		user.role === "admin" &&
 		!isEffectivelyBlocked(user) &&
@@ -307,6 +315,96 @@ export function setNotes(username, notes) {
 	db.users[user.username].notes = String(notes || "").trim().slice(0, 500);
 	save();
 	return { ok: true };
+}
+
+function normalizeHosts(input) {
+	const lines = Array.isArray(input)
+		? input
+		: String(input || "").split(/\r?\n/);
+	const hosts = [];
+	for (let line of lines) {
+		line = String(line).trim();
+		if (!line || line.startsWith("#")) continue;
+		line = line.replace(/^\*\./, "");
+		const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(line)
+			? line
+			: `https://${line}`;
+		try {
+			const host = new URL(candidate).hostname.toLowerCase().replace(/\.$/, "");
+			if (/^[a-z0-9.-]+$/.test(host) && host.includes(".")) hosts.push(host);
+		} catch {}
+		if (hosts.length >= 100) break;
+	}
+	return [...new Set(hosts)];
+}
+
+export function setUserBlockedSites(username, input) {
+	const user = getUser(username);
+	if (!user) return { error: "notfound" };
+	db.users[user.username].blockedSites = normalizeHosts(input);
+	save();
+	return { ok: true, blockedSites: db.users[user.username].blockedSites };
+}
+
+export function setUserSchedule(username, schedule) {
+	const user = getUser(username);
+	if (!user) return { error: "notfound" };
+	if (!schedule || schedule.enabled !== true) {
+		db.users[user.username].schedule = null;
+		save();
+		return { ok: true, schedule: null };
+	}
+	const days = Array.isArray(schedule.days)
+		? [...new Set(schedule.days.map((d) => Number(d)).filter((d) => d >= 0 && d <= 6))]
+		: [];
+	const start = String(schedule.start || "");
+	const end = String(schedule.end || "");
+	if (!days.length) return { error: "invalid-schedule" };
+	if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end)) {
+		return { error: "invalid-schedule" };
+	}
+	db.users[user.username].schedule = { enabled: true, days, start, end };
+	save();
+	return { ok: true, schedule: db.users[user.username].schedule };
+}
+
+export function isWithinSchedule(user, timezone = "Europe/Madrid") {
+	const schedule = user?.schedule;
+	if (!schedule?.enabled) return true;
+	let parts;
+	try {
+		parts = new Intl.DateTimeFormat("en-GB", {
+			timeZone: timezone,
+			weekday: "short",
+			hour: "2-digit",
+			minute: "2-digit",
+			hourCycle: "h23",
+		}).formatToParts(new Date());
+	} catch {
+		parts = new Intl.DateTimeFormat("en-GB", {
+			timeZone: "UTC",
+			weekday: "short",
+			hour: "2-digit",
+			minute: "2-digit",
+			hourCycle: "h23",
+		}).formatToParts(new Date());
+	}
+	const get = (type) => parts.find((p) => p.type === type)?.value || "";
+	const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+	const day = dayMap[get("weekday")];
+	const hour = Number(get("hour"));
+	const minute = Number(get("minute"));
+	if (!schedule.days.includes(day)) return false;
+	const toMinutes = (hhmm) => {
+		const [h, m] = hhmm.split(":").map(Number);
+		return h * 60 + m;
+	};
+	const now = hour * 60 + minute;
+	const start = toMinutes(schedule.start);
+	const end = toMinutes(schedule.end);
+	if (start === end) return true;
+	if (start < end) return now >= start && now < end;
+	return now >= start || now < end;
 }
 
 export function setMustChangePassword(username, value) {

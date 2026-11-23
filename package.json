@@ -1,6 +1,6 @@
 {
 	"name": "scramjet-web-proxy",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Self-hosted web proxy with Scramjet, sessions, roles and admin controls",
 	"main": "server.js",
 	"type": "module",
@@ -24,5 +24,8 @@
 		"type": "git",
 		"url": "https://github.com/ericsnet/scramjet-web-proxy.git"
 	},
-	"homepage": "https://github.com/ericsnet/scramjet-web-proxy"
+	"homepage": "https://github.com/ericsnet/scramjet-web-proxy",
+	"engines": {
+		"node": ">=22"
+	}
 }
