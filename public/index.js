@@ -127,6 +127,40 @@ let controller;
 let frame;
 let currentUrl = "";
 
+const MEDIA_EXTENSION =
+	/\.(?:mp3|mp4|m4a|m4v|aac|ogg|oga|opus|webm|wav|flac|mov|m3u8|mpd|ts|m4s)(?:$|[?#])/i;
+
+// Evita que el plugin de caché descargue un audio/vídeo completo antes de
+// entregarlo al reproductor. Los segmentos y peticiones Range se sirven en
+// streaming y no se guardan en CacheStorage.
+class MediaStreamPlugin extends $scramjetUtils.ManagedPlugin {
+	constructor() {
+		super("media-stream", []);
+	}
+	install(handler) {
+		super.install(handler);
+		this.tap(
+			handler.hooks.fetch.request,
+			(event) => {
+				try {
+					const request = event.request;
+					const parsed = event.parsed;
+					if (!request) return;
+					const destination = String(parsed?.destination || "");
+					const path = String(parsed?.url?.pathname || "");
+					const range = request.initialHeaders?.get?.("range") || "";
+					const isMedia =
+						["audio", "video", "track"].includes(destination) ||
+						!!range ||
+						MEDIA_EXTENSION.test(path);
+					if (isMedia && "cache" in request) request.cache = "no-store";
+				} catch {}
+			},
+			{ before: ["scramjet-http-cache"] },
+		);
+	}
+}
+
 async function init() {
 	if (controller) return;
 	if (!navigator.serviceWorker) {
@@ -159,6 +193,7 @@ async function init() {
 	await controller.wait();
 
 	const cachePlugin = new $scramjetUtils.HttpCachePlugin();
+	const mediaStreamPlugin = new MediaStreamPlugin();
 	const urlWatcher = new $scramjetUtils.UrlWatcherPlugin(handleFrameUrl);
 	const catchEscapedLinks = new $scramjetUtils.CatchEscapedLinksPlugin(
 		(url) =>
@@ -169,7 +204,7 @@ async function init() {
 	);
 
 	frame = controller.createFrame(frameElement, {
-		plugins: [cachePlugin, urlWatcher, catchEscapedLinks],
+		plugins: [mediaStreamPlugin, cachePlugin, urlWatcher, catchEscapedLinks],
 	});
 }
 

@@ -12,6 +12,7 @@ administración.
 ## Funciones
 
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
+- **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
 - **Chat interno entre usuarios**, con texto plano, moderación y ajustes de capacidad, retención y ritmo.
 - **Interfaz en español, inglés y catalán**.
@@ -244,6 +245,10 @@ Medidas de seguridad incluidas:
 - Wisp aplica además su propia comprobación de IPs privadas antes de conectar;
 - chat interno con autenticación obligatoria, CSRF, límites por usuario, texto
   plano sin HTML y autorización por rol para moderar;
+- `media-src` permite audio/vídeo propio, `blob:` (MSE) y `data:`;
+- tiempo de proxy ampliado para reproducciones largas;
+- audio y vídeo se sirven en streaming: no se cachea el archivo completo antes de
+  reproducirlo y se respetan las peticiones `Range`;
 - cabeceras HSTS, CSP, `X-Frame-Options`, `X-Content-Type-Options`,
   `Referrer-Policy` y `Permissions-Policy` en el proxy inverso.
 
@@ -299,7 +304,8 @@ No actualices esas versiones por separado sin probar la combinación completa.
 
 - No incluye 2FA ni filtrado de contenido más allá de dominios.
 - Algunas webs (login de Google, Cloudflare, bancos, DRM) no funcionan a través
-  de un proxy web.
+  de un proxy web. El contenido protegido con DRM (Netflix, Disney+, etc.) no se
+  puede reproducir.
 - El motor Scramjet puede fallar con redirecciones anidadas en webs concretas;
   el proxy intenta recuperarse y vuelve al inicio con aviso.
 - El tráfico sale por la IP del servidor: úsalo con login y no compartas la URL.
