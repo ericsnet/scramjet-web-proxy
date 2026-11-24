@@ -15,6 +15,16 @@ export const DEFAULTS = Object.freeze({
 	sessionIdleHours: 12,
 	maxLoginAttempts: 8,
 	lockoutMinutes: 10,
+	chatEnabled: true,
+	chatTitle: "Chat de usuarios",
+	chatWelcome: "Escribe un mensaje. Sé respetuoso.",
+	chatMaxLength: 500,
+	chatMaxMessages: 1000,
+	chatRetentionDays: 14,
+	chatSlowModeSeconds: 2,
+	chatMaxPerMinute: 20,
+	chatAllowUserDelete: false,
+	chatShowOnline: true,
 	activityEnabled: true,
 	activityPerUser: 500,
 	activityTotal: 3000,
@@ -63,6 +73,11 @@ const LIMITS = {
 	sessionIdleHours: [1, 720],
 	maxLoginAttempts: [3, 20],
 	lockoutMinutes: [1, 1440],
+	chatMaxLength: [20, 2000],
+	chatMaxMessages: [100, 5000],
+	chatRetentionDays: [1, 365],
+	chatSlowModeSeconds: [0, 300],
+	chatMaxPerMinute: [1, 120],
 	activityPerUser: [50, 2000],
 	activityTotal: [100, 10000],
 };
@@ -189,6 +204,34 @@ function normalize(input, silent = false) {
 			input.allowUserPasswordChange === true ||
 			input.allowUserPasswordChange === "1" ||
 			input.allowUserPasswordChange === "on";
+	}
+
+	if (input.chatEnabled !== undefined) {
+		next.chatEnabled =
+			input.chatEnabled === true || input.chatEnabled === "1" || input.chatEnabled === "on";
+	}
+	if (input.chatAllowUserDelete !== undefined) {
+		next.chatAllowUserDelete =
+			input.chatAllowUserDelete === true ||
+			input.chatAllowUserDelete === "1" ||
+			input.chatAllowUserDelete === "on";
+	}
+	if (input.chatShowOnline !== undefined) {
+		next.chatShowOnline =
+			input.chatShowOnline === true ||
+			input.chatShowOnline === "1" ||
+			input.chatShowOnline === "on";
+	}
+	if (input.chatTitle !== undefined) {
+		const value = String(input.chatTitle).trim();
+		if (!value) errors.push("El título del chat no puede estar vacío.");
+		else if (value.length > 60) errors.push("El título del chat es demasiado largo (máx. 60).");
+		else next.chatTitle = value;
+	}
+	if (input.chatWelcome !== undefined) {
+		const value = String(input.chatWelcome).trim();
+		if (value.length > 200) errors.push("El mensaje de bienvenida es demasiado largo (máx. 200).");
+		else next.chatWelcome = value;
 	}
 
 	if (input.blockedSites !== undefined) {

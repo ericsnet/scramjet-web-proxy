@@ -212,6 +212,29 @@ pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;p
 .section{margin-top:26px;padding-top:4px}
 .section h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
   margin:0 0 6px;font-weight:600}
+.chat-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.chat-toolbar .chat-online{color:var(--muted);font-size:12.5px;display:inline-flex;align-items:center;gap:7px}
+.chat-online::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(74,222,128,.12)}
+.chat-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;
+  background:linear-gradient(180deg,rgba(21,30,41,.65),rgba(13,20,28,.65));overflow:hidden}
+.chat-messages{height:min(58vh,560px);min-height:220px;overflow-y:auto;padding:6px 16px;scroll-behavior:smooth}
+.chat-message{padding:12px 2px;border-top:1px solid var(--border)}
+.chat-message:first-child{border-top:0}
+.chat-message.own{background:linear-gradient(90deg,rgba(59,130,246,.07),transparent 65%)}
+.chat-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.chat-author{color:var(--text);font-size:13px;font-weight:600}
+.chat-message.own .chat-author{color:#93c5fd}
+.chat-meta time{font-variant-numeric:tabular-nums}
+.chat-delete{margin-left:auto;font-size:11.5px;color:#fca5a5!important}
+.chat-text{margin:7px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14.5px}
+.chat-empty{color:var(--muted);text-align:center;padding:52px 18px;font-size:14px}
+.chat-form{display:flex;gap:10px;align-items:flex-end;margin-top:14px}
+.chat-form textarea{flex:1;min-height:54px;max-height:150px;resize:vertical;margin:0}
+.chat-form button.primary{width:auto;margin:0;padding:12px 20px;flex:0 0 auto}
+.chat-counter{font-size:11.5px;color:var(--muted);text-align:right;margin-top:5px}
+.chat-disabled{text-align:center;padding:34px 10px}
+@media(max-width:640px){.chat-messages{height:58vh}.chat-form{flex-direction:column;align-items:stretch}
+  .chat-form button.primary{width:100%}}
 @media(max-width:640px){.field-grid{grid-template-columns:1fr}.link-row{grid-template-columns:1fr}
   .tabs a{font-size:12px;padding:7px 10px}}
 `;
@@ -242,6 +265,7 @@ function topbar(user) {
 	return `<header class="topbar">
   <div class="brand"><span class="brand-icon">${LOGO}</span>Proxy <span>Web</span></div>
   <a href="/">Proxy</a>
+  <a href="/chat">Chat</a>
   <a href="/bookmarks">Favoritos</a>
   <a href="/history">Historial</a>
   <a href="/account">Mi cuenta</a>
@@ -447,6 +471,18 @@ function fmtDate(at) {
 	}
 }
 
+function fmtChatDate(at, timezone = "Europe/Madrid") {
+	try {
+		return new Date(at).toLocaleString("es-ES", {
+			dateStyle: "short",
+			timeStyle: "short",
+			timeZone: timezone,
+		});
+	} catch {
+		return String(at || "");
+	}
+}
+
 export function bookmarksPage({ user, bookmarks = [], notice = "", error = "" } = {}) {
 	const rows = bookmarks
 		.map(
@@ -546,6 +582,91 @@ export function historyPage({
 	}
 </div>`;
 	return shell("Historial · Proxy Web", body, { topbar: topbar(user) });
+}
+
+export function chatPage({
+	user,
+	settings,
+	messages = [],
+	latestSeq = 0,
+	generation = 1,
+	online = 0,
+	canModerate = false,
+	notice = "",
+	error = "",
+} = {}) {
+	const current = String(user?.username || "");
+	const enabled = !!settings.chatEnabled;
+	const allowDelete = !!settings.chatAllowUserDelete;
+	const rows = messages
+		.map((m) => {
+			const role = String(m.role || "user");
+			const own = String(m.username).toLowerCase() === current.toLowerCase();
+			const canDelete =
+				enabled && (canModerate || (allowDelete && own));
+			const roleBadge =
+				role === "admin"
+					? '<span class="badge admin">admin</span>'
+					: role === "moderator"
+						? '<span class="badge">moderador</span>'
+						: "";
+			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
+  <div class="chat-meta">
+    <span class="chat-author">${esc(m.username)}</span>
+    ${roleBadge}
+    <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
+    ${canDelete ? `<button class="link chat-delete" type="button" data-chat-delete="${esc(m.id)}">Eliminar</button>` : ""}
+  </div>
+  <p class="chat-text">${esc(m.text)}</p>
+</article>`;
+		})
+		.join("");
+
+	const body = `
+<div class="card">
+  <h1>${esc(settings.chatTitle || "Chat de usuarios")}</h1>
+  <p class="muted">${esc(settings.chatWelcome || "")}</p>
+  ${
+		enabled
+			? `
+  <div class="chat-toolbar">
+    <span class="muted" style="margin:0">Chat privado entre usuarios del proxy.</span>
+    ${
+			settings.chatShowOnline
+				? `<span class="chat-online" id="chat-online">${esc(online)} conectado${online === 1 ? "" : "s"}</span>`
+				: ""
+		}
+  </div>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <p class="msg error" id="chat-error" hidden></p>
+  <div class="chat-box">
+    <div class="chat-messages" id="chat-messages"
+      data-last-seq="${esc(latestSeq)}"
+      data-generation="${esc(generation)}"
+      data-current-user="${esc(current)}"
+      data-max-length="${esc(settings.chatMaxLength)}"
+      data-can-moderate="${canModerate ? "1" : "0"}"
+      data-allow-delete="${allowDelete ? "1" : "0"}">
+      ${rows || '<p class="chat-empty" id="chat-empty">Todavía no hay mensajes. Escribe el primero.</p>'}
+    </div>
+    <form method="post" action="/api/chat/messages" class="chat-form" id="chat-form" autocomplete="off">
+      <div style="flex:1">
+        <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" required
+          placeholder="Escribe un mensaje…" aria-label="Mensaje"></textarea>
+        <div class="chat-counter"><span id="chat-counter">0</span>/${esc(settings.chatMaxLength)}</div>
+      </div>
+      <button class="primary" type="submit" id="chat-send">Enviar</button>
+    </form>
+  </div>
+  <script src="/chat.js" defer></script>`
+			: `<div class="chat-disabled">
+    <p class="muted">El chat está desactivado por la administración.</p>
+    ${user?.role === "admin" ? '<a class="small" href="/admin/settings">Activar en Ajustes</a>' : '<a class="small" href="/">Volver al proxy</a>'}
+  </div>`
+	}
+</div>`;
+	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, { topbar: topbar(user) });
 }
 
 export function statsPage({
@@ -1094,6 +1215,43 @@ ${adminTabs("settings")}
         <input id="activityTotal" name="activityTotal" type="number" min="100" max="10000" value="${settings.activityTotal}" required>
       </div>
     </div>
+  </div>
+
+  <div class="section">
+    <h3>Chat de usuarios</h3>
+    <label class="check"><input type="checkbox" name="chatEnabled"${settings.chatEnabled ? " checked" : ""}> Activar el chat entre usuarios</label>
+    <label class="check"><input type="checkbox" name="chatShowOnline"${settings.chatShowOnline ? " checked" : ""}> Mostrar cuántos usuarios están conectados</label>
+    <label class="check"><input type="checkbox" name="chatAllowUserDelete"${settings.chatAllowUserDelete ? " checked" : ""}> Permitir que cada usuario borre sus propios mensajes</label>
+    <div class="field-grid">
+      <div>
+        <label for="chatTitle">Título visible</label>
+        <input id="chatTitle" name="chatTitle" value="${esc(settings.chatTitle || "")}" maxlength="60" required>
+      </div>
+      <div>
+        <label for="chatMaxLength">Longitud máxima por mensaje</label>
+        <input id="chatMaxLength" name="chatMaxLength" type="number" min="20" max="2000" value="${settings.chatMaxLength}" required>
+      </div>
+      <div>
+        <label for="chatSlowModeSeconds">Espera entre mensajes (segundos)</label>
+        <input id="chatSlowModeSeconds" name="chatSlowModeSeconds" type="number" min="0" max="300" value="${settings.chatSlowModeSeconds}" required>
+      </div>
+      <div>
+        <label for="chatMaxPerMinute">Máximo de mensajes por minuto</label>
+        <input id="chatMaxPerMinute" name="chatMaxPerMinute" type="number" min="1" max="120" value="${settings.chatMaxPerMinute}" required>
+      </div>
+      <div>
+        <label for="chatMaxMessages">Mensajes guardados (máximo)</label>
+        <input id="chatMaxMessages" name="chatMaxMessages" type="number" min="100" max="5000" value="${settings.chatMaxMessages}" required>
+      </div>
+      <div>
+        <label for="chatRetentionDays">Días de retención</label>
+        <input id="chatRetentionDays" name="chatRetentionDays" type="number" min="1" max="365" value="${settings.chatRetentionDays}" required>
+      </div>
+    </div>
+    <label for="chatWelcome">Mensaje de bienvenida</label>
+    <textarea id="chatWelcome" name="chatWelcome" maxlength="200" style="min-height:60px">${esc(settings.chatWelcome || "")}</textarea>
+    <p class="hint">Los mensajes son texto plano: no se interpreta HTML ni Markdown. Los administradores y moderadores pueden borrar cualquier mensaje desde el chat.</p>
+    <button class="small danger" type="submit" formaction="/api/admin/chat/clear" formmethod="post" onclick="return confirm('¿Vaciar todo el chat? Esta acción no se puede deshacer.')">Vaciar chat</button>
   </div>
 
   <div class="section">

@@ -13,6 +13,7 @@ administración.
 
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
+- **Chat interno entre usuarios**, con texto plano, moderación y ajustes de capacidad, retención y ritmo.
 - **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
 - Roles `admin`, `moderador` y `usuario`.
@@ -22,7 +23,7 @@ administración.
   - forzar logout y revocar sesiones,
   - ver actividad (URLs y búsquedas), auditoría, sesiones y **estadísticas**,
   - exigir cambio de contraseña y dejar notas internas,
-  - configurar sesiones, actividad, mantenimiento, **cuarentena**, buscador,
+  - configurar sesiones, actividad, mantenimiento, **cuarentena**, **chat interno**, buscador,
     portada, **lista blanca/negra**, **mensajes por sitio**,
     **categorías** adultas/apuestas/social, **sitios por usuario** y **horarios**,
   - aprobar **peticiones de desbloqueo**,
@@ -32,7 +33,7 @@ administración.
 - Bloqueo real de dominios en la capa Wisp, con listas globales, categorías y por usuario.
 - **Modo cuarentena**: rechaza nuevas conexiones, cierra las abiertas y registra los intentos rechazados.
 - Copias automáticas diarias locales, métricas Prometheus, CI, watchdog y despliegue con Docker + Caddy.
-- Protección CSRF, límite de intentos por usuario e IP, cookies `HttpOnly` y
+- Protección CSRF, límite de intentos por IP, cookies `HttpOnly` y
   `Secure`, y cierre de conexiones al bloquear o revocar sesiones.
 - Los administradores están exentos de las restricciones configurables.
 
@@ -191,6 +192,20 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - los intentos visibles se eliminan automáticamente **10 minutos después de la primera vista**;
 - solo un administrador puede activarla o desactivarla.
 
+### Chat interno
+
+- Sala única para todos los usuarios autenticados, con actualización automática.
+- Texto plano: no se interpreta HTML ni Markdown; todo se escapa en servidor y
+  se pinta con `textContent` en el navegador.
+- Límite de longitud, espera entre mensajes, máximo por minuto, retención por
+  días y número máximo de mensajes almacenados.
+- Título y mensaje de bienvenida personalizables; se puede activar/desactivar y
+  mostrar u ocultar el número de usuarios conectados.
+- Cada usuario puede borrar sus propios mensajes si el administrador lo permite.
+  Administradores y moderadores pueden borrar cualquiera y vaciar la sala.
+- Los mensajes se eliminan al borrar la cuenta del autor y se incluyen en las
+  copias de seguridad.
+
 ### Favoritos e historial
 
 Cada usuario tiene favoritos propios, historial con búsqueda y atajos
@@ -211,6 +226,7 @@ usuario puede vaciar su propio historial.
 - `data/activity.json`: historial de actividad.
 - `data/audit.json`: auditoría.
 - `data/bookmarks.json`: favoritos por usuario.
+- `data/chat.json`: mensajes del chat interno.
 - `backups/`: copias automáticas.
 
 Todo se guarda con permisos `600`. **No subas `data/` ni `backups/` a Git**:
@@ -225,6 +241,8 @@ Medidas de seguridad incluidas:
 - `/api/navigate-check` bloquea loopback, RFC1918, CGNAT, link-local, ULA y
   direcciones IPv4 mapeadas en IPv6, resolviendo DNS;
 - Wisp aplica además su propia comprobación de IPs privadas antes de conectar;
+- chat interno con autenticación obligatoria, CSRF, límites por usuario, texto
+  plano sin HTML y autorización por rol para moderar;
 - cabeceras HSTS, CSP, `X-Frame-Options`, `X-Content-Type-Options`,
   `Referrer-Policy` y `Permissions-Policy` en el proxy inverso.
 
@@ -252,6 +270,8 @@ Archivos principales:
 | `backup.js` | Copias automáticas, listado y restauración |
 | `metrics.js` | Contadores Prometheus |
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
+| `chat.js` | Almacén, límites y retención del chat interno |
+| `public/chat.js` | Actualización y envío de mensajes en el navegador |
 | `public/page-i18n.js` | Traducciones de interfaz |
 | `.github/workflows/ci.yml` | Comprobación de sintaxis en CI |
 | `pages.js` | Páginas de login, cuenta y administración |

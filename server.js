@@ -64,6 +64,7 @@ import {
 	statsPage,
 	bookmarksPage,
 	historyPage,
+	chatPage,
 } from "./pages.js";
 import {
 	recordActivity,
@@ -119,6 +120,15 @@ import {
 	resolveRequest,
 	exportRequests,
 } from "./requests.js";
+import {
+	postChatMessage,
+	listChat,
+	getChatMessage,
+	deleteChatMessage,
+	deleteChatMessagesByUser,
+	clearChat,
+	flushChat,
+} from "./chat.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -378,6 +388,59 @@ function requireStaff(req, res, next) {
 		return res.status(403).type("text/plain").send("Solo administradores o moderadores.");
 	}
 	next();
+}
+
+const CHAT_ERRORS = {
+	disabled: "El chat está desactivado.",
+	empty: "Escribe un mensaje.",
+	too_long: "El mensaje es demasiado largo.",
+	slow: "Espera unos segundos antes de enviar otro mensaje.",
+	rate: "Has enviado demasiados mensajes. Espera un minuto.",
+	forbidden: "No puedes borrar ese mensaje.",
+	notfound: "Ese mensaje ya no existe.",
+};
+
+function isChatModerator(user) {
+	return !!user && ["admin", "moderator"].includes(user.role);
+}
+
+function chatOnlineCount() {
+	const cutoff = Date.now() - 5 * 60 * 1000;
+	const users = new Set();
+	for (const session of listSessions()) {
+		const seen = new Date(session.lastSeenAt).getTime();
+		if (Number.isFinite(seen) && seen >= cutoff) {
+			users.add(String(session.username).toLowerCase());
+		}
+	}
+	return users.size;
+}
+
+function chatRoleMap() {
+	const map = new Map();
+	for (const entry of listUsers()) {
+		map.set(String(entry.username).toLowerCase(), entry.role);
+	}
+	return map;
+}
+
+function enrichChatMessage(message, user, roles) {
+	const own =
+		String(message.username).toLowerCase() ===
+		String(user?.username || "").toLowerCase();
+	return {
+		...message,
+		role: roles.get(String(message.username).toLowerCase()) || "user",
+		canDelete:
+			isChatModerator(user) || (!!getSettings().chatAllowUserDelete && own),
+	};
+}
+
+function wantsChatJson(req) {
+	return (
+		req.is("application/json") ||
+		String(req.get("accept") || "").includes("application/json")
+	);
 }
 
 // Protección CSRF: exige Origin válido en peticiones que cambian estado.
@@ -658,6 +721,7 @@ const ADMIN_OK = {
 	revoked: "Sesión cerrada.",
 	saved: "Ajustes guardados.",
 	reset_settings: "Ajustes restablecidos.",
+	chat_cleared: "Chat vaciado.",
 };
 
 /* --------------------------- rutas públicas --------------------------- */
@@ -973,6 +1037,112 @@ app.post("/api/activity", sameOrigin, (req, res) => {
 		url: typeof req.body.url === "string" ? req.body.url : "",
 		query: typeof req.body.query === "string" ? req.body.query : "",
 	});
+	res.status(204).end();
+});
+
+/* ------------------------------ chat interno ------------------------------ */
+
+app.get("/chat", (req, res) => {
+	const settings = getSettings();
+	const canModerate = isChatModerator(req.user);
+	const notice = req.query.ok === "sent" ? "Mensaje enviado." : req.query.ok === "deleted" ? "Mensaje eliminado." : "";
+	const error = CHAT_ERRORS[req.query.error] || "";
+	let messages = [];
+	let latestSeq = 0;
+	let generation = 1;
+	if (settings.chatEnabled) {
+		const result = listChat({ after: 0, limit: 200 });
+		const roles = chatRoleMap();
+		messages = result.messages.map((m) => enrichChatMessage(m, req.user, roles));
+		latestSeq = result.latestSeq;
+		generation = result.generation;
+	}
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		chatPage({
+			user: req.user,
+			settings,
+			messages,
+			latestSeq,
+			generation,
+			online: settings.chatShowOnline ? chatOnlineCount() : 0,
+			canModerate,
+			notice,
+			error,
+		}),
+	);
+});
+
+app.get("/api/chat/messages", (req, res) => {
+	const settings = getSettings();
+	if (!settings.chatEnabled) {
+		return res.status(403).json({ error: "disabled" });
+	}
+	const after = Math.max(0, Number.parseInt(req.query.after, 10) || 0);
+	const result = listChat({ after, limit: 200 });
+	const roles = chatRoleMap();
+	res.set("Cache-Control", "no-store");
+	res.json({
+		...result,
+		messages: result.messages.map((m) => enrichChatMessage(m, req.user, roles)),
+		online: settings.chatShowOnline ? chatOnlineCount() : null,
+		canModerate: isChatModerator(req.user),
+		allowUserDelete: !!settings.chatAllowUserDelete,
+		maxLength: settings.chatMaxLength,
+		currentUser: req.user.username,
+	});
+});
+
+app.post("/api/chat/messages", sameOrigin, (req, res) => {
+	const json = wantsChatJson(req);
+	const result = postChatMessage(req.user.username, req.body.text);
+	if (result.error) {
+		if (!json) {
+			return res.redirect(303, `/chat?error=${encodeURIComponent(result.error)}`);
+		}
+		const status =
+			result.error === "disabled"
+				? 403
+				: result.error === "slow" || result.error === "rate"
+					? 429
+					: 400;
+		return res.status(status).json({
+			error: result.error,
+			message: CHAT_ERRORS[result.error] || "No se pudo enviar el mensaje.",
+			retryAfter: result.retryAfter || 0,
+		});
+	}
+	if (!json) return res.redirect(303, "/chat?ok=sent");
+	const roles = chatRoleMap();
+	res.status(201).json({
+		message: enrichChatMessage(result.message, req.user, roles),
+	});
+});
+
+app.post("/api/chat/messages/:id/delete", sameOrigin, (req, res) => {
+	const json = wantsChatJson(req);
+	const settings = getSettings();
+	if (!settings.chatEnabled) {
+		if (!json) return res.redirect(303, "/chat?error=disabled");
+		return res.status(403).json({ error: "disabled", message: CHAT_ERRORS.disabled });
+	}
+	const message = getChatMessage(req.params.id);
+	if (!message) {
+		if (!json) return res.redirect(303, "/chat?error=notfound");
+		return res.status(404).json({ error: "notfound", message: CHAT_ERRORS.notfound });
+	}
+	const own =
+		String(message.username).toLowerCase() ===
+		String(req.user.username).toLowerCase();
+	const allowed =
+		isChatModerator(req.user) || (!!settings.chatAllowUserDelete && own);
+	if (!allowed) {
+		if (!json) return res.redirect(303, "/chat?error=forbidden");
+		return res.status(403).json({ error: "forbidden", message: CHAT_ERRORS.forbidden });
+	}
+	deleteChatMessage(message.id);
+	audit(req, "chat.delete", message.username, own ? "mensaje propio" : "moderación");
+	if (!json) return res.redirect(303, "/chat?ok=deleted");
 	res.status(204).end();
 });
 
@@ -1450,6 +1620,16 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		activityEnabled: req.body.activityEnabled === "on",
 		activityPerUser: req.body.activityPerUser,
 		activityTotal: req.body.activityTotal,
+		chatEnabled: req.body.chatEnabled === "on",
+		chatShowOnline: req.body.chatShowOnline === "on",
+		chatAllowUserDelete: req.body.chatAllowUserDelete === "on",
+		chatTitle: req.body.chatTitle,
+		chatWelcome: req.body.chatWelcome,
+		chatMaxLength: req.body.chatMaxLength,
+		chatMaxMessages: req.body.chatMaxMessages,
+		chatRetentionDays: req.body.chatRetentionDays,
+		chatSlowModeSeconds: req.body.chatSlowModeSeconds,
+		chatMaxPerMinute: req.body.chatMaxPerMinute,
 		maintenanceMode: req.body.maintenanceMode === "on",
 		maintenanceMessage: req.body.maintenanceMessage,
 		quarantineMode: req.body.quarantineMode === "on",
@@ -1546,6 +1726,12 @@ app.post("/api/admin/categories/refresh", requireAdmin, sameOrigin, async (req, 
 	closeNonAdminConnections();
 	audit(req, "categories.refresh");
 	res.redirect(303, "/admin/settings?ok=categories");
+});
+
+app.post("/api/admin/chat/clear", requireAdmin, sameOrigin, (req, res) => {
+	clearChat();
+	audit(req, "chat.clear");
+	res.redirect(303, "/admin/settings?ok=chat_cleared");
 });
 
 app.get("/admin/audit", requireStaff, (req, res) => {
@@ -1882,6 +2068,7 @@ app.post("/api/admin/users/:username/delete", requireAdmin, sameOrigin, (req, re
 	const result = deleteUser(target);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
 	deleteUserBookmarks(target);
+	deleteChatMessagesByUser(target);
 	closeUserConnections(target);
 	audit(req, "user.delete", target);
 	res.redirect(303, "/admin?ok=deleted");
@@ -1958,6 +2145,7 @@ function shutdown() {
 	flushActivity();
 	flushAudit();
 	flushSessions();
+	flushChat();
 	process.exit(0);
 }
 process.on("SIGTERM", shutdown);

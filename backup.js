@@ -6,6 +6,7 @@ import { exportActivity } from "./activity.js";
 import { exportAudit } from "./audit.js";
 import { exportBookmarks } from "./bookmarks.js";
 import { exportRequests } from "./requests.js";
+import { exportChat } from "./chat.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
@@ -57,6 +58,7 @@ export function createBackup(reason = "manual") {
 		audit: exportAudit(),
 		bookmarks: exportBookmarks(),
 		requests: exportRequests(),
+		chat: exportChat(),
 	};
 	let name = `backup-${fileStamp()}.json`;
 	let full = path.join(BACKUP_DIR, name);
@@ -133,6 +135,14 @@ export function restoreBackup(name) {
 	write("requests.json", {
 		requests: Array.isArray(data.requests) ? data.requests : [],
 	});
+	if (data.chat && Array.isArray(data.chat.messages)) {
+		write("chat.json", {
+			messages: data.chat.messages,
+			generation: Number(data.chat.generation) || 1,
+			nextSeq:
+				data.chat.messages.reduce((max, m) => Math.max(max, Number(m.seq) || 0), 0) + 1,
+		});
+	}
 	return { ok: true };
 }
 
