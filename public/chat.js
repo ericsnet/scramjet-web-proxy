@@ -71,10 +71,10 @@
 		author.textContent = String(message.username);
 		meta.appendChild(author);
 
-		if (message.role === "admin" || message.role === "moderator") {
+		if (["admin", "moderator", "creator"].includes(message.role)) {
 			const badge = document.createElement("span");
-			badge.className = `badge${message.role === "admin" ? " admin" : ""}`;
-			badge.textContent = message.role === "admin" ? "admin" : "moderador";
+			badge.className = `badge${message.role === "admin" ? " admin" : message.role === "creator" ? " creator" : ""}`;
+			badge.textContent = message.role === "creator" ? "creador" : message.role === "admin" ? "admin" : "moderador";
 			meta.appendChild(badge);
 		}
 
@@ -149,6 +149,16 @@
 		return data;
 	}
 
+	function markRead() {
+		if (document.hidden || lastSeq <= 0) return;
+		fetch("/api/chat/read", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Accept: "application/json" },
+			body: JSON.stringify({ seq: lastSeq }),
+			keepalive: true,
+		}).catch(() => {});
+	}
+
 	async function refresh() {
 		if (inFlight || stopped || document.hidden) return;
 		inFlight = true;
@@ -168,6 +178,7 @@
 			if (input && Number(input.maxLength) !== maxLength) input.maxLength = maxLength;
 			if (counter) counter.textContent = String((input?.value || "").length);
 			scrollBottom(false);
+			markRead();
 			clearError();
 		} catch (error) {
 			if (error.status === 403) {
@@ -256,8 +267,13 @@
 	});
 
 	document.addEventListener("visibilitychange", () => {
-		if (!document.hidden) refresh();
+		if (!document.hidden) {
+			refresh();
+			markRead();
+		}
 	});
 	setInterval(refresh, 4000);
+	markRead();
+	refresh();
 	scrollBottom(true);
 })();

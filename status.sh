@@ -50,7 +50,7 @@ for (const [name, u] of Object.entries(users)) {
 	if (u.blocked) states.push("bloqueado");
 	else if (u.blockedUntil) states.push(`bloqueado hasta ${u.blockedUntil.slice(0, 16).replace("T", " ")}`);
 	if (u.mustChangePassword) states.push("cambio obligatorio");
-	const role = u.role === "admin" ? "administrador" : u.role === "moderator" ? "moderador" : "usuario";
+	const role = u.role === "creator" ? "creador" : u.role === "admin" ? "administrador" : u.role === "moderator" ? "moderador" : "usuario";
 	console.log(` - ${name}: ${role}${states.length ? ` (${states.join(", ")})` : ""}`);
 }
 ' 2>/dev/null || echo "No se pudo leer data/users.json"

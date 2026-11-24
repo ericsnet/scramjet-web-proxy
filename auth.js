@@ -188,12 +188,12 @@ export function getUser(username) {
 }
 
 export function countAdmins() {
-	return Object.values(db.users).filter((u) => u.role === "admin").length;
+	return Object.values(db.users).filter((u) => ["admin", "creator"].includes(u.role)).length;
 }
 
 export function countActiveAdmins() {
 	return Object.values(db.users).filter(
-		(u) => u.role === "admin" && !isEffectivelyBlocked(u),
+		(u) => ["admin", "creator"].includes(u.role) && !isEffectivelyBlocked(u),
 	).length;
 }
 
@@ -236,6 +236,7 @@ export function createUser(username, password, role) {
 export function deleteUser(username) {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
+	if (user.role === "creator") return { error: "protected" };
 	if (user.role === "admin" && !isEffectivelyBlocked(user) && countActiveAdmins() <= 1) {
 		return { error: "last-admin" };
 	}
@@ -257,6 +258,7 @@ export function setPassword(username, password) {
 export function setRole(username, role) {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
+	if (user.role === "creator") return { error: "protected" };
 	if (!["admin", "moderator", "user"].includes(role)) return { error: "invalid-role" };
 	if (
 		user.role === "admin" &&
@@ -274,6 +276,7 @@ export function setRole(username, role) {
 export function setBlocked(username, blocked, message = "") {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
+	if (user.role === "creator") return { error: "protected" };
 	const value = !!blocked;
 	if (value && user.role === "admin" && !isEffectivelyBlocked(user) && countActiveAdmins() <= 1) {
 		return { error: "last-admin" };
@@ -293,6 +296,7 @@ export function setBlocked(username, blocked, message = "") {
 export function setBlockUntil(username, until, message = "") {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
+	if (user.role === "creator") return { error: "protected" };
 	if (until) {
 		const date = new Date(until);
 		if (Number.isNaN(date.getTime())) return { error: "invalid-date" };
@@ -578,7 +582,7 @@ loadSessions();
 export function createSession(username, { ip = "", userAgent = "" } = {}) {
 	const settings = getSettings();
 	const user = getUser(username);
-	const isAdmin = user?.role === "admin";
+	const isAdmin = ["admin", "creator"].includes(user?.role);
 	const max = isAdmin ? Number.POSITIVE_INFINITY : settings.maxSessionsPerUser;
 	const wanted = String(username).toLowerCase();
 	const existing = [...sessions.entries()]

@@ -84,6 +84,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
   border-radius:999px;padding:3px 9px;border:1px solid var(--border);color:var(--muted)}
 .badge.admin{color:#bfdbfe;border-color:#1e40af;background:#101c33}
+.badge.creator{color:#fde68a;border-color:#a16207;background:#271c06}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{color:var(--muted);font-weight:500;text-align:left;font-size:12px;text-transform:uppercase;
   letter-spacing:.06em;padding:0 10px 10px}
@@ -202,6 +203,9 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .user-summary-meta b{color:var(--text);font-weight:600}
 .user-chevron{color:var(--muted);font-size:12px;line-height:1;transition:transform .15s}
 .admin-user[open] .user-chevron{transform:rotate(180deg)}
+.protected-user{border-color:#6b5312;background:linear-gradient(90deg,rgba(161,98,7,.12),rgba(21,30,41,.5) 60%)}
+.protected-user .user-summary{cursor:default}
+.protected-user .user-summary:hover{background:transparent}
 .user-body{padding:0 14px 14px}
 .user-body .user-stats{margin-top:12px}
 .user-extra{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
@@ -261,6 +265,21 @@ pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;p
 .chat-fab svg{width:26px;height:26px;display:block}
 .chat-fab:hover{background:#2f6fdd;text-decoration:none;transform:translateY(-2px)}
 .chat-fab:focus-visible{outline:3px solid rgba(96,165,250,.55);outline-offset:3px}
+.chat-fab-badge{position:absolute;top:-5px;right:-5px;min-width:21px;height:21px;padding:0 5px;
+  border-radius:999px;background:#ef4444;color:#fff;font-size:11px;font-weight:700;line-height:21px;
+  text-align:center;border:2px solid var(--bg);box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.chat-toast-stack{position:fixed;left:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:90;
+  display:flex;flex-direction:column;gap:9px;width:min(340px,calc(100vw - 36px));pointer-events:none}
+.chat-toast{pointer-events:auto;background:var(--soft);border:1px solid var(--border);border-left:3px solid var(--accent);
+  border-radius:12px;padding:11px 12px;box-shadow:0 14px 32px rgba(0,0,0,.4);font-size:13px;
+  display:grid;grid-template-columns:1fr auto;gap:3px 10px}
+.chat-toast strong{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-toast span{grid-column:1;color:var(--muted);line-height:1.45;overflow-wrap:anywhere}
+.chat-toast a{grid-column:1;font-size:12px;color:var(--accent-2,#60a5fa);width:max-content}
+.chat-toast-close{grid-column:2;grid-row:1;background:none;border:0;color:var(--muted);font-size:18px;
+  line-height:1;cursor:pointer;padding:0 2px}
+.chat-toast.unread{border-left-color:#f59e0b}
+@media(max-width:640px){.chat-toast-stack{left:10px;bottom:calc(10px + env(safe-area-inset-bottom,0px));width:calc(100vw - 20px)}}
 @media(max-width:640px){.chat-fab{right:14px;width:50px;height:50px}
   .chat-fab svg{width:24px;height:24px}}
 @media(max-width:640px){.chat-messages{height:58vh}.chat-form{flex-direction:column;align-items:stretch}
@@ -285,13 +304,13 @@ function shell(title, body, { topbar = "", chatFab = true } = {}) {
 ${topbar}
 <main class="wrap">${body}</main>
 <footer>Proxy Web</footer>
-${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a>' : ""}
+${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js" defer></script>' : ""}
 </body>
 </html>`;
 }
 
 function topbar(user) {
-	const staff = user?.role === "admin" || user?.role === "moderator";
+	const staff = ["admin", "creator", "moderator"].includes(user?.role);
 	const admin = staff ? '<a href="/admin">Administración</a>' : "";
 	return `<header class="topbar">
   <div class="brand"><span class="brand-icon">${LOGO}</span>Proxy <span>Web</span></div>
@@ -307,6 +326,7 @@ function topbar(user) {
 }
 
 function roleLabel(role) {
+	if (role === "creator") return "creador";
 	if (role === "admin") return "administrador";
 	if (role === "moderator") return "moderador";
 	return "usuario";
@@ -324,8 +344,9 @@ const ADMIN_TABS = [
 ];
 
 function adminTabs(active, role = "admin") {
-	const visible =
-		role === "admin" ? ADMIN_TABS : ADMIN_TABS.filter(([key]) => !["settings", "system"].includes(key));
+	const visible = ["admin", "creator"].includes(role)
+		? ADMIN_TABS
+		: ADMIN_TABS.filter(([key]) => !["settings", "system"].includes(key));
 	const links = visible
 		.map(
 			([key, href, label]) =>
@@ -636,11 +657,13 @@ export function chatPage({
 			const canDelete =
 				enabled && (canModerate || (allowDelete && own));
 			const roleBadge =
-				role === "admin"
-					? '<span class="badge admin">admin</span>'
-					: role === "moderator"
-						? '<span class="badge">moderador</span>'
-						: "";
+				role === "creator"
+					? '<span class="badge creator">creador</span>'
+					: role === "admin"
+						? '<span class="badge admin">admin</span>'
+						: role === "moderator"
+							? '<span class="badge">moderador</span>'
+							: "";
 			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
   <div class="chat-meta">
     <span class="chat-author">${esc(m.username)}</span>
@@ -693,7 +716,7 @@ export function chatPage({
   <script src="/chat.js" defer></script>`
 			: `<div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
-    ${user?.role === "admin" ? '<a class="small" href="/admin/settings">Activar en Ajustes</a>' : '<a class="small" href="/">Volver al proxy</a>'}
+    ${["admin", "creator"].includes(user?.role) ? '<a class="small" href="/admin/settings">Activar en Ajustes</a>' : '<a class="small" href="/">Volver al proxy</a>'}
   </div>`
 	}
 </div>`;
@@ -838,6 +861,18 @@ export function adminPage({
 			const self = u.username.toLowerCase() === user.username.toLowerCase();
 			const visits = counts[u.username] || 0;
 			const tempBlocked = !!u.blockedUntil;
+			if (u.role === "creator") {
+				return `<div class="user admin-user protected-user">
+  <div class="user-summary">
+    <span class="user-summary-main">
+      <strong class="user-name">${esc(u.username)}</strong>
+      <span class="badge creator">creador</span>
+      ${self ? '<span class="badge">tú</span>' : ""}
+    </span>
+    <span class="user-summary-meta">Cuenta protegida · solo el creador puede usar su cuenta</span>
+  </div>
+</div>`;
+			}
 			const schedule = u.schedule || { enabled: false, days: [1, 2, 3, 4, 5], start: "08:00", end: "20:00" };
 			const dayChecks = dayLabels
 				.map(
@@ -936,7 +971,7 @@ export function adminPage({
   <summary class="user-summary">
     <span class="user-summary-main">
       <strong class="user-name">${esc(u.username)}</strong>
-      <span class="badge${u.role === "admin" ? " admin" : ""}">${esc(roleLabel(u.role))}</span>
+      <span class="badge${u.role === "admin" ? " admin" : u.role === "creator" ? " creator" : ""}">${esc(roleLabel(u.role))}</span>
       ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
       ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
       ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}

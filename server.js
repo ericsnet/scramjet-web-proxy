@@ -72,6 +72,7 @@ import {
 	countActivity,
 	activityCounts,
 	clearActivity,
+	clearActivityExcept,
 	trimActivity,
 	exportActivity,
 	flushActivity,
@@ -124,6 +125,8 @@ import {
 	postChatMessage,
 	listChat,
 	getChatMessage,
+	getChatUnread,
+	markChatRead,
 	deleteChatMessage,
 	deleteChatMessagesByUser,
 	clearChat,
@@ -131,6 +134,30 @@ import {
 } from "./chat.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function isAdminRole(role) {
+	return role === "admin" || role === "creator";
+}
+
+function isStaffRole(role) {
+	return isAdminRole(role) || role === "moderator";
+}
+
+function creatorNameSet() {
+	const set = new Set();
+	for (const entry of listUsers()) {
+		if (entry.role === "creator") set.add(String(entry.username).toLowerCase());
+	}
+	return set;
+}
+
+function hideCreatorData(req, items, getUsername) {
+	if (req.user?.role === "creator") return items;
+	const creators = creatorNameSet();
+	return items.filter(
+		(item) => !creators.has(String(getUsername(item) || "").toLowerCase()),
+	);
+}
 const VERSION = (() => {
 	try {
 		return JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8")).version;
@@ -319,7 +346,7 @@ function requireAuth(req, res, next) {
 	}
 
 	const settings = getSettings();
-	if (settings.quarantineMode && session.role !== "admin") {
+	if (settings.quarantineMode && !isAdminRole(session.role)) {
 		if (req.path === "/api/navigate-check") {
 			req.user = session;
 			return next();
@@ -335,7 +362,7 @@ function requireAuth(req, res, next) {
 		}
 		return res.redirect(303, "/quarantine");
 	}
-	if (settings.maintenanceMode && session.role !== "admin") {
+	if (settings.maintenanceMode && !isAdminRole(session.role)) {
 		if (req.path.startsWith("/api/")) {
 			return res.status(503).json({ error: "maintenance" });
 		}
@@ -343,7 +370,7 @@ function requireAuth(req, res, next) {
 	}
 
 	if (
-		session.role !== "admin" &&
+		!isAdminRole(session.role) &&
 		!isWithinSchedule(getUser(session.username), settings.timezone)
 	) {
 		if (req.path.startsWith("/api/")) {
@@ -377,14 +404,14 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-	if (!req.user || req.user.role !== "admin") {
+	if (!req.user || !isAdminRole(req.user.role)) {
 		return res.status(403).type("text/plain").send("Solo administradores.");
 	}
 	next();
 }
 
 function requireStaff(req, res, next) {
-	if (!req.user || !["admin", "moderator"].includes(req.user.role)) {
+	if (!req.user || !isStaffRole(req.user.role)) {
 		return res.status(403).type("text/plain").send("Solo administradores o moderadores.");
 	}
 	next();
@@ -401,7 +428,7 @@ const CHAT_ERRORS = {
 };
 
 function isChatModerator(user) {
-	return !!user && ["admin", "moderator"].includes(user.role);
+	return !!user && isStaffRole(user.role);
 }
 
 function chatOnlineCount() {
@@ -564,7 +591,7 @@ function closeNonAdminConnections() {
 		let keep = true;
 		for (const entry of set) {
 			const user = getUser(entry.username);
-			if (!user || user.role !== "admin" || user.effectivelyBlocked) keep = false;
+			if (!user || !isAdminRole(user.role) || user.effectivelyBlocked) keep = false;
 		}
 		if (keep) continue;
 		for (const { socket } of set) {
@@ -586,7 +613,7 @@ function matchSite(host, list) {
 }
 
 function checkHostPolicy(user, hostname) {
-	if (!user || user.role === "admin") return { blocked: false };
+	if (!user || isAdminRole(user.role)) return { blocked: false };
 	const settings = getSettings();
 	const host = String(hostname || "").toLowerCase().replace(/\.$/, "");
 	if (!host) return { blocked: false };
@@ -647,7 +674,7 @@ function checkHostPolicy(user, hostname) {
 
 function checkUrlPolicy(user, value) {
 	const settings = getSettings();
-	if (!user || user.role === "admin") return { blocked: false };
+	if (!user || isAdminRole(user.role)) return { blocked: false };
 	if (settings.quarantineMode) {
 		return {
 			blocked: true,
@@ -700,6 +727,8 @@ const ADMIN_ERRORS = {
 	"invalid-schedule": "Horario no válido: elige al menos un día y horas correctas.",
 	notfound: "Usuario no encontrado.",
 	"last-admin": "Debe quedar al menos un administrador activo.",
+	"creator-protected": "La cuenta del creador está protegida y no puede modificarse.",
+	protected: "La cuenta del creador está protegida y no puede modificarse.",
 	forbidden: "No tienes permisos sobre un administrador.",
 };
 
@@ -809,7 +838,7 @@ app.get("/login", (req, res) => {
 	const settings = getSettings();
 	const session = getSession(req);
 	if (session) {
-		if (settings.maintenanceMode && session.role !== "admin") {
+		if (settings.maintenanceMode && !isAdminRole(session.role)) {
 			return res.redirect(303, "/maintenance");
 		}
 		return res.redirect(303, "/");
@@ -828,7 +857,7 @@ app.get("/login", (req, res) => {
 app.get("/quarantine", (req, res) => {
 	const settings = getSettings();
 	const session = getSession(req);
-	if (session?.role === "admin") return res.redirect(303, "/");
+	if (isAdminRole(session?.role)) return res.redirect(303, "/");
 	res.status(503).set("Cache-Control", "no-store").type("html").send(
 		quarantinePage({ settings, user: session || null }),
 	);
@@ -837,7 +866,7 @@ app.get("/quarantine", (req, res) => {
 app.get("/maintenance", (req, res) => {
 	const settings = getSettings();
 	const session = getSession(req);
-	if (session?.role === "admin") return res.redirect(303, "/");
+	if (isAdminRole(session?.role)) return res.redirect(303, "/");
 	res.status(503).set("Cache-Control", "no-store").type("html").send(
 		maintenancePage({ settings, user: session || null }),
 	);
@@ -859,7 +888,7 @@ app.get("/blocked", (req, res) => {
 app.get("/denied", (req, res) => {
 	const session = getSession(req);
 	const settings = getSettings();
-	if (session?.role === "admin") return res.redirect(303, "/");
+	if (isAdminRole(session?.role)) return res.redirect(303, "/");
 	const reason = String(req.query.reason || "schedule");
 	const schedule = reason === "schedule";
 	res.status(403).set("Cache-Control", "no-store").type("html").send(
@@ -924,7 +953,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		const token = createBlockFlash(message);
 		return res.redirect(303, `/blocked?t=${token}`);
 	}
-	if (settings.quarantineMode && user.role !== "admin") {
+	if (settings.quarantineMode && !isAdminRole(user.role)) {
 		addAudit({
 			actor: user.username,
 			action: "login.quarantine",
@@ -933,7 +962,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		});
 		return res.redirect(303, "/quarantine");
 	}
-	if (settings.maintenanceMode && user.role !== "admin") {
+	if (settings.maintenanceMode && !isAdminRole(user.role)) {
 		addAudit({
 			actor: user.username,
 			action: "login.maintenance",
@@ -943,7 +972,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		return res.redirect(303, `/login?error=maintenance&next=${encodeURIComponent(next)}`);
 	}
 	if (
-		user.role !== "admin" &&
+		!isAdminRole(user.role) &&
 		!isWithinSchedule(getUser(user.username), settings.timezone)
 	) {
 		addAudit({
@@ -992,6 +1021,14 @@ app.post("/logout", sameOrigin, (req, res) => {
 /* --------------------------- a partir de aquí, login --------------------------- */
 
 app.use(requireAuth);
+
+app.param("username", (req, res, next, value) => {
+	const target = getUser(value);
+	if (target?.role === "creator") {
+		return res.redirect(303, "/admin?error=creator-protected");
+	}
+	next();
+});
 
 app.get("/api/me", (req, res) => {
 	const user = getUser(req.user.username);
@@ -1078,6 +1115,25 @@ app.get("/chat", (req, res) => {
 	);
 });
 
+app.get("/api/chat/unread", (req, res) => {
+	const settings = getSettings();
+	if (!settings.chatEnabled) {
+		return res.json({ enabled: false, unread: 0, latestSeq: 0 });
+	}
+	res.set("Cache-Control", "no-store");
+	res.json({
+		enabled: true,
+		...getChatUnread(req.user.username),
+		currentUser: req.user.username,
+	});
+});
+
+app.post("/api/chat/read", sameOrigin, (req, res) => {
+	if (!getSettings().chatEnabled) return res.status(403).json({ error: "disabled" });
+	markChatRead(req.user.username, req.body.seq);
+	res.status(204).end();
+});
+
 app.get("/api/chat/messages", (req, res) => {
 	const settings = getSettings();
 	if (!settings.chatEnabled) {
@@ -1095,6 +1151,7 @@ app.get("/api/chat/messages", (req, res) => {
 		allowUserDelete: !!settings.chatAllowUserDelete,
 		maxLength: settings.chatMaxLength,
 		currentUser: req.user.username,
+		unread: getChatUnread(req.user.username).unread,
 	});
 });
 
@@ -1226,7 +1283,7 @@ app.get("/account", (req, res) => {
 			user: req.user,
 			sessions,
 			currentId: req.user.id,
-			allowPasswordChange: settings.allowUserPasswordChange || req.user.role === "admin",
+			allowPasswordChange: settings.allowUserPasswordChange || isAdminRole(req.user.role),
 			forced: req.user.mustChangePassword || req.query.force === "1",
 			notice,
 			error,
@@ -1288,7 +1345,7 @@ app.post("/api/account/password", sameOrigin, (req, res) => {
 	const settings = getSettings();
 	if (
 		!settings.allowUserPasswordChange &&
-		req.user.role !== "admin" &&
+		!isAdminRole(req.user.role) &&
 		!req.user.mustChangePassword
 	) {
 		return res.redirect(303, "/account?error=disabled");
@@ -1381,18 +1438,27 @@ app.get("/admin", requireStaff, (req, res) => {
 	const error = ADMIN_ERRORS[req.query.error] || "";
 	const notice = ADMIN_OK[req.query.ok] || "";
 	touchQuarantineView();
+	const users = listUsers();
+	const counts = activityCounts();
+	if (req.user.role !== "creator") {
+		const creators = creatorNameSet();
+		for (const username of Object.keys(counts)) {
+			if (creators.has(username.toLowerCase())) delete counts[username];
+		}
+	}
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		adminPage({
 			user: req.user,
-			users: listUsers(),
-			counts: activityCounts(),
-			canManage: req.user.role === "admin",
+			users,
+			counts,
+			canManage: isAdminRole(req.user.role),
 			quarantine: getSettings().quarantineMode,
-			quarantineAttempts: listAudit({
-				action: "quarantine.attempt",
-				limit: 20,
-			}),
+			quarantineAttempts: hideCreatorData(
+				req,
+				listAudit({ action: "quarantine.attempt", limit: 20 }),
+				(e) => e.actor,
+			),
 			error,
 			notice,
 		}),
@@ -1407,9 +1473,9 @@ app.get("/admin/requests", requireStaff, (req, res) => {
 	res.type("html").send(
 		requestsPage({
 			user: req.user,
-			requests: listRequests({ status }),
+			requests: hideCreatorData(req, listRequests({ status }), (r) => r.username),
 			status,
-			canManage: req.user.role === "admin" || req.user.role === "moderator",
+			canManage: isAdminRole(req.user.role) || req.user.role === "moderator",
 		}),
 	);
 });
@@ -1417,6 +1483,9 @@ app.get("/admin/requests", requireStaff, (req, res) => {
 app.post("/api/admin/requests/:id/approve", requireStaff, sameOrigin, (req, res) => {
 	const request = listRequests().find((r) => r.id === req.params.id);
 	if (!request) return res.redirect(303, "/admin/requests?error=notfound");
+	if (getUser(request.username)?.role === "creator" && req.user.role !== "creator") {
+		return res.redirect(303, "/admin/requests?error=forbidden");
+	}
 	const result = resolveRequest(request.id, "approved", req.user.username);
 	if (result.error) return res.redirect(303, "/admin/requests?error=notfound");
 	addUnblockOverride(request.username, request.host);
@@ -1428,20 +1497,25 @@ app.post("/api/admin/requests/:id/approve", requireStaff, sameOrigin, (req, res)
 app.post("/api/admin/requests/:id/deny", requireStaff, sameOrigin, (req, res) => {
 	const request = listRequests().find((r) => r.id === req.params.id);
 	if (!request) return res.redirect(303, "/admin/requests?error=notfound");
+	if (getUser(request.username)?.role === "creator" && req.user.role !== "creator") {
+		return res.redirect(303, "/admin/requests?error=forbidden");
+	}
 	resolveRequest(request.id, "denied", req.user.username);
 	audit(req, "request.deny", request.username, request.host);
 	res.redirect(303, "/admin/requests?status=pending");
 });
 
 app.get("/admin/sessions", requireStaff, (req, res) => {
-	const users = listUsers();
+	const users = listUsers().filter(
+		(u) => req.user.role === "creator" || u.role !== "creator",
+	);
 	const wanted = String(req.query.user || "");
 	const filter = users.some(
 		(u) => u.username.toLowerCase() === wanted.toLowerCase(),
 	)
 		? wanted
 		: "";
-	const sessions = listSessions().filter(
+	const sessions = hideCreatorData(req, listSessions(), (s) => s.username).filter(
 		(s) => !filter || s.username.toLowerCase() === filter.toLowerCase(),
 	);
 	const notice =
@@ -1461,7 +1535,10 @@ app.post("/api/admin/sessions/:id/revoke", requireStaff, sameOrigin, (req, res) 
 	const info = listSessions().find((s) => s.id === req.params.id);
 	if (!info) return res.redirect(303, "/admin/sessions?error=notfound");
 	const targetUser = getUser(info.username);
-	if (targetUser?.role === "admin" && req.user.role !== "admin") {
+	if (targetUser?.role === "creator") {
+		return res.redirect(303, "/admin/sessions?error=forbidden");
+	}
+	if (targetUser?.role === "admin" && !isAdminRole(req.user.role)) {
 		return res.redirect(303, "/admin/sessions?error=forbidden");
 	}
 	const session = revokeSessionById(req.params.id);
@@ -1476,7 +1553,9 @@ app.post("/api/admin/sessions/:id/revoke", requireStaff, sameOrigin, (req, res) 
 });
 
 app.get("/admin/activity", requireStaff, (req, res) => {
-	const users = listUsers();
+	const users = listUsers().filter(
+		(u) => req.user.role === "creator" || u.role !== "creator",
+	);
 	const wanted = String(req.query.user || "");
 	const filter = users.some(
 		(u) => u.username.toLowerCase() === wanted.toLowerCase(),
@@ -1485,18 +1564,29 @@ app.get("/admin/activity", requireStaff, (req, res) => {
 		: "";
 	const notice = req.query.ok === "cleared" ? "Historial vaciado." : "";
 	const settings = getSettings();
+	const counts = activityCounts();
+	if (req.user.role !== "creator") {
+		const creators = creatorNameSet();
+		for (const username of Object.keys(counts)) {
+			if (creators.has(username.toLowerCase())) delete counts[username];
+		}
+	}
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		activityPage({
 			user: req.user,
 			users,
-			counts: activityCounts(),
-			activity: getActivity({ username: filter, limit: 500 }),
+			counts,
+			activity: hideCreatorData(
+				req,
+				getActivity({ username: filter, limit: 500 }),
+				(e) => e.username,
+			),
 			filter,
 			notice,
 			retention: settings.activityPerUser,
 			activityEnabled: settings.activityEnabled,
-			canManage: req.user.role === "admin",
+			canManage: isAdminRole(req.user.role),
 		}),
 	);
 });
@@ -1504,7 +1594,16 @@ app.get("/admin/activity", requireStaff, (req, res) => {
 app.post("/api/admin/activity/clear", requireAdmin, sameOrigin, (req, res) => {
 	const wanted = String(req.body.user || "").trim();
 	const target = wanted ? getUser(wanted) : null;
-	clearActivity(target ? target.username : "");
+	if (target?.role === "creator" && req.user.role !== "creator") {
+		return res.redirect(303, "/admin/activity?error=forbidden");
+	}
+	if (target) {
+		clearActivity(target.username);
+	} else if (req.user.role === "creator") {
+		clearActivity();
+	} else {
+		clearActivityExcept([...creatorNameSet()]);
+	}
 	audit(req, "activity.clear", target ? target.username : "", target ? "historial del usuario" : "todo el historial");
 	const suffix = target ? `&user=${encodeURIComponent(target.username)}` : "";
 	res.redirect(303, `/admin/activity?ok=cleared${suffix}`);
@@ -1513,10 +1612,17 @@ app.post("/api/admin/activity/clear", requireAdmin, sameOrigin, (req, res) => {
 app.get("/admin/activity.csv", requireAdmin, sameSiteRequest, (req, res) => {
 	const wanted = String(req.query.user || "").trim();
 	const target = wanted ? getUser(wanted) : null;
-	const rows = getActivity({
-		username: target ? target.username : "",
-		limit: 10000,
-	});
+	if (target?.role === "creator" && req.user.role !== "creator") {
+		return res.status(403).type("text/plain").send("No autorizado.");
+	}
+	const rows = hideCreatorData(
+		req,
+		getActivity({
+			username: target ? target.username : "",
+			limit: 10000,
+		}),
+		(e) => e.username,
+	);
 	const csvEscape = (value) => {
 		let text = String(value ?? "");
 		if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
@@ -1553,7 +1659,7 @@ app.post("/api/admin/quarantine", requireAdmin, sameOrigin, (req, res) => {
 });
 
 app.get("/admin/stats", requireStaff, (req, res) => {
-	const activity = exportActivity();
+	const activity = hideCreatorData(req, exportActivity(), (e) => e.username);
 	const hostCounts = new Map();
 	const userCounts = new Map();
 	for (const entry of activity) {
@@ -1569,7 +1675,7 @@ app.get("/admin/stats", requireStaff, (req, res) => {
 		.slice(0, 10);
 	const byUser = [...userCounts.entries()].sort((a, b) => b[1] - a[1]);
 	const failCounts = new Map();
-	for (const event of exportAudit()) {
+	for (const event of hideCreatorData(req, exportAudit(), (e) => e.actor)) {
 		if (!["login.fail", "login.rate", "login.blocked", "login.quarantine"].includes(event.action)) continue;
 		failCounts.set(event.actor, (failCounts.get(event.actor) || 0) + 1);
 	}
@@ -1740,29 +1846,37 @@ app.post("/api/admin/chat/clear", requireAdmin, sameOrigin, (req, res) => {
 });
 
 app.get("/admin/audit", requireStaff, (req, res) => {
+	const hidden = req.user.role === "creator" ? [] : [...creatorNameSet()];
 	const filters = {
 		actor: String(req.query.actor || ""),
 		action: String(req.query.action || ""),
 		limit: 300,
+		excludeActors: hidden,
+		excludeTargets: hidden,
 	};
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		auditPage({
 			user: req.user,
 			events: listAudit(filters),
-			users: listUsers(),
+			users: listUsers().filter(
+				(u) => req.user.role === "creator" || u.role !== "creator",
+			),
 			actions: auditActions(),
 			filters,
-			canManage: req.user.role === "admin",
+			canManage: isAdminRole(req.user.role),
 			notice: req.query.ok === "cleared" ? "Auditoría vaciada." : "",
 		}),
 	);
 });
 
 app.get("/admin/audit.csv", requireAdmin, (req, res) => {
+	const hidden = req.user.role === "creator" ? [] : [...creatorNameSet()];
 	const filters = {
 		actor: String(req.query.actor || ""),
 		action: String(req.query.action || ""),
+		excludeActors: hidden,
+		excludeTargets: hidden,
 	};
 	audit(req, "audit.export", "", JSON.stringify(filters));
 	res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -1933,7 +2047,7 @@ app.post("/api/admin/users/:username/role", requireAdmin, sameOrigin, (req, res)
 	const role = req.body.role;
 	if (
 		target.toLowerCase() === req.user.username.toLowerCase() &&
-		role !== "admin"
+		!isAdminRole(role)
 	) {
 		return res.redirect(303, "/admin?error=self");
 	}
@@ -1946,7 +2060,7 @@ app.post("/api/admin/users/:username/role", requireAdmin, sameOrigin, (req, res)
 app.post("/api/admin/users/:username/block", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
-	if (target.role === "admin" && req.user.role !== "admin") {
+	if (target.role === "admin" && !isAdminRole(req.user.role)) {
 		return res.redirect(303, "/admin?error=forbidden");
 	}
 	if (target.username.toLowerCase() === req.user.username.toLowerCase()) {
@@ -1972,7 +2086,7 @@ app.post("/api/admin/users/:username/block", requireStaff, sameOrigin, (req, res
 app.post("/api/admin/users/:username/block-until", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
-	if (target.role === "admin" && req.user.role !== "admin") {
+	if (target.role === "admin" && !isAdminRole(req.user.role)) {
 		return res.redirect(303, "/admin?error=forbidden");
 	}
 	if (target.username.toLowerCase() === req.user.username.toLowerCase()) {
@@ -2053,7 +2167,7 @@ app.post("/api/admin/users/:username/must-change", requireAdmin, sameOrigin, (re
 app.post("/api/admin/users/:username/logout", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
-	if (target.role === "admin" && req.user.role !== "admin") {
+	if (target.role === "admin" && !isAdminRole(req.user.role)) {
 		return res.redirect(303, "/admin?error=forbidden");
 	}
 	if (target.username.toLowerCase() === req.user.username.toLowerCase()) {
@@ -2138,7 +2252,7 @@ setInterval(() => {
 		let close = false;
 		for (const entry of set) {
 			const user = getUser(entry.username);
-			if (user && user.role !== "admin" && !isWithinSchedule(user, tz)) {
+			if (user && !isAdminRole(user.role) && !isWithinSchedule(user, tz)) {
 				close = true;
 			}
 		}
@@ -2180,10 +2294,10 @@ server.on("upgrade", (req, socket, head) => {
 	const currentUser = session ? getUser(session.username) : null;
 	if (
 		!session ||
-		(settings.quarantineMode && session.role !== "admin") ||
-		(settings.maintenanceMode && session.role !== "admin") ||
+		(settings.quarantineMode && !isAdminRole(session.role)) ||
+		(settings.maintenanceMode && !isAdminRole(session.role)) ||
 		session.mustChangePassword ||
-		(session.role !== "admin" &&
+		(!isAdminRole(session.role) &&
 			!isWithinSchedule(currentUser, settings.timezone))
 	) {
 		if (settings.quarantineMode) {
@@ -2206,7 +2320,7 @@ server.on("upgrade", (req, socket, head) => {
 	metric("wisp_connections_total");
 	wisp.routeRequest(req, socket, head, {
 		username: session.username,
-		isAdmin: () => getUser(session.username)?.role === "admin",
+		isAdmin: () => isAdminRole(getUser(session.username)?.role),
 		isHostBlocked: (hostname) => {
 			const user = getUser(session.username);
 			return checkHostPolicy(user, hostname).blocked;

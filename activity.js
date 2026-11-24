@@ -174,6 +174,13 @@ export function clearActivity(username = "") {
 	saveNow();
 }
 
+export function clearActivityExcept(usernames = []) {
+	const keep = new Set(usernames.map((name) => String(name).toLowerCase()));
+	entries = entries.filter((e) => keep.has(String(e.username).toLowerCase()));
+	dirty = true;
+	saveNow();
+}
+
 export function exportActivity() {
 	return JSON.parse(JSON.stringify(entries));
 }

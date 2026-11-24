@@ -12,6 +12,7 @@ const FILE = path.join(DATA_DIR, "chat.json");
 let messages = [];
 let nextSeq = 1;
 let generation = 1;
+let reads = {}; // usuario en minúsculas -> última secuencia leída
 let saveTimer = null;
 let dirty = false;
 const lastPost = new Map(); // usuario -> { last, times[] }
@@ -23,7 +24,7 @@ function saveNow() {
 		const tmp = `${FILE}.tmp`;
 		fs.writeFileSync(
 			tmp,
-			JSON.stringify({ messages, nextSeq, generation }, null, 2),
+			JSON.stringify({ messages, nextSeq, generation, reads }, null, 2),
 			{ mode: 0o600 },
 		);
 		fs.renameSync(tmp, FILE);
@@ -62,6 +63,15 @@ function load() {
 		if (!fs.existsSync(FILE)) return;
 		const data = JSON.parse(fs.readFileSync(FILE, "utf8"));
 		generation = Math.max(1, Number(data.generation) || 1);
+		if (data.reads && typeof data.reads === "object" && !Array.isArray(data.reads)) {
+			reads = {};
+			for (const [name, seq] of Object.entries(data.reads)) {
+				const value = Number(seq);
+				if (typeof name === "string" && Number.isFinite(value) && value >= 0) {
+					reads[name.toLowerCase()] = Math.floor(value);
+				}
+			}
+		}
 		const entries = Array.isArray(data.messages) ? data.messages : [];
 		messages = entries
 			.filter(
@@ -95,6 +105,7 @@ function load() {
 		messages = [];
 		nextSeq = 1;
 		generation = 1;
+		reads = {};
 	}
 }
 
@@ -180,6 +191,7 @@ export function deleteChatMessagesByUser(username) {
 	const wanted = String(username || "").toLowerCase();
 	const before = messages.length;
 	messages = messages.filter((m) => m.username.toLowerCase() !== wanted);
+	delete reads[wanted];
 	lastPost.delete(wanted);
 	if (messages.length !== before) {
 		generation += 1;
@@ -191,16 +203,41 @@ export function deleteChatMessagesByUser(username) {
 
 export function clearChat() {
 	messages = [];
+	reads = {};
 	generation += 1;
 	lastPost.clear();
 	dirty = true;
 	saveNow();
 }
 
+export function getChatUnread(username) {
+	const wanted = String(username || "").toLowerCase();
+	const read = Number(reads[wanted]) || 0;
+	const latestSeq = messages.length ? messages[messages.length - 1].seq : nextSeq - 1;
+	let unread = 0;
+	for (const message of messages) {
+		if (message.seq > read && message.username.toLowerCase() !== wanted) unread++;
+	}
+	return { unread, read, latestSeq };
+}
+
+export function markChatRead(username, seq) {
+	const wanted = String(username || "").toLowerCase();
+	const value = Math.max(0, Number.parseInt(seq, 10) || 0);
+	if (!wanted) return { error: "invalid" };
+	if ((reads[wanted] || 0) < value) {
+		reads[wanted] = value;
+		dirty = true;
+		scheduleSave();
+	}
+	return { ok: true };
+}
+
 export function exportChat() {
 	return {
 		generation,
 		messages: messages.map((m) => ({ ...m })),
+		reads: { ...reads },
 	};
 }
 

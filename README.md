@@ -15,9 +15,10 @@ administración.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
 - **Chat interno entre usuarios**, con texto plano, moderación y ajustes de capacidad, retención y ritmo.
+- **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
-- Roles `admin`, `moderador` y `usuario`.
+- Roles `usuario`, `moderador`, `administrador` y `creador`. El **creador** es la cuenta propietaria: nadie más puede modificarla, bloquearla, borrarla ni ver su historial, sesiones o auditoría.
 - **Vista compacta de usuarios** en Administración: cada fila muestra el resumen y se despliega al pulsarla con toda la información y acciones.
 - Los administradores pueden:
   - crear usuarios y resetear contraseñas,
@@ -32,6 +33,8 @@ administración.
   - crear/restaurar copias y consultar métricas.
 - Los **moderadores** pueden ver usuarios, sesiones, actividad, auditoría y
   solicitudes, y bloquear o cerrar sesiones; no pueden cambiar ajustes ni gestionar admins.
+- El **creador** tiene acceso completo y su cuenta queda fuera del alcance de
+  administradores y moderadores.
 - Bloqueo real de dominios en la capa Wisp, con listas globales, categorías y por usuario.
 - **Modo cuarentena**: rechaza nuevas conexiones, cierra las abiertas y registra los intentos rechazados.
 - Copias automáticas diarias locales, métricas Prometheus, CI, watchdog y despliegue con Docker + Caddy.
@@ -196,6 +199,10 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 
 ### Chat interno
 
+- Pop-ups en cualquier página cuando otro usuario escribe.
+- Contador de no leídos sobre el icono flotante.
+- Al volver a abrir el proxy: “Tienes X mensajes nuevos…”.
+- El puntero de lectura se guarda por usuario en `data/chat.json`.
 - Sala única para todos los usuarios autenticados, con actualización automática.
 - Texto plano: no se interpreta HTML ni Markdown; todo se escapa en servidor y
   se pinta con `textContent` en el navegador.
@@ -278,6 +285,7 @@ Archivos principales:
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `chat.js` | Almacén, límites y retención del chat interno |
 | `public/chat.js` | Actualización y envío de mensajes en el navegador |
+| `public/chat-notify.js` | Avisos, pop-ups y contador de no leídos |
 | `public/page-i18n.js` | Traducciones de interfaz |
 | `.github/workflows/ci.yml` | Comprobación de sintaxis en CI |
 | `pages.js` | Páginas de login, cuenta y administración |

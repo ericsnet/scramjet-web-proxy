@@ -68,14 +68,24 @@ export function addAudit({
 	scheduleSave();
 }
 
-export function listAudit({ actor = "", action = "", limit = 300 } = {}) {
+export function listAudit({
+	actor = "",
+	action = "",
+	limit = 300,
+	excludeActors = [],
+	excludeTargets = [],
+} = {}) {
 	const wantedActor = String(actor || "").toLowerCase();
 	const wantedAction = String(action || "").toLowerCase();
+	const hiddenActors = new Set(excludeActors.map((v) => String(v).toLowerCase()));
+	const hiddenTargets = new Set(excludeTargets.map((v) => String(v).toLowerCase()));
 	const out = [];
 	for (let i = events.length - 1; i >= 0 && out.length < limit; i--) {
 		const e = events[i];
 		if (wantedActor && String(e.actor).toLowerCase() !== wantedActor) continue;
 		if (wantedAction && String(e.action).toLowerCase() !== wantedAction) continue;
+		if (hiddenActors.has(String(e.actor).toLowerCase())) continue;
+		if (hiddenTargets.has(String(e.target).toLowerCase())) continue;
 		out.push(e);
 	}
 	return out;
@@ -105,8 +115,8 @@ export function exportAudit() {
 	return JSON.parse(JSON.stringify(events));
 }
 
-export function auditToCsv({ actor = "", action = "" } = {}) {
-	const rows = listAudit({ actor, action, limit: MAX_EVENTS });
+export function auditToCsv({ actor = "", action = "", excludeActors = [], excludeTargets = [] } = {}) {
+	const rows = listAudit({ actor, action, limit: MAX_EVENTS, excludeActors, excludeTargets });
 	const escape = (value) => {
 		let text = String(value ?? "");
 		if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;

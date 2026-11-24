@@ -139,6 +139,10 @@ export function restoreBackup(name) {
 		write("chat.json", {
 			messages: data.chat.messages,
 			generation: Number(data.chat.generation) || 1,
+			reads:
+				data.chat.reads && typeof data.chat.reads === "object"
+					? data.chat.reads
+					: {},
 			nextSeq:
 				data.chat.messages.reduce((max, m) => Math.max(max, Number(m.seq) || 0), 0) + 1,
 		});

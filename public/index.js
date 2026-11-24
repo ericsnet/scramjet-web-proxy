@@ -104,7 +104,7 @@ fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" })
 	.then((r) => (r.ok ? r.json() : null))
 	.then((me) => {
 		if (!me) return;
-		isAdmin = me.role === "admin";
+		isAdmin = ["admin", "creator"].includes(me.role);
 		myBlockedSites = Array.isArray(me.blockedSites)
 			? me.blockedSites.map((s) => String(s).toLowerCase())
 			: [];
@@ -114,11 +114,16 @@ fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" })
 		const avatar = document.getElementById("session-avatar");
 		if (avatar) avatar.textContent = me.username.slice(0, 1).toUpperCase();
 		if (who) {
-			who.textContent = `${me.username} · ${
-				me.role === "admin" ? "administrador" : "usuario"
-			}`;
+			const roleLabel = me.role === "creator"
+				? "creador"
+				: me.role === "admin"
+					? "administrador"
+					: me.role === "moderator"
+						? "moderador"
+						: "usuario";
+			who.textContent = `${me.username} · ${roleLabel}`;
 		}
-		if (adminLink) adminLink.hidden = me.role !== "admin";
+		if (adminLink) adminLink.hidden = !["admin", "creator"].includes(me.role);
 		if (bar) bar.hidden = false;
 	})
 	.catch(() => {});
