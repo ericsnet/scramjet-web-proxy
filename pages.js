@@ -107,7 +107,8 @@ td{padding:12px 10px;border-top:1px solid var(--border);vertical-align:middle}
 .day{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);margin:0}
 .day input{width:auto}
 .scroll{overflow-x:auto}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;min-width:0}
+.grid>*{min-width:0}.scroll{max-width:100%}
 .badge.blocked{color:#fecaca;border-color:#7f1d1d;background:#1f1113}
 .user{border:1px solid var(--border);border-radius:12px;padding:14px;background:rgba(21,30,41,.5)}
 .user + .user{margin-top:12px}
@@ -319,6 +320,14 @@ dialog h2{margin-top:0}
 .role-scale li.role-creator strong{color:#fde68a}
 .role-scale span{display:block}
 .role-scale b{color:#fde68a}
+.traffic-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.traffic-live{display:inline-flex;align-items:center;gap:7px;color:#86efac;font-size:12px;font-weight:600;padding:6px 10px;border:1px solid rgba(74,222,128,.3);border-radius:999px;background:rgba(74,222,128,.07)}
+.traffic-live i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 4px rgba(74,222,128,.12);animation:trafficPulse 1.8s infinite}
+@keyframes trafficPulse{0%,100%{opacity:1}50%{opacity:.35}}
+.badge.status-2xx{color:#bbf7d0;border-color:#166534;background:#0d2115}
+.badge.status-3xx{color:#bfdbfe;border-color:#1e40af;background:#101c33}
+.badge.status-4xx{color:#fde68a;border-color:#a16207;background:#271c06}
+.badge.status-5xx{color:#fecaca;border-color:#7f1d1d;background:#1f1113}
 .chat-disabled{text-align:center;padding:34px 10px}
 .chat-fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:80;
   width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -515,6 +524,7 @@ const ADMIN_TABS = [
 	["users", "/admin", "Usuarios"],
 	["sessions", "/admin/sessions", "Sesiones"],
 	["security", "/admin/security", "Seguridad"],
+	["traffic", "/admin/traffic", "Tráfico"],
 	["activity", "/admin/activity", "Actividad"],
 	["audit", "/admin/audit", "Auditoría"],
 	["requests", "/admin/requests", "Solicitudes"],
@@ -526,7 +536,7 @@ const ADMIN_TABS = [
 function adminTabs(active, role = "admin") {
 	const visible = ["admin", "creator"].includes(role)
 		? ADMIN_TABS
-		: ADMIN_TABS.filter(([key]) => !["settings", "system", "security"].includes(key));
+		: ADMIN_TABS.filter(([key]) => !["settings", "system", "security", "traffic"].includes(key));
 	const links = visible
 		.map(
 			([key, href, label]) =>
@@ -1733,6 +1743,65 @@ ${adminTabs("security", user.role)}
   ${banRows ? `<div class="scroll"><table><thead><tr><th>Objetivo</th><th>Tipo</th><th>Categoría</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay bloqueos activos.</p>'}
 </div>`;
 	return shell("Seguridad · Administración", body, { topbar: topbar(user) });
+}
+
+export function trafficPage({
+	user,
+	snapshot = {},
+	sessions = 0,
+	security = {},
+} = {}) {
+	const http = snapshot.http || {};
+	const wisp = snapshot.wisp || {};
+	const recent = http.recent || [];
+	const hostRows = (wisp.hosts || []).slice(0, 15).map((h) => `<tr>
+  <td class="mono">${esc(h.host)}</td><td>${esc(h.active)}</td><td>${esc(h.opened)}</td>
+  <td>${esc(fmtBytes(h.bytesOut || 0))}</td><td>${esc((h.users || []).slice(0, 3).join(", ") || "—")}</td>
+</tr>`).join("");
+	const requestRows = recent.slice(0, 25).map((r) => `<tr>
+  <td class="mono">${esc((r.at || "").slice(11, 19))}</td>
+  <td><span class="badge status-${Math.floor((r.status || 0) / 100)}xx">${esc(r.status)}</span></td>
+  <td class="mono">${esc(r.method)} ${esc(r.path)}</td>
+  <td>${esc(r.ms)} ms</td>
+  <td>${esc(r.user || r.ip || "—")}</td>
+</tr>`).join("");
+	const streamRows = (wisp.streams || []).slice(0, 20).map((stream) => `<tr>
+  <td class="mono">${esc(stream.host)}:${esc(stream.port)}</td>
+  <td>${esc(stream.type)}</td><td>${esc(stream.username || "—")}</td>
+  <td>${esc(fmtBytes((stream.bytesIn || 0) + (stream.bytesOut || 0)))}</td>
+</tr>`).join("");
+	const body = `
+${adminTabs("traffic", user.role)}
+<div class="traffic-head">
+  <div><h1>Tráfico en tiempo real</h1><p class="muted">Peticiones HTTP, actividad Wisp, destinos y usuarios conectados.</p></div>
+  <span class="traffic-live" id="traffic-live"><i></i> En directo</span>
+</div>
+<div class="stats">
+  <div class="stat"><div class="k">Peticiones por segundo</div><div class="v" id="traffic-rps">${esc(http.requestsPerSecond || 0)}</div></div>
+  <div class="stat"><div class="k">Último minuto</div><div class="v" id="traffic-minute">${esc(http.lastMinute || 0)}</div></div>
+  <div class="stat"><div class="k">Usuarios activos</div><div class="v" id="traffic-users">${esc(http.activeUsers || 0)}</div></div>
+  <div class="stat"><div class="k">Sesiones</div><div class="v" id="traffic-sessions">${esc(sessions || 0)}</div></div>
+  <div class="stat"><div class="k">Streams Wisp</div><div class="v" id="traffic-streams-count">${esc(wisp.activeStreams || 0)}</div></div>
+  <div class="stat"><div class="k">Tráfico Wisp</div><div class="v" id="traffic-bytes">${esc(fmtBytes((wisp.bytesIn || 0) + (wisp.bytesOut || 0)))}</div></div>
+  <div class="stat"><div class="k">Alertas seguridad</div><div class="v" id="traffic-alerts">${esc(security.open || 0)}</div></div>
+</div>
+<div class="grid">
+  <div class="card">
+    <h2>Peticiones HTTP recientes</h2>
+    <div class="scroll"><table><thead><tr><th>Hora</th><th>Estado</th><th>Ruta</th><th>Duración</th><th>Usuario / IP</th></tr></thead><tbody id="traffic-requests">${requestRows || '<tr><td colspan="5" class="empty">Esperando tráfico…</td></tr>'}</tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>Destinos Wisp</h2>
+    <div class="scroll"><table><thead><tr><th>Destino</th><th>Activos</th><th>Abiertos</th><th>Descarga</th><th>Usuarios</th></tr></thead><tbody id="traffic-hosts">${hostRows || '<tr><td colspan="5" class="empty">Sin conexiones Wisp.</td></tr>'}</tbody></table></div>
+  </div>
+</div>
+<div class="card">
+  <h2>Streams activos</h2>
+  <div class="scroll"><table><thead><tr><th>Destino</th><th>Tipo</th><th>Usuario</th><th>Tráfico</th></tr></thead><tbody id="traffic-active-streams">${streamRows || '<tr><td colspan="4" class="empty">Sin streams activos.</td></tr>'}</tbody></table></div>
+  <p class="hint" id="traffic-updated">Actualizado: ${esc(fmtDate(snapshot.generatedAt || new Date().toISOString()))}</p>
+</div>
+<script src="/traffic.js" defer></script>`;
+	return shell("Tráfico · Administración", body, { topbar: topbar(user) });
 }
 
 export function settingsPage({ user, settings, notice = "", error = "" } = {}) {

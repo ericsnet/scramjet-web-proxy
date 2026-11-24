@@ -14,6 +14,7 @@ administración.
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
+- **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento, intercambio de cuentas y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
@@ -312,6 +313,8 @@ Archivos principales:
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `chat.js` | Almacén, límites y retención del chat interno |
 | `security.js` | Detección pasiva, alertas, bloqueos y account-swapping |
+| `traffic.js` | Búfer de tráfico HTTP y conexiones Wisp para el panel en vivo |
+| `public/traffic.js` | Actualización del panel de tráfico |
 | `roles.js` | Jerarquía y permisos de usuario/moderador/administrador/creador |
 | `public/chat.js` | Actualización y envío de mensajes en el navegador |
 | `public/chat-notify.js` | Avisos, pop-ups y contador de no leídos |

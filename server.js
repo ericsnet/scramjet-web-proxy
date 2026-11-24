@@ -57,6 +57,7 @@ import {
 	activityPage,
 	sessionsPage,
 	securityPage,
+	trafficPage,
 	settingsPage,
 	auditPage,
 	systemPage,
@@ -110,6 +111,7 @@ import {
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { isPrivateDestination } from "./net-guard.js";
+import { recordHttp, trafficSnapshot, wispOpen, wispClose, wispBytes } from "./traffic.js";
 import { isAdminRole, isStaffRole, canManageRole, canAssignRole } from "./roles.js";
 import {
 	securityMiddleware,
@@ -221,6 +223,11 @@ app.use((req, res, next) => {
 });
 app.use(securityMiddleware);
 app.use((req, res, next) => {
+	const startedAt = Date.now();
+	res.once("finish", () => recordHttp(req, res, startedAt));
+	next();
+});
+app.use((req, res, next) => {
 	metric("requests_total");
 	next();
 });
@@ -229,6 +236,53 @@ app.use((req, res, next) => {
 
 function escapeRegExp(value) {
 	return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function instrumentWispTraffic() {
+	if (!wisp.ServerConnection?.prototype || !wisp.ServerStream?.prototype) return;
+	const connection = wisp.ServerConnection.prototype;
+	const stream = wisp.ServerStream.prototype;
+	if (connection.__trafficPatched) return;
+	connection.__trafficPatched = true;
+	const createStream = connection.create_stream;
+	connection.create_stream = function (streamId, type, hostname, port) {
+		const result = createStream.apply(this, arguments);
+		try {
+			wispOpen(this, streamId, type, hostname, port);
+		} catch {}
+		return result;
+	};
+	const closeStream = connection.close_stream;
+	connection.close_stream = function (streamId) {
+		const result = closeStream.apply(this, arguments);
+		try {
+			wispClose(this, streamId);
+		} catch {}
+		return result;
+	};
+	const putData = stream.put_data;
+	stream.put_data = function (data) {
+		try {
+			wispBytes(this.conn, this.stream_id, "in", data?.length || data?.byteLength || 0);
+		} catch {}
+		return putData.apply(this, arguments);
+	};
+	const tcpToWs = stream.tcp_to_ws;
+	stream.tcp_to_ws = function () {
+		const socket = this.socket;
+		if (socket && !socket.__trafficRecv) {
+			socket.__trafficRecv = true;
+			const recv = socket.recv.bind(socket);
+			socket.recv = async () => {
+				const data = await recv();
+				try {
+					wispBytes(this.conn, this.stream_id, "out", data?.length || data?.byteLength || 0);
+				} catch {}
+				return data;
+			};
+		}
+		return tcpToWs.apply(this, arguments);
+	};
 }
 
 function applyWispBlocklist() {
@@ -240,6 +294,7 @@ function applyWispBlocklist() {
 }
 
 applyWispBlocklist();
+instrumentWispTraffic();
 initCategories().then(() => {
 	if ((getSettings().categories || []).length) {
 		return refreshCategories(false);
@@ -1819,6 +1874,28 @@ app.post("/api/admin/security/dismiss", requireAdmin, sameOrigin, (req, res) => 
 	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
 	audit(req, "security.dismiss", String(req.body.id || ""));
 	res.redirect(303, "/admin/security?ok=dismissed");
+});
+
+app.get("/admin/traffic", requireAdmin, (req, res) => {
+	const snapshot = trafficSnapshot();
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		trafficPage({
+			user: req.user,
+			snapshot,
+			sessions: sessionCount(),
+			security: securitySummary(),
+		}),
+	);
+});
+
+app.get("/api/admin/traffic", requireAdmin, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.json({
+		...trafficSnapshot(),
+		sessions: sessionCount(),
+		security: securitySummary(),
+	});
 });
 
 app.get("/admin/requests", requireStaff, (req, res) => {
