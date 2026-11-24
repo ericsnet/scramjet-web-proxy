@@ -64,12 +64,17 @@
 		article.dataset.chatId = String(message.id);
 		article.dataset.chatSeq = String(message.seq);
 
+		const bubble = document.createElement("div");
+		bubble.className = "chat-bubble";
+
 		const meta = document.createElement("div");
 		meta.className = "chat-meta";
-		const author = document.createElement("span");
-		author.className = "chat-author";
-		author.textContent = String(message.username);
-		meta.appendChild(author);
+		if (!own) {
+			const author = document.createElement("span");
+			author.className = "chat-author";
+			author.textContent = String(message.username);
+			meta.appendChild(author);
+		}
 
 		if (["admin", "moderator", "creator"].includes(message.role)) {
 			const badge = document.createElement("span");
@@ -96,7 +101,8 @@
 		text.className = "chat-text";
 		text.textContent = String(message.text);
 
-		article.append(meta, text);
+		bubble.append(meta, text);
+		article.appendChild(bubble);
 		return article;
 	}
 	function appendMessages(messages) {

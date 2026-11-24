@@ -241,17 +241,24 @@ pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;p
 .chat-online::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(74,222,128,.12)}
 .chat-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;
   background:linear-gradient(180deg,rgba(21,30,41,.65),rgba(13,20,28,.65));overflow:hidden}
-.chat-messages{height:min(58vh,560px);min-height:220px;overflow-y:auto;padding:6px 16px;scroll-behavior:smooth}
-.chat-message{padding:12px 2px;border-top:1px solid var(--border)}
-.chat-message:first-child{border-top:0}
-.chat-message.own{background:linear-gradient(90deg,rgba(59,130,246,.07),transparent 65%)}
-.chat-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
-.chat-author{color:var(--text);font-size:13px;font-weight:600}
-.chat-message.own .chat-author{color:#93c5fd}
-.chat-meta time{font-variant-numeric:tabular-nums}
-.chat-delete{margin-left:auto;font-size:11.5px;color:#fca5a5!important}
-.chat-text{margin:7px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14.5px}
-.chat-empty{color:var(--muted);text-align:center;padding:52px 18px;font-size:14px}
+.chat-messages{height:min(58vh,560px);min-height:220px;overflow-y:auto;padding:12px 14px;scroll-behavior:smooth;
+  display:flex;flex-direction:column;gap:8px}
+.chat-message{display:flex;justify-content:flex-start;padding:0;border:0;background:none!important}
+.chat-message.own{justify-content:flex-end}
+.chat-bubble{max-width:min(80%,560px);min-width:110px;padding:8px 11px 9px;border-radius:14px 14px 14px 4px;
+  background:linear-gradient(180deg,#182433,#121b27);border:1px solid var(--border);
+  box-shadow:0 4px 14px rgba(0,0,0,.16)}
+.chat-message.own .chat-bubble{border-radius:14px 14px 4px 14px;border-color:#2b5bd7;
+  background:linear-gradient(180deg,#1d4ed8,#1e40af);box-shadow:0 6px 18px rgba(29,78,216,.24)}
+.chat-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.chat-author{color:var(--text);font-size:12.5px;font-weight:600}
+.chat-meta time{font-variant-numeric:tabular-nums;font-size:10.5px}
+.chat-message.own .chat-meta{color:rgba(255,255,255,.72)}
+.chat-delete{margin-left:auto;font-size:10.5px;color:#fca5a5!important}
+.chat-message.own .chat-delete{color:#fecaca!important}
+.chat-text{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:14.5px;color:var(--text)}
+.chat-message.own .chat-text{color:#fff}
+.chat-empty{color:var(--muted);text-align:center;padding:52px 18px;font-size:14px;margin:auto}
 .chat-form{display:flex;gap:10px;align-items:flex-end;margin-top:14px}
 .chat-form textarea{flex:1;min-height:54px;max-height:150px;resize:vertical;margin:0}
 .chat-form button.primary{width:auto;margin:0;padding:12px 20px;flex:0 0 auto}
@@ -665,13 +672,15 @@ export function chatPage({
 							? '<span class="badge">moderador</span>'
 							: "";
 			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
-  <div class="chat-meta">
-    <span class="chat-author">${esc(m.username)}</span>
-    ${roleBadge}
-    <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
-    ${canDelete ? `<button class="link chat-delete" type="button" data-chat-delete="${esc(m.id)}">Eliminar</button>` : ""}
+  <div class="chat-bubble">
+    <div class="chat-meta">
+      ${own ? "" : `<span class="chat-author">${esc(m.username)}</span>`}
+      ${roleBadge}
+      <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
+      ${canDelete ? `<button class="link chat-delete" type="button" data-chat-delete="${esc(m.id)}">Eliminar</button>` : ""}
+    </div>
+    <p class="chat-text">${esc(m.text)}</p>
   </div>
-  <p class="chat-text">${esc(m.text)}</p>
 </article>`;
 		})
 		.join("");
