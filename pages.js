@@ -189,6 +189,26 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
   background:rgba(251,191,36,.07);color:#fcd34d;font-size:13px}
 .user-stats{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;margin:2px 0 12px}
 .user-stats b{color:var(--text);font-weight:600}
+.admin-user{padding:0;overflow:hidden}
+.admin-user > .user-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:12px 14px;cursor:pointer;list-style:none;user-select:none}
+.admin-user > .user-summary::-webkit-details-marker{display:none}
+.admin-user > .user-summary:hover{background:rgba(59,130,246,.055)}
+.admin-user[open] > .user-summary{border-bottom:1px solid var(--border);background:rgba(59,130,246,.04)}
+.user-summary-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.user-name{font-weight:650;letter-spacing:-.01em}
+.user-summary-meta{margin-left:auto;display:flex;align-items:center;gap:13px;flex-wrap:wrap;
+  color:var(--muted);font-size:12px}
+.user-summary-meta b{color:var(--text);font-weight:600}
+.user-chevron{color:var(--muted);font-size:12px;line-height:1;transition:transform .15s}
+.admin-user[open] .user-chevron{transform:rotate(180deg)}
+.user-body{padding:0 14px 14px}
+.user-body .user-stats{margin-top:12px}
+.user-extra{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+@media(max-width:640px){
+  .user-summary-meta{order:3;margin-left:0;width:100%;gap:10px}
+  .user-chevron{order:2;margin-left:auto}
+}
 details.more{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
 details.more summary{cursor:pointer;color:var(--accent-2,#60a5fa);font-size:13px}
 details.more[open] summary{margin-bottom:10px}
@@ -869,8 +889,7 @@ export function adminPage({
         <button class="small" type="submit">${u.mustChangePassword ? "Quitar cambio obligatorio" : "Exigir cambio de contraseña"}</button>
       </form>`;
 			const details = canManage
-				? `<details class="more">
-    <summary>Más acciones</summary>
+				? `<div class="user-extra">
     <div class="actions">
       <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/password">
         <input name="password" type="password" placeholder="Nueva contraseña" minlength="8" required aria-label="Nueva contraseña de ${esc(u.username)}">
@@ -911,21 +930,28 @@ export function adminPage({
       <textarea id="notes-${esc(u.username)}" name="notes" maxlength="500" placeholder="Solo visibles para administradores">${esc(u.notes || "")}</textarea>
       <button class="small" type="submit" style="margin-top:8px">Guardar notas</button>
     </form>
-  </details>`
+  </div>`
 				: "";
-			return `<div class="user">
-  <div class="user-head">
-    <strong>${esc(u.username)}</strong>
-    <span class="badge${u.role === "admin" ? " admin" : ""}">${esc(roleLabel(u.role))}</span>
-    ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
-    ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
-    ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
-    ${self ? '<span class="badge">tú</span>' : ""}
-  </div>
+			return `<details class="user admin-user">
+  <summary class="user-summary">
+    <span class="user-summary-main">
+      <strong class="user-name">${esc(u.username)}</strong>
+      <span class="badge${u.role === "admin" ? " admin" : ""}">${esc(roleLabel(u.role))}</span>
+      ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
+      ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
+      ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
+      ${self ? '<span class="badge">tú</span>' : ""}
+    </span>
+    <span class="user-summary-meta">
+      <span><b>${visits}</b> visitas</span>
+      <span><b>${u.sessionCount || 0}</b> sesiones</span>
+      <span><b>${u.loginCount || 0}</b> logins</span>
+      <span>${u.lastSeenAt ? `visto ${esc(fmtDate(u.lastSeenAt))}` : "sin actividad"}</span>
+    </span>
+    <span class="user-chevron" aria-hidden="true">▾</span>
+  </summary>
+  <div class="user-body">
   <div class="user-stats">
-    <span><b>${visits}</b> visitas</span>
-    <span><b>${u.sessionCount || 0}</b> sesiones</span>
-    <span><b>${u.loginCount || 0}</b> logins</span>
     <span>creado ${esc((u.createdAt || "").slice(0, 10))}</span>
     <span>último login ${esc(u.lastLoginAt ? fmtDate(u.lastLoginAt) : "nunca")}</span>
     <span>última actividad ${esc(u.lastSeenAt ? fmtDate(u.lastSeenAt) : "—")}</span>
@@ -943,7 +969,8 @@ export function adminPage({
     ${blockForm}
   </div>
   ${details}
-</div>`;
+  </div>
+</details>`;
 		})
 		.join("\n");
 
@@ -1016,6 +1043,7 @@ ${
 
 <div class="card">
   <h2>Usuarios (${users.length})</h2>
+  <p class="muted">Vista compacta. Pulsa un usuario para desplegar toda su información y sus acciones.</p>
   ${cards}
 </div>
 <script>

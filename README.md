@@ -17,6 +17,7 @@ administración.
 - **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
 - Roles `admin`, `moderador` y `usuario`.
+- **Vista compacta de usuarios** en Administración: cada fila muestra el resumen y se despliega al pulsarla con toda la información y acciones.
 - Los administradores pueden:
   - crear usuarios y resetear contraseñas,
   - bloquear cuentas (permanente o temporal) **con mensaje personalizado**,
