@@ -507,7 +507,12 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .error-screen p{max-width:520px;margin:0 auto;color:var(--muted);font-size:14.5px;line-height:1.6}
 .error-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:24px}
 .error-actions .small{margin:0}
-.topbar{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-left:20px;padding-right:20px}
+.error-preview{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;margin-top:30px;padding-top:18px;border-top:1px solid var(--border)}
+.error-preview span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:3px}
+.error-preview a{font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted);text-decoration:none;line-height:1}
+.error-preview a:hover{color:var(--text);border-color:#34506f;text-decoration:none}
+.error-preview a.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.topbar{flex-wrap:nowrap!important;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-left:20px;padding-right:20px}
 .topbar::-webkit-scrollbar{display:none}
 `;
 
@@ -662,12 +667,24 @@ const HTTP_ERRORS = {
 	504: ["Pasarela sin respuesta", "El servicio tardó demasiado en responder.", "📡"],
 };
 
-export function errorPage({ status = 500, title = "", message = "", user = null } = {}) {
+export function errorPage({
+	status = 500,
+	title = "",
+	message = "",
+	user = null,
+	previewCodes = null,
+} = {}) {
 	const code = Number(status) || 500;
 	const info = HTTP_ERRORS[code] || ["Error del servidor", "No se pudo completar la operación.", "⚠️"];
 	const heading = title || info[0];
 	const detail = message || info[1];
 	const icon = info[2];
+	const preview = Array.isArray(previewCodes) && previewCodes.length
+		? `<div class="error-preview">
+  <span>Vista previa</span>
+  ${previewCodes.map((item) => `<a class="${item === code ? "active" : ""}" href="/admin/error-preview?code=${item}">${item}</a>`).join("")}
+</div>`
+		: "";
 	const body = `<div class="error-screen">
   <div class="error-orbit" aria-hidden="true"><span>${esc(icon)}</span></div>
   <div class="error-code">${esc(code)}</div>
@@ -679,6 +696,7 @@ export function errorPage({ status = 500, title = "", message = "", user = null 
     <button class="small" type="button" onclick="history.back()">Volver atrás</button>
   </div>
   ${code >= 500 ? '<p class="hint">Si el problema continúa, contacta con el administrador.</p>' : ""}
+  ${preview}
 </div>`;
 	return shell(`${code} · ${heading}`, body, { topbar: user ? topbar(user) : "", chatFab: false });
 }

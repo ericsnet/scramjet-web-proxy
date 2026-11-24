@@ -1800,6 +1800,26 @@ app.get("/admin", requireStaff, (req, res) => {
 	);
 });
 
+const PREVIEW_ERROR_CODES = [
+	400, 401, 403, 404, 405, 408, 413, 418, 421, 429, 451, 500, 501, 502, 503, 504,
+];
+
+app.get("/admin/error-preview", requireAdmin, (req, res) => {
+	const requested = Number(req.query.code);
+	const code = PREVIEW_ERROR_CODES.includes(requested) ? requested : 404;
+	res
+		.set("Cache-Control", "no-store")
+		.status(code)
+		.type("html")
+		.send(
+			errorPage({
+				status: code,
+				user: req.user,
+				previewCodes: PREVIEW_ERROR_CODES,
+			}),
+		);
+});
+
 app.get("/admin/security", requireAdmin, (req, res) => {
 	const includeDismissed = req.query.all === "1";
 	const notices = {
