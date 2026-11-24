@@ -1,4 +1,5 @@
 import { countOpenAlerts } from "./security.js";
+import { canAssignRole, canManageRole } from "./roles.js";
 
 export function esc(value) {
 	return String(value ?? "")
@@ -87,6 +88,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
   border-radius:999px;padding:3px 9px;border:1px solid var(--border);color:var(--muted)}
 .badge.admin{color:#bfdbfe;border-color:#1e40af;background:#101c33}
 .badge.creator{color:#fde68a;border-color:#a16207;background:#271c06}
+.badge.role-user{color:#bfdbfe;border-color:#1d4ed8;background:#0d1b2e}
+.badge.role-moderator{color:#bbf7d0;border-color:#166534;background:#0d2115}
+.badge.role-admin{color:#ddd6fe;border-color:#6d28d9;background:#1d1233}
+.badge.role-creator{color:#fde68a;border-color:#a16207;background:#2a1d05}
 .badge.bot{color:#fbcfe8;border-color:#9d174d;background:#2a0d1a}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{color:var(--muted);font-weight:500;text-align:left;font-size:12px;text-transform:uppercase;
@@ -268,6 +273,15 @@ pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;p
 .chat-form textarea{flex:1;min-height:54px;max-height:150px;resize:vertical;margin:0}
 .chat-form button.primary{width:auto;margin:0;padding:12px 20px;flex:0 0 auto}
 .chat-counter{font-size:11.5px;color:var(--muted);text-align:right;margin-top:5px}
+.role-scale{margin:10px 0 0;padding-left:22px;color:var(--muted);font-size:13px;line-height:1.5}
+.role-scale li{margin-bottom:9px}
+.role-scale strong{display:block;color:var(--text);font-size:14px}
+.role-scale li.role-user strong{color:#93c5fd}
+.role-scale li.role-moderator strong{color:#86efac}
+.role-scale li.role-admin strong{color:#c4b5fd}
+.role-scale li.role-creator strong{color:#fde68a}
+.role-scale span{display:block}
+.role-scale b{color:#fde68a}
 .chat-disabled{text-align:center;padding:34px 10px}
 .chat-fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:80;
   width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -675,14 +689,9 @@ export function chatPage({
 			const own = String(m.username).toLowerCase() === current.toLowerCase();
 			const canDelete =
 				enabled && (canModerate || (allowDelete && own));
-			const roleBadge =
-				role === "creator"
-					? '<span class="badge creator">creador</span>'
-					: role === "admin"
-						? '<span class="badge admin">admin</span>'
-						: role === "moderator"
-							? '<span class="badge">moderador</span>'
-							: "";
+			const roleBadge = role === "user"
+				? ""
+				: `<span class="badge role-${role}">${role === "creator" ? "creador" : role === "admin" ? "admin" : "moderador"}</span>`;
 			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
   <div class="chat-bubble">
     <div class="chat-meta">
@@ -857,6 +866,9 @@ export function adminPage({
 	notice = "",
 	error = "",
 } = {}) {
+	const assignableRoles = ["user", "moderator"].concat(
+		user.role === "creator" ? ["admin"] : [],
+	);
 	const dayLabels = [
 		[0, "D"],
 		[1, "L"],
@@ -883,15 +895,16 @@ export function adminPage({
 			const self = u.username.toLowerCase() === user.username.toLowerCase();
 			const visits = counts[u.username] || 0;
 			const tempBlocked = !!u.blockedUntil;
-			if (u.role === "creator") {
+			const manageable = u.role !== "creator" && canManageRole(user.role, u.role);
+			if (u.role === "creator" || !manageable) {
 				return `<div class="user admin-user protected-user">
   <div class="user-summary">
     <span class="user-summary-main">
       <strong class="user-name">${esc(u.username)}</strong>
-      <span class="badge creator">creador</span>
+      <span class="badge role-creator">creador</span>
       ${self ? '<span class="badge">tú</span>' : ""}
     </span>
-    <span class="user-summary-meta">Cuenta protegida · solo el creador puede usar su cuenta</span>
+    <span class="user-summary-meta">${u.role === "creator" ? "Cuenta protegida · solo el creador puede usar su cuenta" : u.role === "admin" ? "Solo el creador puede gestionar administradores" : "Sin permisos para gestionar esta cuenta"}</span>
   </div>
 </div>`;
 			}
@@ -906,9 +919,7 @@ export function adminPage({
 				.join("");
 			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role">
         <select name="role" aria-label="Rol de ${esc(u.username)}">
-          <option value="user"${u.role === "user" ? " selected" : ""}>usuario</option>
-          <option value="moderator"${u.role === "moderator" ? " selected" : ""}>moderador</option>
-          <option value="admin"${u.role === "admin" ? " selected" : ""}>admin</option>
+          ${assignableRoles.map((role) => `<option value="${role}"${u.role === role ? " selected" : ""}>${role === "user" ? "usuario" : role === "moderator" ? "moderador" : "admin"}</option>`).join("")}
         </select>
         <button class="small" type="submit">Guardar rol</button>
       </form>`;
@@ -993,7 +1004,7 @@ export function adminPage({
   <summary class="user-summary">
     <span class="user-summary-main">
       <strong class="user-name">${esc(u.username)}</strong>
-      <span class="badge${u.role === "admin" ? " admin" : u.role === "creator" ? " creator" : ""}">${esc(roleLabel(u.role))}</span>
+      <span class="badge role-${esc(u.role)}">${esc(roleLabel(u.role))}</span>
       ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
       ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
       ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
@@ -1044,9 +1055,18 @@ ${
 </div>`
 		: ""
 }
-${
-	canManage
-		? `<div class="card" style="border-color:${quarantine ? "#7f1d1d" : "var(--border)"}">
+<div class="card" style="margin-bottom:22px">
+  <h2>Escala de privilegios</h2>
+  <ol class="role-scale">
+    <li class="role-user"><strong>Usuario</strong><span>Navegación, chat, favoritos, historial propio y cuenta.</span></li>
+    <li class="role-moderator"><strong>Moderador</strong><span>Consulta usuarios, actividad, sesiones, auditoría y solicitudes; puede bloquear o cerrar sesión solo a usuarios.</span></li>
+    <li class="role-admin"><strong>Administrador</strong><span>Gestiona usuarios y moderadores, ajustes, seguridad y copias; no puede gestionar a otros administradores ni al creador.</span></li>
+    <li class="role-creator"><strong>Creador</strong><span>Acceso total y cuenta protegida. <b>Único</b> que puede crear, ascender, degradar, resetear o eliminar administradores.</span></li>
+  </ol>
+  <p class="hint">Tu rol actual: <strong>${esc(roleLabel(user.role))}</strong>.</p>
+</div>
+${canManage
+	? `<div class="card" style="border-color:${quarantine ? "#7f1d1d" : "var(--border)"}">
   <h2>Modo cuarentena</h2>
   <p class="muted">
     ${quarantine ? "ACTIVO: se rechazan nuevas peticiones de webs y se han cerrado las conexiones de usuarios." : "Desactivado. Al activarlo se rechazan nuevas webs y se cierran las conexiones abiertas de usuarios al instante."}
@@ -1096,9 +1116,7 @@ ${
     </div>
     <label for="new-role">Rol</label>
     <select id="new-role" name="role">
-      <option value="user">usuario normal</option>
-      <option value="moderator">moderador</option>
-      <option value="admin">administrador</option>
+      ${assignableRoles.map((role) => `<option value="${role}">${role === "user" ? "usuario normal" : role === "moderator" ? "moderador" : "administrador"}</option>`).join("")}
     </select>
     <button class="primary" type="submit">Crear usuario</button>
   </form>

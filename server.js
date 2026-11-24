@@ -110,6 +110,7 @@ import {
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { isPrivateDestination } from "./net-guard.js";
+import { isAdminRole, isStaffRole, canManageRole, canAssignRole } from "./roles.js";
 import {
 	securityMiddleware,
 	securitySummary,
@@ -149,14 +150,6 @@ import {
 } from "./chat.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-function isAdminRole(role) {
-	return role === "admin" || role === "creator";
-}
-
-function isStaffRole(role) {
-	return isAdminRole(role) || role === "moderator";
-}
 
 function creatorNameSet() {
 	const set = new Set();
@@ -1184,8 +1177,12 @@ app.use(requireAuth);
 
 app.param("username", (req, res, next, value) => {
 	const target = getUser(value);
-	if (target?.role === "creator") {
+	if (!target) return next();
+	if (target.role === "creator") {
 		return res.redirect(303, "/admin?error=creator-protected");
+	}
+	if (!canManageRole(req.user?.role, target.role)) {
+		return res.redirect(303, "/admin?error=forbidden");
 	}
 	next();
 });
@@ -2234,10 +2231,14 @@ app.post("/api/admin/backup/restore", requireAdmin, sameOrigin, (req, res) => {
 });
 
 app.post("/api/admin/users", requireAdmin, sameOrigin, (req, res) => {
+	const role = String(req.body.role || "");
+	if (!canAssignRole(req.user.role, role)) {
+		return res.redirect(303, "/admin?error=forbidden");
+	}
 	const result = createUser(
 		req.body.username,
 		String(req.body.password || ""),
-		req.body.role,
+		role,
 	);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
 	audit(req, "user.create", result.user.username, `rol: ${result.user.role}`);
@@ -2263,7 +2264,10 @@ app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, 
 
 app.post("/api/admin/users/:username/role", requireAdmin, sameOrigin, (req, res) => {
 	const target = req.params.username;
-	const role = req.body.role;
+	const role = String(req.body.role || "");
+	if (!canAssignRole(req.user.role, role)) {
+		return res.redirect(303, "/admin?error=forbidden");
+	}
 	if (
 		target.toLowerCase() === req.user.username.toLowerCase() &&
 		!isAdminRole(role)

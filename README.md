@@ -19,7 +19,7 @@ administración.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
-- Roles `usuario`, `moderador`, `administrador` y `creador`. El **creador** es la cuenta propietaria: nadie más puede modificarla, bloquearla, borrarla ni ver su historial, sesiones o auditoría.
+- Escala de roles: **usuario → moderador → administrador → creador**. El creador es la cuenta propietaria: nadie más puede modificarla, bloquearla, borrarla ni ver su historial, sesiones o auditoría. Solo el creador puede crear, ascender, degradar, resetear o eliminar administradores; los administradores solo gestionan usuarios y moderadores.
 - **Vista compacta de usuarios** en Administración: cada fila muestra el resumen y se despliega al pulsarla con toda la información y acciones.
 - Los administradores pueden:
   - crear usuarios y resetear contraseñas,
@@ -307,7 +307,8 @@ Archivos principales:
 | `metrics.js` | Contadores Prometheus |
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `chat.js` | Almacén, límites y retención del chat interno |
-| `security.js` | Detección pasiva, alertas, bans y account-swapping |
+| `security.js` | Detección pasiva, alertas, bloqueos y account-swapping |
+| `roles.js` | Jerarquía y permisos de usuario/moderador/administrador/creador |
 | `public/chat.js` | Actualización y envío de mensajes en el navegador |
 | `public/chat-notify.js` | Avisos, pop-ups y contador de no leídos |
 | `public/page-i18n.js` | Traducciones de interfaz |

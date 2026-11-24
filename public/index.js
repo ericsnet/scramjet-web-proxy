@@ -123,7 +123,7 @@ fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" })
 						: "usuario";
 			who.textContent = `${me.username} · ${roleLabel}`;
 		}
-		if (adminLink) adminLink.hidden = !["admin", "creator"].includes(me.role);
+		if (adminLink) adminLink.hidden = !["admin", "creator", "moderator"].includes(me.role);
 		if (bar) bar.hidden = false;
 	})
 	.catch(() => {});

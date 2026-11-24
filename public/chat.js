@@ -78,7 +78,7 @@
 
 		if (["admin", "moderator", "creator"].includes(message.role)) {
 			const badge = document.createElement("span");
-			badge.className = `badge${message.role === "admin" ? " admin" : message.role === "creator" ? " creator" : ""}`;
+			badge.className = `badge role-${message.role}`;
 			badge.textContent = message.role === "creator" ? "creador" : message.role === "admin" ? "admin" : "moderador";
 			meta.appendChild(badge);
 		}
