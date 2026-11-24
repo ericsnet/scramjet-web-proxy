@@ -901,7 +901,7 @@ export function adminPage({
   <div class="user-summary">
     <span class="user-summary-main">
       <strong class="user-name">${esc(u.username)}</strong>
-      <span class="badge role-creator">creador</span>
+      <span class="badge role-${esc(u.role)}">${esc(roleLabel(u.role))}</span>
       ${self ? '<span class="badge">tú</span>' : ""}
     </span>
     <span class="user-summary-meta">${u.role === "creator" ? "Cuenta protegida · solo el creador puede usar su cuenta" : u.role === "admin" ? "Solo el creador puede gestionar administradores" : "Sin permisos para gestionar esta cuenta"}</span>
