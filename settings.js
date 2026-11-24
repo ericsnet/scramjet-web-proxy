@@ -12,6 +12,7 @@ const SEARCH_ENGINES = new Set(["duckduckgo", "google", "bing"]);
 export const DEFAULTS = Object.freeze({
 	sessionHours: 720,
 	maxSessionsPerUser: 5,
+	sessionIdleHours: 12,
 	maxLoginAttempts: 8,
 	lockoutMinutes: 10,
 	activityEnabled: true,
@@ -59,6 +60,7 @@ export const DEFAULTS = Object.freeze({
 const LIMITS = {
 	sessionHours: [1, 8760],
 	maxSessionsPerUser: [1, 50],
+	sessionIdleHours: [1, 720],
 	maxLoginAttempts: [3, 20],
 	lockoutMinutes: [1, 1440],
 	activityPerUser: [50, 2000],

@@ -85,6 +85,7 @@ import {
 	auditActions,
 	auditCount,
 	exportAudit,
+	clearQuarantineAttempts,
 	flushAudit,
 } from "./audit.js";
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
@@ -105,6 +106,7 @@ import {
 	backupCount,
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
+import { isPrivateDestination } from "./net-guard.js";
 import QRCode from "qrcode";
 import {
 	refreshCategories,
@@ -187,6 +189,60 @@ function audit(req, action, target = "", detail = "") {
 const quarantineAttempts = new Map(); // clave -> timestamp (anti-flood)
 let quarantineWindow = 0;
 let quarantineCount = 0;
+const QUARANTINE_VIEW_FILE = path.join(__dirname, "data/quarantine-view.json");
+const QUARANTINE_VIEW_MS = 10 * 60 * 1000;
+
+function readQuarantineView() {
+	try {
+		return JSON.parse(fs.readFileSync(QUARANTINE_VIEW_FILE, "utf8"));
+	} catch {
+		return null;
+	}
+}
+
+function writeQuarantineView(value) {
+	try {
+		if (!value) {
+			fs.rmSync(QUARANTINE_VIEW_FILE, { force: true });
+			return;
+		}
+		fs.writeFileSync(QUARANTINE_VIEW_FILE, JSON.stringify(value), { mode: 0o600 });
+	} catch {}
+}
+
+function hasQuarantineAttempts() {
+	return listAudit({ action: "quarantine.attempt", limit: 1 }).length > 0;
+}
+
+function purgeQuarantineIfDue() {
+	const marker = readQuarantineView();
+	if (!marker) return;
+	if (Date.now() - Number(marker.firstViewedAt || 0) < QUARANTINE_VIEW_MS) return;
+	clearQuarantineAttempts();
+	writeQuarantineView(null);
+}
+
+function touchQuarantineView() {
+	purgeQuarantineIfDue();
+	if (!hasQuarantineAttempts()) {
+		writeQuarantineView(null);
+		return;
+	}
+	let marker = readQuarantineView();
+	if (!marker) {
+		marker = { firstViewedAt: Date.now() };
+		writeQuarantineView(marker);
+	}
+	const remaining = QUARANTINE_VIEW_MS - (Date.now() - marker.firstViewedAt);
+	if (remaining > 0 && remaining < 2_147_483_647) {
+		const timer = setTimeout(() => {
+			purgeQuarantineIfDue();
+		}, remaining + 250);
+		timer.unref?.();
+	}
+}
+
+setInterval(purgeQuarantineIfDue, 30_000).unref();
 
 function requestTarget(req) {
 	try {
@@ -222,6 +278,13 @@ function recordQuarantineAttempt(req, session, target, detail = "") {
 		ip: clientIp(req),
 		userAgent: clientUa(req),
 	});
+}
+
+function normalizeUsername(value) {
+	return String(value || "")
+		.normalize("NFKC")
+		.trim()
+		.replace(/\s+/g, " ");
 }
 
 function safeNext(next) {
@@ -330,13 +393,26 @@ function sameOrigin(req, res, next) {
 		const referer = req.headers.referer;
 		if (referer) {
 			try {
-				if (new URL(referer).host === req.headers.host) return next();
+				const parsed = new URL(referer);
+				const local =
+					parsed.protocol === "http:" &&
+					["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+				if ((parsed.protocol === "https:" || local) && parsed.host === req.headers.host) {
+					return next();
+				}
 			} catch {}
 		}
 		return res.status(403).type("text/plain").send("Origen requerido.");
 	}
 	try {
-		if (new URL(origin).host !== req.headers.host) {
+		const parsed = new URL(origin);
+		const local =
+			parsed.protocol === "http:" &&
+			["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+		if (parsed.protocol !== "https:" && !local) {
+			return res.status(403).type("text/plain").send("Origen no válido.");
+		}
+		if (parsed.host !== req.headers.host) {
 			return res.status(403).type("text/plain").send("Origen no válido.");
 		}
 	} catch {
@@ -601,6 +677,11 @@ app.get("/favicon.svg", (req, res) => {
 
 app.get("/favicon.ico", (req, res) => res.redirect(302, "/favicon.svg"));
 
+app.get("/page-i18n.js", (req, res) => {
+	res.set("Cache-Control", "public, max-age=3600");
+	res.type("application/javascript").sendFile(path.join(__dirname, "public/page-i18n.js"));
+});
+
 app.get("/api/config", (req, res) => {
 	const settings = getSettings();
 	res.set("Cache-Control", "no-store");
@@ -730,13 +811,13 @@ app.get("/denied", (req, res) => {
 });
 
 app.post("/api/login", sameOrigin, (req, res) => {
-	const username = String(req.body.username || "").trim();
+	const username = normalizeUsername(req.body.username);
 	const password = String(req.body.password || "");
 	const next = safeNext(req.body.next);
 	const settings = getSettings();
 	const ip = clientIp(req);
 
-	if (isRateLimited(username) || isIpRateLimited(ip)) {
+	if (isIpRateLimited(ip)) {
 		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
@@ -858,14 +939,24 @@ app.get("/api/me", (req, res) => {
 	});
 });
 
-app.get("/api/navigate-check", (req, res) => {
+app.get("/api/navigate-check", async (req, res) => {
 	const url = String(req.query.url || "");
 	let parsed;
 	try {
 		parsed = new URL(url);
-		if (!/^https?:$/.test(parsed.protocol)) throw new Error("bad");
+		if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password) {
+			throw new Error("bad");
+		}
 	} catch {
 		return res.status(400).json({ error: "invalid-url" });
+	}
+	if (await isPrivateDestination(parsed.hostname)) {
+		return res.status(200).json({
+			blocked: true,
+			reason: "private",
+			message: "Los destinos locales o privados no están permitidos.",
+			host: parsed.hostname,
+		});
 	}
 	const result = checkUrlPolicy(getUser(req.user.username), parsed.href);
 	if (result.reason === "quarantine") {
@@ -1049,6 +1140,13 @@ app.post("/api/account/password", sameOrigin, (req, res) => {
 	res.redirect(303, "/account?ok=password");
 });
 
+app.post("/api/account/sessions/revoke-others", sameOrigin, (req, res) => {
+	const removed = destroyOtherSessions(req.user.username, req.user.token);
+	for (const id of removed) closeSessionConnections(id);
+	audit(req, "session.revoke_others", "", `${removed.length} sesiones`);
+	res.redirect(303, "/account?ok=session");
+});
+
 app.post("/api/account/sessions/:id/revoke", sameOrigin, (req, res) => {
 	const session = revokeSessionById(req.params.id);
 	if (!session || session.username.toLowerCase() !== req.user.username.toLowerCase()) {
@@ -1110,6 +1208,7 @@ app.post("/api/requests", sameOrigin, (req, res) => {
 app.get("/admin", requireStaff, (req, res) => {
 	const error = ADMIN_ERRORS[req.query.error] || "";
 	const notice = ADMIN_OK[req.query.ok] || "";
+	touchQuarantineView();
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		adminPage({
@@ -1348,6 +1447,7 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 	const payload = {
 		sessionHours: req.body.sessionHours,
 		maxSessionsPerUser: req.body.maxSessionsPerUser,
+		sessionIdleHours: req.body.sessionIdleHours,
 		maxLoginAttempts: req.body.maxLoginAttempts,
 		lockoutMinutes: req.body.lockoutMinutes,
 		activityEnabled: req.body.activityEnabled === "on",

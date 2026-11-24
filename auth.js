@@ -739,6 +739,12 @@ export function getSession(req) {
 		scheduleSessionsSave();
 		return null;
 	}
+	const idleMs = Math.max(1, getSettings().sessionIdleHours || 12) * 60 * 60 * 1000;
+	if (now - new Date(session.lastSeenAt).getTime() > idleMs) {
+		sessions.delete(key);
+		scheduleSessionsSave();
+		return null;
+	}
 	const user = getUser(session.username);
 	if (!user || isEffectivelyBlocked(user)) {
 		sessions.delete(key);

@@ -427,6 +427,9 @@ ${
 <div class="card" style="max-width:620px;margin:18px auto 0">
   <h2>Sesiones activas</h2>
   <p class="muted">Estos son los navegadores con sesión iniciada en tu cuenta.</p>
+  <form method="post" action="/api/account/sessions/revoke-others" onsubmit="return confirm('¿Cerrar todas las demás sesiones?')" style="margin-bottom:12px">
+    <button class="small" type="submit">Cerrar todas las demás</button>
+  </form>
   <ul class="session-list">${sessionItems || '<li class="empty">No hay sesiones activas.</li>'}</ul>
 </div>`;
 	return shell("Mi cuenta · Proxy Web", body, { topbar: topbar(user) });
@@ -831,7 +834,7 @@ ${
 }
 <div class="card">
   <h2>Intentos durante la cuarentena</h2>
-  <p class="muted">Peticiones rechazadas mientras la cuarentena estaba activa. Se muestran las últimas 20 (con límite anti-flood).</p>
+  <p class="muted">Peticiones rechazadas mientras la cuarentena estaba activa. Se muestran las últimas 20 (con límite anti-flood) y se eliminan automáticamente 10 minutos después de la primera vista.</p>
   ${
 		quarantineRows
 			? `<div class="scroll"><table>
@@ -1056,6 +1059,10 @@ ${adminTabs("settings")}
       <div>
         <label for="maxSessionsPerUser">Máximo de sesiones por usuario (admins exentos)</label>
         <input id="maxSessionsPerUser" name="maxSessionsPerUser" type="number" min="1" max="50" value="${settings.maxSessionsPerUser}" required>
+      </div>
+      <div>
+        <label for="sessionIdleHours">Cierre por inactividad (horas)</label>
+        <input id="sessionIdleHours" name="sessionIdleHours" type="number" min="1" max="720" value="${settings.sessionIdleHours || 12}" required>
       </div>
       <div>
         <label for="maxLoginAttempts">Intentos de login antes de bloquear</label>

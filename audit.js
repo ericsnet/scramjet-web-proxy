@@ -95,6 +95,12 @@ export function clearAudit() {
 	saveNow();
 }
 
+export function clearQuarantineAttempts() {
+	events = events.filter((e) => e.action !== "quarantine.attempt");
+	dirty = true;
+	saveNow();
+}
+
 export function exportAudit() {
 	return JSON.parse(JSON.stringify(events));
 }

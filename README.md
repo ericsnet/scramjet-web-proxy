@@ -163,7 +163,8 @@ Todo se gestiona desde `/admin`:
 - **Usuarios**: crear, rol (`admin`/`moderador`/`usuario`), contraseña, bloqueo
   temporal/permanente con mensaje, forzar logout, notas, cambio obligatorio,
   sitios por usuario y horario de acceso.
-- **Sesiones**: IP, navegador, fechas y revocación.
+- **Sesiones**: IP, navegador, fechas, revocación individual, **cierre por
+  inactividad** configurable y botón **“cerrar todas las demás”**.
 - **Actividad**: URLs y búsquedas introducidas, exportación CSV.
 - **Auditoría**: logins, acciones de administración y exportación CSV.
 - **Ajustes**: sesión, actividad, mantenimiento, buscador, portada, enlaces
@@ -187,6 +188,7 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - cierra inmediatamente las conexiones Wisp abiertas (los admins se mantienen);
 - registra los intentos rechazados con usuario, IP, navegador, destino y detalle;
 - muestra los últimos intentos en el panel `/admin` con límite anti-flood;
+- los intentos visibles se eliminan automáticamente **10 minutos después de la primera vista**;
 - solo un administrador puede activarla o desactivarla.
 
 ### Favoritos e historial
@@ -214,6 +216,18 @@ usuario puede vaciar su propio historial.
 Todo se guarda con permisos `600`. **No subas `data/` ni `backups/` a Git**:
 contienen datos personales. El `.gitignore` ya los excluye.
 
+Medidas de seguridad incluidas:
+
+- nombres de usuario normalizados (Unicode NFKC, espacios y mayúsculas) antes de
+  autenticar y aplicar políticas;
+- límite de intentos por IP, sin bloquear la cuenta (evita *lockout* DoS);
+- validación de `Origin`/`Referer` con HTTPS obligatorio (salvo localhost);
+- `/api/navigate-check` bloquea loopback, RFC1918, CGNAT, link-local, ULA y
+  direcciones IPv4 mapeadas en IPv6, resolviendo DNS;
+- Wisp aplica además su propia comprobación de IPs privadas antes de conectar;
+- cabeceras HSTS, CSP, `X-Frame-Options`, `X-Content-Type-Options`,
+  `Referrer-Policy` y `Permissions-Policy` en el proxy inverso.
+
 Copia de seguridad desde `Sistema` o con el botón de descarga. Protege la copia:
 incluye hashes, IPs y navegadores.
 
@@ -237,6 +251,7 @@ Archivos principales:
 | `requests.js` | Peticiones de desbloqueo |
 | `backup.js` | Copias automáticas, listado y restauración |
 | `metrics.js` | Contadores Prometheus |
+| `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `public/page-i18n.js` | Traducciones de interfaz |
 | `.github/workflows/ci.yml` | Comprobación de sintaxis en CI |
 | `pages.js` | Páginas de login, cuenta y administración |
