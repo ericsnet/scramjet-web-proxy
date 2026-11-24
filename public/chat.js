@@ -184,7 +184,17 @@
 		if (message.text) {
 			const text = document.createElement("p");
 			text.className = "chat-text";
-			text.textContent = String(message.text);
+			for (const part of String(message.text).split(/(@[A-Za-z0-9._-]{3,32})/g)) {
+				if (!part) continue;
+				if (/^@[A-Za-z0-9._-]{3,32}$/.test(part)) {
+					const mention = document.createElement("span");
+					mention.className = "chat-mention";
+					mention.textContent = part;
+					text.appendChild(mention);
+				} else {
+					text.appendChild(document.createTextNode(part));
+				}
+			}
 			bubble.appendChild(text);
 		}
 		const attachment = makeAttachment(message.attachment);

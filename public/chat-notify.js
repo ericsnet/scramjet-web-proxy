@@ -88,9 +88,12 @@
 				String(message.username).toLowerCase() !== currentUser.toLowerCase(),
 		);
 		for (const message of incoming.slice(-3)) {
+			const mentioned = Array.isArray(message.mentions) &&
+				message.mentions.some((name) => String(name).toLowerCase() === currentUser.toLowerCase());
 			showToast({
-				title: message.username,
+				title: mentioned ? `${message.username} te mencionó` : message.username,
 				text: String(message.text || "").slice(0, 140),
+				tone: mentioned ? "mention" : "",
 			});
 		}
 		lastSeq = Math.max(lastSeq, Number(data.latestSeq) || 0);

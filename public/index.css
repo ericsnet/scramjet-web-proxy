@@ -766,6 +766,11 @@ footer a:hover {
 	border-left-color: #f59e0b;
 }
 
+.chat-toast.mention {
+	border-left-color: #60a5fa;
+	background: #132033;
+}
+
 @media (max-width: 640px) {
 	.chat-toast-stack {
 		left: 10px;

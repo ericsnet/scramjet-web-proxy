@@ -282,6 +282,8 @@ dialog h2{margin-top:0}
 .chat-message.own .chat-delete{color:#fecaca!important}
 .chat-text{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:14.5px;color:var(--text)}
 .chat-message.own .chat-text{color:#fff}
+.chat-mention{color:#93c5fd;font-weight:600}
+.chat-message.own .chat-mention{color:#dbeafe}
 .chat-empty{color:var(--muted);text-align:center;padding:52px 18px;font-size:14px;margin:auto}
 .chat-attachment{display:block;margin-top:8px;border-radius:9px;overflow:hidden;max-width:360px}
 .chat-attachment img{display:block;max-width:100%;max-height:280px;object-fit:contain}
@@ -340,6 +342,7 @@ dialog h2{margin-top:0}
 .chat-toast-close{grid-column:2;grid-row:1;background:none;border:0;color:var(--muted);font-size:18px;
   line-height:1;cursor:pointer;padding:0 2px}
 .chat-toast.unread{border-left-color:#f59e0b}
+.chat-toast.mention{border-left-color:#60a5fa;background:#132033}
 @media(max-width:640px){.chat-toast-stack{left:10px;bottom:calc(10px + env(safe-area-inset-bottom,0px));width:calc(100vw - 20px)}}
 @media(max-width:640px){.chat-fab{right:14px;width:50px;height:50px}
   .chat-fab svg{width:24px;height:24px}}
@@ -735,6 +738,11 @@ export function chatPage({
 		.map((name) => `<span class="chat-user-chip">${esc(name)}</span>`)
 		.join("");
 	const reactionSet = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+	const formatText = (text) =>
+		esc(text).replace(
+			/@([A-Za-z0-9._-]{3,32})/g,
+			(_match, name) => `<span class="chat-mention">@${esc(name)}</span>`,
+		);
 	const roleBadge = (role) =>
 		role === "user"
 			? ""
@@ -780,7 +788,7 @@ export function chatPage({
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
       ${canDelete ? `<button class="link chat-delete" type="button" data-chat-delete="${esc(m.id)}">Eliminar</button>` : ""}
     </div>
-    ${m.text ? `<p class="chat-text">${esc(m.text)}</p>` : ""}
+    ${m.text ? `<p class="chat-text">${formatText(m.text)}</p>` : ""}
     ${attachment}
     ${poll}
     <div class="chat-reactions">${reactions}${picker}</div>
