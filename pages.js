@@ -1,3 +1,5 @@
+import { countOpenAlerts } from "./security.js";
+
 export function esc(value) {
 	return String(value ?? "")
 		.replaceAll("&", "&amp;")
@@ -85,6 +87,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
   border-radius:999px;padding:3px 9px;border:1px solid var(--border);color:var(--muted)}
 .badge.admin{color:#bfdbfe;border-color:#1e40af;background:#101c33}
 .badge.creator{color:#fde68a;border-color:#a16207;background:#271c06}
+.badge.bot{color:#fbcfe8;border-color:#9d174d;background:#2a0d1a}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{color:var(--muted);font-weight:500;text-align:left;font-size:12px;text-transform:uppercase;
   letter-spacing:.06em;padding:0 10px 10px}
@@ -139,6 +142,8 @@ body::before{display:none}
 .topbar a:hover{color:var(--text);text-decoration:none}
 .topbar .who{color:var(--muted)}
 .topbar .link{color:var(--accent)}
+.topbar .alert-count{display:inline-block;min-width:18px;padding:0 5px;margin-left:3px;border-radius:999px;
+  background:#dc2626;color:#fff;font-size:10px;font-weight:700;line-height:18px;text-align:center;vertical-align:1px}
 .card{
   background:var(--soft);
   border:1px solid var(--border);
@@ -319,6 +324,10 @@ ${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" 
 function topbar(user) {
 	const staff = ["admin", "creator", "moderator"].includes(user?.role);
 	const admin = staff ? '<a href="/admin">Administración</a>' : "";
+	const alertCount = ["admin", "creator"].includes(user?.role) ? countOpenAlerts() : 0;
+	const security = ["admin", "creator"].includes(user?.role)
+		? `<a href="/admin/security">Seguridad${alertCount ? ` <span class="alert-count">${alertCount}</span>` : ""}</a>`
+		: "";
 	return `<header class="topbar">
   <div class="brand"><span class="brand-icon">${LOGO}</span>Proxy <span>Web</span></div>
   <a href="/">Proxy</a>
@@ -326,6 +335,7 @@ function topbar(user) {
   <a href="/bookmarks">Favoritos</a>
   <a href="/history">Historial</a>
   <a href="/account">Mi cuenta</a>
+  ${security}
   ${admin}
   <span class="who">${esc(user?.username || "")} · ${roleLabel(user?.role)}</span>
   <form method="post" action="/logout" class="inline"><button class="link" type="submit">Salir</button></form>
@@ -342,6 +352,7 @@ function roleLabel(role) {
 const ADMIN_TABS = [
 	["users", "/admin", "Usuarios"],
 	["sessions", "/admin/sessions", "Sesiones"],
+	["security", "/admin/security", "Seguridad"],
 	["activity", "/admin/activity", "Actividad"],
 	["audit", "/admin/audit", "Auditoría"],
 	["requests", "/admin/requests", "Solicitudes"],
@@ -353,7 +364,7 @@ const ADMIN_TABS = [
 function adminTabs(active, role = "admin") {
 	const visible = ["admin", "creator"].includes(role)
 		? ADMIN_TABS
-		: ADMIN_TABS.filter(([key]) => !["settings", "system"].includes(key));
+		: ADMIN_TABS.filter(([key]) => !["settings", "system", "security"].includes(key));
 	const links = visible
 		.map(
 			([key, href, label]) =>
@@ -841,6 +852,7 @@ export function adminPage({
 	canManage = false,
 	quarantine = false,
 	quarantineAttempts = [],
+	security = {},
 	notice = "",
 	error = "",
 } = {}) {
@@ -1020,6 +1032,17 @@ export function adminPage({
 
 	const body = `
 ${adminTabs("users", user.role)}
+${
+	user.role === "admin" || user.role === "creator"
+		? `<div class="card" style="margin-bottom:22px">
+  <h2>Escáner de seguridad</h2>
+  <p class="muted" style="margin-bottom:10px">
+    ${security.open ? `${security.open} alerta${security.open === 1 ? "" : "s"} abierta${security.open === 1 ? "" : "s"} · ${security.bots} con comportamiento de bot · ${security.banned} IP${security.banned === 1 ? "" : "s"} baneada${security.banned === 1 ? "" : "s"}.` : "Sin alertas abiertas. El escáner sigue observando patrones sospechosos y comportamiento automatizado."}
+  </p>
+  <a class="small" href="/admin/security">Abrir escáner</a>
+</div>`
+		: ""
+}
 ${
 	canManage
 		? `<div class="card" style="border-color:${quarantine ? "#7f1d1d" : "var(--border)"}">
@@ -1231,6 +1254,104 @@ ${adminTabs("sessions", user.role)}
 	}
 </div>`;
 	return shell("Sesiones · Administración", body, { topbar: topbar(user) });
+}
+
+export function securityPage({
+	user,
+	alerts = [],
+	bans = [],
+	summary = {},
+	currentIp = "",
+	includeDismissed = false,
+	notice = "",
+	error = "",
+} = {}) {
+	const alertRows = alerts
+		.map((a) => {
+			const reasons = (a.reasons || [])
+				.map((reason) => `<span class="badge">${esc(reason)}</span>`)
+				.join(" ");
+			return `<tr>
+  <td><span class="badge ${a.bot ? "bot" : "blocked"}">${a.bot ? "bot" : "alerta"}</span><br><span class="mono">${esc(fmtDate(a.lastSeen))}</span></td>
+  <td><strong class="mono">${esc(a.ip)}</strong>${a.banned ? '<br><span class="badge blocked">baneada</span>' : ""}<br><span class="muted">${esc(a.username || "sin sesión")}</span></td>
+  <td><strong>${esc(a.score)}</strong><br><span class="muted">${esc(a.count)} eventos</span></td>
+  <td>${reasons || "—"}</td>
+  <td class="mono">${esc(a.lastMethod || "")} ${esc(a.lastPath || "")}<br><span class="muted">${esc(a.userAgent || "sin user-agent")}</span></td>
+  <td><div class="actions">
+    ${
+			a.status === "open"
+				? `<form method="post" action="/api/admin/security/dismiss">
+      <input type="hidden" name="id" value="${esc(a.id)}">
+      <button class="small" type="submit">Descartar</button>
+    </form>`
+				: '<span class="muted">descartada</span>'
+		}
+    ${
+			a.banned
+				? `<form method="post" action="/api/admin/security/unban" onsubmit="return confirm('¿Quitar el bloqueo de esta IP?')">
+      <input type="hidden" name="ip" value="${esc(a.ip)}">
+      <button class="small" type="submit">Desbanear</button>
+    </form>`
+				: `<form method="post" action="/api/admin/security/ban" onsubmit="return confirm('¿Banear esta IP? El usuario no podrá acceder hasta que la desbanees.')">
+      <input type="hidden" name="ip" value="${esc(a.ip)}">
+      <input type="hidden" name="alert" value="${esc(a.id)}">
+      <input name="reason" maxlength="200" placeholder="Motivo (opcional)" aria-label="Motivo del baneo">
+      <button class="small danger" type="submit"${a.ip === currentIp ? " disabled" : ""}>Banear IP</button>
+    </form>`
+		}
+  </div></td>
+</tr>`;
+		})
+		.join("");
+	const banRows = bans
+		.map(
+			(b) => `<tr>
+  <td class="mono">${esc(b.ip)}</td>
+  <td>${esc(b.by || "—")}</td>
+  <td>${esc(b.reason || "—")}</td>
+  <td class="mono">${esc(fmtDate(b.at))}</td>
+  <td><form method="post" action="/api/admin/security/unban" onsubmit="return confirm('¿Quitar el bloqueo de esta IP?')">
+    <input type="hidden" name="ip" value="${esc(b.ip)}">
+    <button class="small" type="submit">Desbanear</button>
+  </form></td>
+</tr>`,
+		)
+		.join("");
+	const body = `
+${adminTabs("security", user.role)}
+<div class="stats">
+  <div class="stat"><div class="k">Alertas abiertas</div><div class="v">${esc(summary.open || 0)}</div></div>
+  <div class="stat"><div class="k">Bots detectados</div><div class="v">${esc(summary.bots || 0)}</div></div>
+  <div class="stat"><div class="k">IPs baneadas</div><div class="v">${esc(summary.banned || 0)}</div></div>
+  <div class="stat"><div class="k">Últimas 24 h</div><div class="v">${esc(summary.last24h || 0)}</div></div>
+</div>
+<div class="card">
+  <h1>Escáner de seguridad</h1>
+  <p class="muted">
+    El escáner observa peticiones y comportamiento: rutas de escaneo, intentos de inyección, accesos no autorizados,
+    enumeración de API, ráfagas, intervalos automatizados y user-agents de bot. No bloquea automáticamente:
+    decide tú si baneas una IP.
+  </p>
+  <div class="filter">
+    <a class="small${includeDismissed ? "" : " active"}" href="/admin/security">Abiertas</a>
+    <a class="small${includeDismissed ? " active" : ""}" href="/admin/security?all=1">Todas</a>
+  </div>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  ${
+		alertRows
+			? `<div class="scroll"><table>
+    <thead><tr><th>Detección</th><th>IP / usuario</th><th>Puntuación</th><th>Motivos</th><th>Última petición</th><th>Acciones</th></tr></thead>
+    <tbody>${alertRows}</tbody>
+  </table></div>`
+			: '<p class="empty">No hay alertas de seguridad.</p>'
+	}
+</div>
+<div class="card">
+  <h2>IPs baneadas (${bans.length})</h2>
+  ${banRows ? `<div class="scroll"><table><thead><tr><th>IP</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay IPs baneadas.</p>'}
+</div>`;
+	return shell("Seguridad · Administración", body, { topbar: topbar(user) });
 }
 
 export function settingsPage({ user, settings, notice = "", error = "" } = {}) {

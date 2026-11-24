@@ -54,6 +54,7 @@ import {
 	adminPage,
 	activityPage,
 	sessionsPage,
+	securityPage,
 	settingsPage,
 	auditPage,
 	systemPage,
@@ -107,6 +108,17 @@ import {
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { isPrivateDestination } from "./net-guard.js";
+import {
+	securityMiddleware,
+	securitySummary,
+	listSecurityAlerts,
+	listBans,
+	banIp,
+	unbanIp,
+	dismissAlert,
+	recordSuccessfulLogin,
+	flushSecurity,
+} from "./security.js";
 import QRCode from "qrcode";
 import {
 	refreshCategories,
@@ -173,6 +185,7 @@ app.set("trust proxy", true);
 app.disable("x-powered-by");
 app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(express.json({ limit: "64kb" }));
+app.use(securityMiddleware);
 app.use((req, res, next) => {
 	metric("requests_total");
 	next();
@@ -984,6 +997,30 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		return res.redirect(303, "/denied?reason=schedule");
 	}
 
+	const swap = recordSuccessfulLogin(user.username, ip, {
+		exempt: user.role === "creator",
+	});
+	if (swap.blocked) {
+		setBlockUntil(
+			user.username,
+			swap.until,
+			"Bloqueo temporal automático por posible intercambio de cuentas. Contacta con el administrador o espera a que expire.",
+		);
+		closeUserConnections(user.username);
+		addAudit({
+			actor: user.username,
+			action: "account.swap",
+			target: user.username,
+			detail: `${swap.reasons.join(", ")} · hasta ${swap.until}`,
+			ip,
+			userAgent: clientUa(req),
+		});
+		const token = createBlockFlash(
+			"Bloqueo temporal automático por posible intercambio de cuentas. Contacta con el administrador o espera a que expire.",
+		);
+		return res.redirect(303, `/blocked?t=${token}`);
+	}
+
 	clearFailedLogins(username);
 	metric("logins_success_total");
 	const session = createSession(user.username, {
@@ -1459,10 +1496,66 @@ app.get("/admin", requireStaff, (req, res) => {
 				listAudit({ action: "quarantine.attempt", limit: 20 }),
 				(e) => e.actor,
 			),
+			security: securitySummary(),
 			error,
 			notice,
 		}),
 	);
+});
+
+app.get("/admin/security", requireAdmin, (req, res) => {
+	const includeDismissed = req.query.all === "1";
+	const notices = {
+		banned: "IP baneada.",
+		unbanned: "IP desbaneada.",
+		dismissed: "Alerta descartada.",
+	};
+	const errors = {
+		"invalid-ip": "La IP no es válida.",
+		notfound: "Esa IP o alerta ya no existe.",
+		"self-ban": "No puedes banear tu propia IP actual.",
+	};
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		securityPage({
+			user: req.user,
+			alerts: listSecurityAlerts({ includeDismissed }),
+			bans: listBans(),
+			summary: securitySummary(),
+			currentIp: clientIp(req),
+			includeDismissed,
+			notice: notices[req.query.ok] || "",
+			error: errors[req.query.error] || "",
+		}),
+	);
+});
+
+app.post("/api/admin/security/ban", requireAdmin, sameOrigin, (req, res) => {
+	const ip = String(req.body.ip || "").trim();
+	if (ip === clientIp(req)) return res.redirect(303, "/admin/security?error=self-ban");
+	const result = banIp(ip, {
+		by: req.user.username,
+		reason: String(req.body.reason || "").slice(0, 200),
+		alertId: String(req.body.alert || ""),
+	});
+	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
+	audit(req, "security.ban", ip, String(req.body.reason || "").slice(0, 200));
+	res.redirect(303, "/admin/security?ok=banned");
+});
+
+app.post("/api/admin/security/unban", requireAdmin, sameOrigin, (req, res) => {
+	const ip = String(req.body.ip || "").trim();
+	const result = unbanIp(ip);
+	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
+	audit(req, "security.unban", ip);
+	res.redirect(303, "/admin/security?ok=unbanned");
+});
+
+app.post("/api/admin/security/dismiss", requireAdmin, sameOrigin, (req, res) => {
+	const result = dismissAlert(String(req.body.id || ""));
+	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
+	audit(req, "security.dismiss", String(req.body.id || ""));
+	res.redirect(303, "/admin/security?ok=dismissed");
 });
 
 app.get("/admin/requests", requireStaff, (req, res) => {
@@ -2265,6 +2358,7 @@ function shutdown() {
 	flushAudit();
 	flushSessions();
 	flushChat();
+	flushSecurity();
 	process.exit(0);
 }
 process.on("SIGTERM", shutdown);

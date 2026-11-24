@@ -14,6 +14,7 @@ administración.
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
+- **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento, intercambio de cuentas e IPs baneadas manualmente.
 - **Chat interno entre usuarios**, con texto plano, moderación y ajustes de capacidad, retención y ritmo.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
@@ -197,6 +198,15 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - los intentos visibles se eliminan automáticamente **10 minutos después de la primera vista**;
 - solo un administrador puede activarla o desactivarla.
 
+### Escáner de seguridad
+
+- Observa todas las peticiones y llamadas a la API sin bloquearlas automáticamente.
+- Genera alertas con IP, usuario, motivos, puntuación y última petición.
+- Detecta bots por intervalos, user-agent y patrones de uso; no usa captcha.
+- Detecta **intercambio de cuentas** por varias cuentas en la misma IP o una cuenta desde varias IPs y bloquea temporalmente la cuenta implicada.
+- Desde `/admin/security` puedes banear o desbanear la IP y descartar alertas.
+- El creador y los administradores ven el resumen en Administración.
+
 ### Chat interno
 
 - Pop-ups en cualquier página cuando otro usuario escribe.
@@ -236,6 +246,7 @@ usuario puede vaciar su propio historial.
 - `data/audit.json`: auditoría.
 - `data/bookmarks.json`: favoritos por usuario.
 - `data/chat.json`: mensajes del chat interno.
+- `data/security.json`: alertas, IPs baneadas e historial reciente de logins para detección de intercambio de cuentas.
 - `backups/`: copias automáticas.
 
 Todo se guarda con permisos `600`. **No subas `data/` ni `backups/` a Git**:
@@ -284,6 +295,7 @@ Archivos principales:
 | `metrics.js` | Contadores Prometheus |
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `chat.js` | Almacén, límites y retención del chat interno |
+| `security.js` | Detección pasiva, alertas, bans y account-swapping |
 | `public/chat.js` | Actualización y envío de mensajes en el navegador |
 | `public/chat-notify.js` | Avisos, pop-ups y contador de no leídos |
 | `public/page-i18n.js` | Traducciones de interfaz |

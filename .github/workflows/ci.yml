@@ -19,7 +19,7 @@ jobs:
         run: |
           for f in server.js auth.js pages.js activity.js audit.js settings.js \
                    bookmarks.js backup.js metrics.js categories.js requests.js \
-                   net-guard.js chat.js public/index.js public/page-i18n.js \
+                   net-guard.js chat.js security.js public/index.js public/page-i18n.js \
                    public/chat.js public/chat-notify.js; do
             node --check "$f"
           done
