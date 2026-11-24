@@ -8,14 +8,41 @@ import { getSettings } from "./settings.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const FILE = path.join(DATA_DIR, "chat.json");
+const UPLOAD_DIR = path.join(DATA_DIR, "chat-uploads");
+const GENERAL = "general";
+const MAX_FILE = 5 * 1024 * 1024;
+const MAX_CHANNEL_MEMBERS = 50;
+const REACTIONS = new Set(["👍", "❤️", "😂", "😮", "😢", "🔥"]);
+const MIME_EXT = {
+	"image/png": ".png",
+	"image/jpeg": ".jpg",
+	"image/gif": ".gif",
+	"image/webp": ".webp",
+	"application/pdf": ".pdf",
+	"text/plain": ".txt",
+};
 
 let messages = [];
+let channels = [];
+let reads = {};
+let uploads = {};
 let nextSeq = 1;
 let generation = 1;
-let reads = {}; // usuario en minúsculas -> última secuencia leída
+let revision = 1;
+let lastPost = new Map();
 let saveTimer = null;
 let dirty = false;
-const lastPost = new Map(); // usuario -> { last, times[] }
+
+function generalChannel() {
+	return {
+		id: GENERAL,
+		name: "General",
+		type: "public",
+		members: [],
+		createdBy: "sistema",
+		createdAt: new Date().toISOString(),
+	};
+}
 
 function saveNow() {
 	if (!dirty) return;
@@ -24,7 +51,7 @@ function saveNow() {
 		const tmp = `${FILE}.tmp`;
 		fs.writeFileSync(
 			tmp,
-			JSON.stringify({ messages, nextSeq, generation, reads }, null, 2),
+			JSON.stringify({ messages, channels, reads, uploads, nextSeq, generation, revision }, null, 2),
 			{ mode: 0o600 },
 		);
 		fs.renameSync(tmp, FILE);
@@ -44,57 +71,89 @@ function scheduleSave() {
 	saveTimer.unref?.();
 }
 
+function channelFor(username, channelId) {
+	const wanted = String(channelId || GENERAL);
+	const channel = channels.find((item) => item.id === wanted);
+	if (!channel) return null;
+	if (channel.type === "public") return channel;
+	const lower = String(username || "").toLowerCase();
+	return channel.members.some((member) => member.toLowerCase() === lower) ? channel : null;
+}
+
+function channelMessages(channelId) {
+	return messages.filter((message) => message.channelId === channelId);
+}
+
 function trimMessages() {
 	const settings = getSettings();
 	const cutoff = Date.now() - Math.max(1, settings.chatRetentionDays) * 24 * 60 * 60 * 1000;
 	const before = messages.length;
-	messages = messages.filter((m) => {
-		const at = new Date(m.at).getTime();
-		return Number.isFinite(at) && at >= cutoff;
+	messages = messages.filter((message) => {
+		const at = new Date(message.at).getTime();
+		if (Number.isFinite(at) && at < cutoff) {
+			removeFile(message);
+			return false;
+		}
+		return true;
 	});
 	const max = Math.max(100, settings.chatMaxMessages);
-	if (messages.length > max) messages = messages.slice(-max);
+	if (messages.length > max) {
+		for (const message of messages.slice(0, messages.length - max)) removeFile(message);
+		messages = messages.slice(-max);
+	}
+	for (const [id, upload] of Object.entries(uploads)) {
+		if (Date.now() - new Date(upload.createdAt).getTime() > 60 * 60 * 1000) {
+			try { fs.rmSync(path.join(UPLOAD_DIR, `${id}.bin`), { force: true }); } catch {}
+			delete uploads[id];
+		}
+	}
 	return messages.length !== before;
 }
 
 function load() {
 	try {
 		fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
-		if (!fs.existsSync(FILE)) return;
+		if (!fs.existsSync(FILE)) {
+			channels = [generalChannel()];
+			return;
+		}
 		const data = JSON.parse(fs.readFileSync(FILE, "utf8"));
 		generation = Math.max(1, Number(data.generation) || 1);
-		if (data.reads && typeof data.reads === "object" && !Array.isArray(data.reads)) {
-			reads = {};
-			for (const [name, seq] of Object.entries(data.reads)) {
-				const value = Number(seq);
-				if (typeof name === "string" && Number.isFinite(value) && value >= 0) {
-					reads[name.toLowerCase()] = Math.floor(value);
-				}
-			}
-		}
-		const entries = Array.isArray(data.messages) ? data.messages : [];
-		messages = entries
+		revision = Math.max(1, Number(data.revision) || 1);
+		channels = Array.isArray(data.channels) ? data.channels : [];
+		if (!channels.some((channel) => channel.id === GENERAL)) channels.unshift(generalChannel());
+		messages = (Array.isArray(data.messages) ? data.messages : [])
 			.filter(
-				(m) =>
-					m &&
-					typeof m.id === "string" &&
-					Number.isInteger(m.seq) &&
-					m.seq > 0 &&
-					typeof m.username === "string" &&
-					m.username.length > 0 &&
-					m.username.length <= 32 &&
-					typeof m.text === "string" &&
-					m.text.length > 0 &&
-					Number.isFinite(new Date(m.at).getTime()),
+				(message) =>
+					message &&
+					typeof message.id === "string" &&
+					Number.isInteger(message.seq) &&
+					message.seq > 0 &&
+					typeof message.username === "string" &&
+					typeof message.text === "string" &&
+					Number.isFinite(new Date(message.at).getTime()),
 			)
-			.map((m) => ({
-				id: m.id.slice(0, 64),
-				seq: m.seq,
-				username: m.username.slice(0, 32),
-				text: m.text.slice(0, 2000),
-				at: m.at,
+			.map((message) => ({
+				id: message.id.slice(0, 64),
+				seq: message.seq,
+				channelId: typeof message.channelId === "string" ? message.channelId : GENERAL,
+				username: message.username.slice(0, 32),
+				text: message.text.slice(0, 2000),
+				at: message.at,
+				reactions: message.reactions && typeof message.reactions === "object" ? message.reactions : {},
+				attachment: message.attachment || null,
+				poll: message.poll || null,
+				mentions: Array.isArray(message.mentions) ? message.mentions.slice(0, 20) : [],
 			}))
 			.sort((a, b) => a.seq - b.seq);
+		reads = {};
+		if (data.reads && typeof data.reads === "object") {
+			for (const [name, value] of Object.entries(data.reads)) {
+				reads[name.toLowerCase()] =
+					typeof value === "object" && value !== null ? value : { [GENERAL]: Number(value) || 0 };
+			}
+		}
+		uploads = data.uploads && typeof data.uploads === "object" ? data.uploads : {};
 		nextSeq = Math.max(
 			Number(data.nextSeq) || 1,
 			messages.length ? messages[messages.length - 1].seq + 1 : 1,
@@ -103,9 +162,12 @@ function load() {
 	} catch (err) {
 		console.error("No se pudo cargar chat.json:", err.message);
 		messages = [];
+		channels = [generalChannel()];
+		reads = {};
+		uploads = {};
 		nextSeq = 1;
 		generation = 1;
-		reads = {};
+		revision = 1;
 	}
 }
 
@@ -117,71 +179,307 @@ function cleanText(value) {
 		.trim();
 }
 
-export function postChatMessage(username, value) {
+function removeFile(message) {
+	if (!message?.attachment?.id) return;
+	try { fs.rmSync(path.join(UPLOAD_DIR, `${message.attachment.id}.bin`), { force: true }); } catch {}
+}
+
+function mentionsIn(text) {
+	return [...new Set([...String(text).matchAll(/@([A-Za-z0-9._-]{3,32})/g)].map((m) => m[1]))];
+}
+
+export function listChatChannels(username) {
+	const lower = String(username || "").toLowerCase();
+	return channels
+		.filter(
+			(channel) =>
+				channel.type === "public" ||
+				channel.members.some((member) => member.toLowerCase() === lower),
+		)
+		.map((channel) => {
+			const channelMessages = messages.filter((message) => message.channelId === channel.id);
+			const last = channelMessages[channelMessages.length - 1];
+			const read = Number(reads[lower]?.[channel.id]) || 0;
+			const unread = channelMessages.filter(
+				(message) =>
+					message.seq > read &&
+					message.username.toLowerCase() !== lower,
+			).length;
+			return {
+				id: channel.id,
+				name:
+					channel.type === "dm"
+						? channel.members.find((member) => member.toLowerCase() !== lower) || "Privado"
+						: channel.name,
+				type: channel.type,
+				members: channel.members,
+				latestSeq: last?.seq || 0,
+				lastAt: last?.at || null,
+				unread,
+			};
+		})
+		.sort((a, b) => {
+			if (a.type === "public" && b.type !== "public") return -1;
+			if (b.type === "public" && a.type !== "public") return 1;
+			return new Date(b.lastAt || 0) - new Date(a.lastAt || 0);
+		});
+}
+
+export function createGroupChannel(username, name, members) {
+	const cleanName = String(name || "").trim().slice(0, 40);
+	if (cleanName.length < 2) return { error: "invalid-name" };
+	const unique = new Map();
+	unique.set(String(username).toLowerCase(), String(username));
+	for (const member of Array.isArray(members) ? members : [members]) {
+		const value = String(member || "").trim();
+		if (value && value.toLowerCase() !== String(username).toLowerCase()) {
+			unique.set(value.toLowerCase(), value);
+		}
+	}
+	if (unique.size < 2) return { error: "invalid-members" };
+	if (unique.size > MAX_CHANNEL_MEMBERS) return { error: "too-many-members" };
+	const channel = {
+		id: `g-${crypto.randomBytes(6).toString("hex")}`,
+		name: cleanName,
+		type: "group",
+		members: [...unique.values()],
+		createdBy: username,
+		createdAt: new Date().toISOString(),
+	};
+	channels.push(channel);
+	dirty = true;
+	saveNow();
+	return { channel };
+}
+
+export function getOrCreateDmChannel(username, other) {
+	const a = String(username || "").trim();
+	const b = String(other || "").trim();
+	if (!a || !b || a.toLowerCase() === b.toLowerCase()) return { error: "invalid-user" };
+	const pair = [a, b].sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase()));
+	const existing = channels.find(
+		(channel) =>
+			channel.type === "dm" &&
+			channel.members.length === 2 &&
+			channel.members.some((m) => m.toLowerCase() === pair[0].toLowerCase()) &&
+			channel.members.some((m) => m.toLowerCase() === pair[1].toLowerCase()),
+	);
+	if (existing) return { channel: existing };
+	const channel = {
+		id: `dm-${crypto.createHash("sha1").update(pair.map((v) => v.toLowerCase()).join(":")).digest("hex").slice(0, 16)}`,
+		name: "",
+		type: "dm",
+		members: pair,
+		createdBy: a,
+		createdAt: new Date().toISOString(),
+	};
+	channels.push(channel);
+	dirty = true;
+	saveNow();
+	return { channel };
+}
+
+export function postChatMessage(username, value, { channelId = GENERAL, attachmentId = "" } = {}) {
 	const settings = getSettings();
 	if (!settings.chatEnabled) return { error: "disabled" };
-	if (typeof value !== "string") return { error: "empty" };
+	const channel = channelFor(username, channelId);
+	if (!channel) return { error: "forbidden" };
 	const text = cleanText(value);
-	if (!text) return { error: "empty" };
+	if (typeof value !== "string" && value) return { error: "empty" };
+	if (!text && !attachmentId) return { error: "empty" };
 	if ([...text].length > settings.chatMaxLength) return { error: "too_long" };
-
 	const now = Date.now();
 	const key = String(username).toLowerCase();
 	const entry = lastPost.get(key) || { last: 0, times: [] };
 	entry.times = entry.times.filter((t) => now - t < 60_000);
 	const slowMs = Math.max(0, Number(settings.chatSlowModeSeconds) || 0) * 1000;
 	if (entry.last && now - entry.last < slowMs) {
-		return {
-			error: "slow",
-			retryAfter: Math.max(1, Math.ceil((slowMs - (now - entry.last)) / 1000)),
-		};
+		return { error: "slow", retryAfter: Math.max(1, Math.ceil((slowMs - (now - entry.last)) / 1000)) };
 	}
 	if (entry.times.length >= settings.chatMaxPerMinute) {
 		return { error: "rate", retryAfter: 60 };
 	}
-
+	let attachment = null;
+	if (attachmentId) {
+		const upload = uploads[String(attachmentId)];
+		if (!upload || upload.owner.toLowerCase() !== String(username).toLowerCase()) {
+			return { error: "invalid-attachment" };
+		}
+		attachment = { id: upload.id, name: upload.name, type: upload.type, size: upload.size };
+		delete uploads[String(attachmentId)];
+	}
 	const message = {
 		id: crypto.randomBytes(8).toString("hex"),
 		seq: nextSeq++,
+		channelId: channel.id,
 		username: String(username).slice(0, 32),
 		text,
 		at: new Date(now).toISOString(),
+		reactions: {},
+		attachment,
+		poll: null,
+		mentions: mentionsIn(text),
 	};
 	messages.push(message);
 	entry.last = now;
 	entry.times.push(now);
 	lastPost.set(key, entry);
+	revision += 1;
 	trimMessages();
 	scheduleSave();
 	return { message: { ...message } };
 }
 
-export function listChat({ after = 0, limit = 200 } = {}) {
+export function postChatPoll(username, { channelId = GENERAL, question, options } = {}) {
+	const settings = getSettings();
+	if (!settings.chatEnabled) return { error: "disabled" };
+	const channel = channelFor(username, channelId);
+	if (!channel) return { error: "forbidden" };
+	const text = cleanText(question);
+	const choices = (Array.isArray(options) ? options : [])
+		.map((option) => cleanText(option).slice(0, 80))
+		.filter(Boolean)
+		.slice(0, 6);
+	if (!text || text.length > 120 || choices.length < 2) return { error: "invalid-poll" };
+	const now = Date.now();
+	const key = String(username).toLowerCase();
+	const entry = lastPost.get(key) || { last: 0, times: [] };
+	entry.times = entry.times.filter((t) => now - t < 60_000);
+	const slowMs = Math.max(0, Number(settings.chatSlowModeSeconds) || 0) * 1000;
+	if (entry.last && now - entry.last < slowMs) {
+		return { error: "slow", retryAfter: Math.max(1, Math.ceil((slowMs - (now - entry.last)) / 1000)) };
+	}
+	if (entry.times.length >= settings.chatMaxPerMinute) return { error: "rate", retryAfter: 60 };
+	const message = {
+		id: crypto.randomBytes(8).toString("hex"),
+		seq: nextSeq++,
+		channelId: channel.id,
+		username: String(username).slice(0, 32),
+		text,
+		at: new Date(now).toISOString(),
+		reactions: {},
+		attachment: null,
+		poll: { question: text, options: choices.map((choice) => ({ text: choice, votes: [] })) },
+		mentions: [],
+	};
+	entry.last = now;
+	entry.times.push(now);
+	lastPost.set(key, entry);
+	messages.push(message);
+	revision += 1;
+	trimMessages();
+	scheduleSave();
+	return { message: { ...message } };
+}
+
+export function votePoll(username, messageId, optionIndex, channelId) {
+	const message = messages.find((item) => item.id === messageId && item.channelId === channelId);
+	if (!message?.poll) return { error: "notfound" };
+	const channel = channelFor(username, channelId);
+	if (!channel) return { error: "forbidden" };
+	const index = Number(optionIndex);
+	if (!Number.isInteger(index) || !message.poll.options[index]) return { error: "invalid-option" };
+	const lower = String(username).toLowerCase();
+	const already = message.poll.options[index].votes.some((v) => v.toLowerCase() === lower);
+	for (const option of message.poll.options) {
+		option.votes = option.votes.filter((v) => v.toLowerCase() !== lower);
+	}
+	if (!already) message.poll.options[index].votes.push(String(username));
+	revision += 1;
+	dirty = true;
+	scheduleSave();
+	return { message: { ...message } };
+}
+
+export function toggleReaction(username, messageId, emoji, channelId) {
+	const message = messages.find((item) => item.id === messageId && item.channelId === channelId);
+	if (!message) return { error: "notfound" };
+	if (!channelFor(username, channelId)) return { error: "forbidden" };
+	const value = String(emoji || "");
+	if (!REACTIONS.has(value)) return { error: "invalid-reaction" };
+	const lower = String(username).toLowerCase();
+	message.reactions = message.reactions || {};
+	const votes = Array.isArray(message.reactions[value]) ? message.reactions[value] : [];
+	const exists = votes.some((v) => v.toLowerCase() === lower);
+	message.reactions[value] = exists
+		? votes.filter((v) => v.toLowerCase() !== lower)
+		: [...votes, String(username)];
+	if (!message.reactions[value].length) delete message.reactions[value];
+	revision += 1;
+	dirty = true;
+	scheduleSave();
+	return { message: { ...message } };
+}
+
+export function saveChatUpload(username, buffer, { name = "archivo", type = "" } = {}) {
+	if (!Buffer.isBuffer(buffer) || !buffer.length) return { error: "empty" };
+	if (buffer.length > MAX_FILE) return { error: "too_large" };
+	const mime = String(type || "").toLowerCase();
+	if (!MIME_EXT[mime]) return { error: "invalid-type" };
+	if (mime.startsWith("image/")) {
+		const png = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+		const jpg = buffer[0] === 0xff && buffer[1] === 0xd8;
+		const gif = buffer.subarray(0, 6).toString() === "GIF89a" || buffer.subarray(0, 6).toString() === "GIF87a";
+		const webp = buffer.subarray(0, 4).toString() === "RIFF" && buffer.subarray(8, 12).toString() === "WEBP";
+		if (!png && !jpg && !gif && !webp) return { error: "invalid-type" };
+	}
+	if (mime === "application/pdf" && buffer.subarray(0, 4).toString() !== "%PDF") return { error: "invalid-type" };
+	const id = crypto.randomBytes(16).toString("hex");
+	fs.mkdirSync(UPLOAD_DIR, { recursive: true, mode: 0o700 });
+	fs.writeFileSync(path.join(UPLOAD_DIR, `${id}.bin`), buffer, { mode: 0o600 });
+	const upload = {
+		id,
+		owner: String(username).slice(0, 32),
+		name: String(name || "archivo").replace(/[^\w.\- ()]/g, "").slice(0, 120) || "archivo",
+		type: mime,
+		size: buffer.length,
+		createdAt: new Date().toISOString(),
+	};
+	uploads[id] = upload;
+	dirty = true;
+	scheduleSave();
+	return { upload };
+}
+
+export function getChatAttachment(id) {
+	const clean = String(id || "");
+	if (!/^[a-f0-9]{32}$/.test(clean)) return null;
+	const full = path.join(UPLOAD_DIR, `${clean}.bin`);
+	if (!fs.existsSync(full)) return null;
+	return { path: full };
+}
+
+export function listChat({ username, channelId = GENERAL, after = 0, limit = 200 } = {}) {
+	const channel = channelFor(username, channelId);
+	if (!channel) return { error: "forbidden" };
 	if (trimMessages()) scheduleSave();
 	const afterSeq = Math.max(0, Number.parseInt(after, 10) || 0);
 	const max = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 200));
-	const oldestSeq = messages.length ? messages[0].seq : nextSeq;
-	const matching = messages.filter((m) => m.seq > afterSeq);
+	const all = messages.filter((message) => message.channelId === channel.id);
+	const oldestSeq = all.length ? all[0].seq : nextSeq;
+	const matching = all.filter((message) => message.seq > afterSeq);
 	return {
-		messages: matching.slice(0, max).map((m) => ({ ...m })),
-		latestSeq: messages.length ? messages[messages.length - 1].seq : nextSeq - 1,
+		channelId: channel.id,
+		messages: matching.slice(0, max).map((message) => ({ ...message })),
+		latestSeq: all.length ? all[all.length - 1].seq : nextSeq - 1,
 		oldestSeq,
 		generation,
+		revision,
 		reset: afterSeq > 0 && afterSeq < oldestSeq - 1,
 	};
 }
 
 export function getChatMessage(id) {
-	const wanted = String(id || "");
-	return messages.find((m) => m.id === wanted) || null;
+	return messages.find((message) => message.id === String(id || "")) || null;
 }
 
 export function deleteChatMessage(id) {
-	const wanted = String(id || "");
-	const index = messages.findIndex((m) => m.id === wanted);
+	const index = messages.findIndex((message) => message.id === String(id || ""));
 	if (index === -1) return null;
 	const [removed] = messages.splice(index, 1);
+	removeFile(removed);
 	generation += 1;
+	revision += 1;
 	dirty = true;
 	saveNow();
 	return { ...removed };
@@ -190,11 +488,15 @@ export function deleteChatMessage(id) {
 export function deleteChatMessagesByUser(username) {
 	const wanted = String(username || "").toLowerCase();
 	const before = messages.length;
-	messages = messages.filter((m) => m.username.toLowerCase() !== wanted);
+	for (const message of messages) {
+		if (message.username.toLowerCase() === wanted) removeFile(message);
+	}
+	messages = messages.filter((message) => message.username.toLowerCase() !== wanted);
 	delete reads[wanted];
 	lastPost.delete(wanted);
 	if (messages.length !== before) {
 		generation += 1;
+		revision += 1;
 		dirty = true;
 		saveNow();
 	}
@@ -202,31 +504,40 @@ export function deleteChatMessagesByUser(username) {
 }
 
 export function clearChat() {
+	for (const message of messages) removeFile(message);
 	messages = [];
 	reads = {};
+	uploads = {};
 	generation += 1;
+	revision += 1;
 	lastPost.clear();
 	dirty = true;
 	saveNow();
 }
 
 export function getChatUnread(username) {
-	const wanted = String(username || "").toLowerCase();
-	const read = Number(reads[wanted]) || 0;
-	const latestSeq = messages.length ? messages[messages.length - 1].seq : nextSeq - 1;
+	const lower = String(username || "").toLowerCase();
 	let unread = 0;
-	for (const message of messages) {
-		if (message.seq > read && message.username.toLowerCase() !== wanted) unread++;
+	const perChannel = [];
+	for (const channel of listChatChannels(username)) {
+		if (channel.unread) perChannel.push(channel);
+		unread += channel.unread;
 	}
-	return { unread, read, latestSeq };
+	return {
+		unread,
+		read: 0,
+		latestSeq: messages.length ? messages[messages.length - 1].seq : nextSeq - 1,
+		channels: perChannel,
+	};
 }
 
-export function markChatRead(username, seq) {
-	const wanted = String(username || "").toLowerCase();
+export function markChatRead(username, channelId = GENERAL, seq = 0) {
+	const lower = String(username || "").toLowerCase();
+	if (!channelFor(username, channelId)) return { error: "forbidden" };
 	const value = Math.max(0, Number.parseInt(seq, 10) || 0);
-	if (!wanted) return { error: "invalid" };
-	if ((reads[wanted] || 0) < value) {
-		reads[wanted] = value;
+	reads[lower] = reads[lower] || {};
+	if ((reads[lower][channelId] || 0) < value) {
+		reads[lower][channelId] = value;
 		dirty = true;
 		scheduleSave();
 	}
@@ -236,8 +547,11 @@ export function markChatRead(username, seq) {
 export function exportChat() {
 	return {
 		generation,
-		messages: messages.map((m) => ({ ...m })),
-		reads: { ...reads },
+		revision,
+		messages: messages.map((message) => ({ ...message })),
+		channels: channels.map((channel) => ({ ...channel })),
+		reads: JSON.parse(JSON.stringify(reads)),
+		uploads: JSON.parse(JSON.stringify(uploads)),
 	};
 }
 
@@ -249,3 +563,12 @@ load();
 setInterval(() => {
 	if (trimMessages()) scheduleSave();
 }, 10 * 60 * 1000).unref();
+
+export function isChannelMember(username, channelId) {
+	return !!channelFor(username, channelId);
+}
+
+export function getChatAttachmentMessage(attachmentId) {
+	const id = String(attachmentId || "");
+	return messages.find((message) => message.attachment?.id === id) || null;
+}

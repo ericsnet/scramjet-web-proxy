@@ -248,10 +248,19 @@ details.more[open] summary{margin-bottom:10px}
 .stat .v small{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
 pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;padding:12px;
   overflow:auto;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#93a7bd;max-height:260px}
+dialog{border:1px solid var(--border);border-radius:14px;background:var(--soft);color:var(--text);
+  padding:20px;width:min(430px,calc(100vw - 32px));box-shadow:0 24px 70px rgba(0,0,0,.5)}
+dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+dialog h2{margin-top:0}
+.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .section{margin-top:26px;padding-top:4px}
 .section h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
   margin:0 0 6px;font-weight:600}
-.chat-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.chat-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.chat-channel-bar{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.chat-channel-bar select{width:auto;min-width:150px;padding:8px 10px;font-size:13px}
+.chat-online-users{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.chat-user-chip{font-size:11.5px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:3px 8px;background:rgba(21,30,41,.45)}
 .chat-toolbar .chat-online{color:var(--muted);font-size:12.5px;display:inline-flex;align-items:center;gap:7px}
 .chat-online::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(74,222,128,.12)}
 .chat-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;
@@ -274,10 +283,31 @@ pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;p
 .chat-text{margin:5px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:14.5px;color:var(--text)}
 .chat-message.own .chat-text{color:#fff}
 .chat-empty{color:var(--muted);text-align:center;padding:52px 18px;font-size:14px;margin:auto}
+.chat-attachment{display:block;margin-top:8px;border-radius:9px;overflow:hidden;max-width:360px}
+.chat-attachment img{display:block;max-width:100%;max-height:280px;object-fit:contain}
+.chat-attachment.file{font-size:12px;color:#93c5fd;padding:8px 9px;border:1px solid var(--border);background:rgba(0,0,0,.12)}
+.chat-poll{display:flex;flex-direction:column;gap:5px;margin-top:9px;min-width:190px}
+.chat-poll-option{display:flex;justify-content:space-between;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 8px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+.chat-message.own .chat-poll-option{background:rgba(0,0,0,.12);border-color:rgba(255,255,255,.2);color:#fff}
+.chat-poll-option b{color:#93c5fd;font-size:11.5px}
+.chat-message.own .chat-poll-option b{color:#bfdbfe}
+.chat-reactions{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:7px;position:relative}
+.chat-reaction{background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:999px;color:var(--text);font-size:11.5px;padding:2px 7px;cursor:pointer}
+.chat-message.own .chat-reaction{background:rgba(0,0,0,.14);border-color:rgba(255,255,255,.2);color:#fff}
+.chat-reaction.mine{border-color:#60a5fa;background:rgba(59,130,246,.2)}
+.chat-reaction-menu{display:inline-block;position:relative}
+.chat-reaction-menu summary{list-style:none;cursor:pointer;color:var(--muted);font-size:14px;padding:1px 5px;border:1px solid var(--border);border-radius:999px}
+.chat-reaction-menu summary::-webkit-details-marker{display:none}
+.chat-reaction-picker{position:absolute;left:0;bottom:26px;display:flex;gap:2px;background:var(--soft);border:1px solid var(--border);border-radius:10px;padding:5px;z-index:5;box-shadow:0 10px 24px rgba(0,0,0,.35)}
+.chat-reaction-picker button{background:none;border:0;font-size:17px;cursor:pointer;padding:2px 3px;line-height:1}
+.chat-reaction-picker button:hover{transform:scale(1.15)}
 .chat-form{display:flex;gap:10px;align-items:flex-end;margin-top:14px}
+.chat-attach-row{display:flex;align-items:center;gap:10px;margin-top:5px}
+.chat-file-label{margin:0;display:inline-flex;cursor:pointer}
+.chat-counter{font-size:11.5px;color:var(--muted);margin-left:auto}
 .chat-form textarea{flex:1;min-height:54px;max-height:150px;resize:vertical;margin:0}
 .chat-form button.primary{width:auto;margin:0;padding:12px 20px;flex:0 0 auto}
-.chat-counter{font-size:11.5px;color:var(--muted);text-align:right;margin-top:5px}
+.chat-counter{font-size:11.5px;color:var(--muted);text-align:right}
 .role-scale{margin:10px 0 0;padding-left:22px;color:var(--muted);font-size:13px;line-height:1.5}
 .role-scale li{margin-bottom:9px}
 .role-scale strong{display:block;color:var(--text);font-size:14px}
@@ -679,8 +709,12 @@ export function chatPage({
 	settings,
 	messages = [],
 	latestSeq = 0,
-	generation = 1,
+	revision = 0,
 	online = 0,
+	onlineUsers = [],
+	channels = [],
+	currentChannel = "general",
+	users = [],
 	canModerate = false,
 	notice = "",
 	error = "",
@@ -688,24 +722,68 @@ export function chatPage({
 	const current = String(user?.username || "");
 	const enabled = !!settings.chatEnabled;
 	const allowDelete = !!settings.chatAllowUserDelete;
+	const channelOptions = channels
+		.map(
+			(channel) =>
+				`<option value="${esc(channel.id)}"${channel.id === currentChannel ? " selected" : ""}>${esc(channel.name)}${channel.unread ? ` (${channel.unread})` : ""}</option>`,
+		)
+		.join("");
+	const userOptions = users
+		.map((entry) => `<option value="${esc(entry.username)}">${esc(entry.username)}</option>`)
+		.join("");
+	const onlineChips = onlineUsers
+		.map((name) => `<span class="chat-user-chip">${esc(name)}</span>`)
+		.join("");
+	const reactionSet = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+	const roleBadge = (role) =>
+		role === "user"
+			? ""
+			: `<span class="badge role-${esc(role)}">${role === "creator" ? "creador" : role === "admin" ? "admin" : "moderador"}</span>`;
+
 	const rows = messages
 		.map((m) => {
 			const role = String(m.role || "user");
 			const own = String(m.username).toLowerCase() === current.toLowerCase();
-			const canDelete =
-				enabled && (canModerate || (allowDelete && own));
-			const roleBadge = role === "user"
-				? ""
-				: `<span class="badge role-${role}">${role === "creator" ? "creador" : role === "admin" ? "admin" : "moderador"}</span>`;
+			const canDelete = enabled && (canModerate || (allowDelete && own));
+			const attachment = m.attachment
+				? m.attachment.type?.startsWith("image/")
+					? `<a class="chat-attachment" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener"><img src="/api/chat/files/${esc(m.attachment.id)}" alt="${esc(m.attachment.name)}" loading="lazy"></a>`
+					: `<a class="chat-attachment file" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener">${esc(m.attachment.name)} · ${esc(fmtBytes(m.attachment.size))}</a>`
+				: "";
+			const poll = m.poll
+				? `<div class="chat-poll">${(m.poll.options || [])
+						.map(
+							(option, index) =>
+								`<button type="button" class="chat-poll-option" data-chat-vote="${index}"><span>${esc(option.text)}</span><b>${option.votes?.length || 0}</b></button>`,
+						)
+						.join("")}</div>`
+				: "";
+			const reactions =
+				Object.entries(m.reactions || {})
+					.filter(([, votes]) => votes?.length)
+					.map(
+						([emoji, votes]) =>
+							`<button type="button" class="chat-reaction${votes.some((v) => String(v).toLowerCase() === current.toLowerCase()) ? " mine" : ""}" data-chat-reaction="${esc(emoji)}">${esc(emoji)} ${votes.length}</button>`,
+					)
+					.join("");
+			const picker = `<details class="chat-reaction-menu"><summary title="Reaccionar" aria-label="Reaccionar">☺</summary><div class="chat-reaction-picker">${reactionSet
+				.map(
+					(emoji) =>
+						`<button type="button" data-chat-react="${esc(emoji)}" aria-label="Reaccionar con ${esc(emoji)}">${esc(emoji)}</button>`,
+				)
+				.join("")}</div></details>`;
 			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
   <div class="chat-bubble">
     <div class="chat-meta">
       ${own ? "" : `<span class="chat-author">${esc(m.username)}</span>`}
-      ${roleBadge}
+      ${roleBadge(role)}
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
       ${canDelete ? `<button class="link chat-delete" type="button" data-chat-delete="${esc(m.id)}">Eliminar</button>` : ""}
     </div>
-    <p class="chat-text">${esc(m.text)}</p>
+    ${m.text ? `<p class="chat-text">${esc(m.text)}</p>` : ""}
+    ${attachment}
+    ${poll}
+    <div class="chat-reactions">${reactions}${picker}</div>
   </div>
 </article>`;
 		})
@@ -719,35 +797,84 @@ export function chatPage({
 		enabled
 			? `
   <div class="chat-toolbar">
-    <span class="muted" style="margin:0">Chat privado entre usuarios del proxy.</span>
+    <div class="chat-channel-bar">
+      <select id="chat-channel" aria-label="Canal">${channelOptions}</select>
+      <button class="small" type="button" id="chat-new-dm">Privado</button>
+      <button class="small" type="button" id="chat-new-group">Grupo</button>
+      <button class="small" type="button" id="chat-new-poll">Encuesta</button>
+    </div>
     ${
 			settings.chatShowOnline
 				? `<span class="chat-online" id="chat-online">${esc(online)} conectado${online === 1 ? "" : "s"}</span>`
 				: ""
 		}
   </div>
+  ${onlineChips ? `<div class="chat-online-users" id="chat-online-users">${onlineChips}</div>` : ""}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
   <p class="msg error" id="chat-error" hidden></p>
   <div class="chat-box">
     <div class="chat-messages" id="chat-messages"
+      data-channel="${esc(currentChannel)}"
       data-last-seq="${esc(latestSeq)}"
-      data-generation="${esc(generation)}"
+      data-revision="${esc(revision)}"
       data-current-user="${esc(current)}"
       data-max-length="${esc(settings.chatMaxLength)}"
       data-can-moderate="${canModerate ? "1" : "0"}"
       data-allow-delete="${allowDelete ? "1" : "0"}">
       ${rows || '<p class="chat-empty" id="chat-empty">Todavía no hay mensajes. Escribe el primero.</p>'}
     </div>
-    <form method="post" action="/api/chat/messages" class="chat-form" id="chat-form" autocomplete="off">
+    <form method="post" action="/api/chat/messages" class="chat-form" id="chat-form" autocomplete="off" enctype="application/x-www-form-urlencoded">
+      <input type="hidden" name="channel" id="chat-channel-hidden" value="${esc(currentChannel)}">
       <div style="flex:1">
-        <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" required
-          placeholder="Escribe un mensaje…" aria-label="Mensaje"></textarea>
-        <div class="chat-counter"><span id="chat-counter">0</span>/${esc(settings.chatMaxLength)}</div>
+        <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" placeholder="Escribe un mensaje…" aria-label="Mensaje"></textarea>
+        <div class="chat-attach-row">
+          <label class="small chat-file-label" for="chat-file">Adjuntar</label>
+          <input id="chat-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" hidden>
+          <span id="chat-file-name" class="muted"></span>
+          <span class="chat-counter"><span id="chat-counter">0</span>/${esc(settings.chatMaxLength)}</span>
+        </div>
       </div>
       <button class="primary" type="submit" id="chat-send">Enviar</button>
     </form>
   </div>
+  <dialog id="chat-dm-dialog">
+    <form method="dialog">
+      <h2>Nuevo chat privado</h2>
+      <label for="chat-dm-user">Usuario</label>
+      <select id="chat-dm-user">${userOptions}</select>
+      <div class="dialog-actions">
+        <button class="small" type="button" data-close-dialog>Cancelar</button>
+        <button class="small" type="button" id="chat-dm-create">Crear privado</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="chat-group-dialog">
+    <form method="dialog">
+      <h2>Nuevo grupo</h2>
+      <label for="chat-group-name">Nombre</label>
+      <input id="chat-group-name" maxlength="40" placeholder="Equipo, amigos…">
+      <label for="chat-group-members">Miembros</label>
+      <select id="chat-group-members" multiple size="7">${userOptions}</select>
+      <div class="dialog-actions">
+        <button class="small" type="button" data-close-dialog>Cancelar</button>
+        <button class="small" type="button" id="chat-group-create">Crear grupo</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="chat-poll-dialog">
+    <form method="dialog">
+      <h2>Nueva encuesta</h2>
+      <label for="chat-poll-question">Pregunta</label>
+      <input id="chat-poll-question" maxlength="120" placeholder="¿Qué opción prefieres?">
+      <label for="chat-poll-options">Opciones (una por línea, 2–6)</label>
+      <textarea id="chat-poll-options" rows="4" placeholder="Opción 1&#10;Opción 2"></textarea>
+      <div class="dialog-actions">
+        <button class="small" type="button" data-close-dialog>Cancelar</button>
+        <button class="small" type="button" id="chat-poll-create">Crear encuesta</button>
+      </div>
+    </form>
+  </dialog>
   <script src="/chat.js" defer></script>`
 			: `<div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>

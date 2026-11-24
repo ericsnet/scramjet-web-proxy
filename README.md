@@ -15,7 +15,7 @@ administración.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento, intercambio de cuentas y bloqueos manuales por dispositivo, usuario o IP.
-- **Chat interno entre usuarios**, con texto plano, moderación y ajustes de capacidad, retención y ritmo.
+- **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
@@ -214,7 +214,10 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - Contador de no leídos sobre el icono flotante.
 - Al volver a abrir el proxy: “Tienes X mensajes nuevos…”.
 - El puntero de lectura se guarda por usuario en `data/chat.json`.
-- Sala única para todos los usuarios autenticados, con actualización automática.
+- Sala general, chats privados 1:1 y grupos con miembros.
+- Adjuntos de hasta 5 MB (imágenes, PDF y texto) servidos con comprobación de
+  pertenencia al canal, nunca desde una carpeta pública.
+- Reacciones, encuestas con voto y menciones.
 - Texto plano: no se interpreta HTML ni Markdown; todo se escapa en servidor y
   se pinta con `textContent` en el navegador.
 - Límite de longitud, espera entre mensajes, máximo por minuto, retención por
@@ -246,7 +249,8 @@ usuario puede vaciar su propio historial.
 - `data/activity.json`: historial de actividad.
 - `data/audit.json`: auditoría.
 - `data/bookmarks.json`: favoritos por usuario.
-- `data/chat.json`: mensajes del chat interno.
+- `data/chat.json`: mensajes, canales y lecturas del chat interno.
+- `data/chat-uploads/`: adjuntos privados del chat.
 - `data/security.json`: alertas, bloqueos e historial reciente de logins para detección de intercambio de cuentas.
 - `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
 - Clave de cifrado: `BACKUP_KEY_FILE` (`/etc/webproxy/backup.key` en producción).

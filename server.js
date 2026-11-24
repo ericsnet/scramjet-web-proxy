@@ -139,7 +139,17 @@ import {
 } from "./requests.js";
 import {
 	postChatMessage,
+	postChatPoll,
+	votePoll,
+	toggleReaction,
 	listChat,
+	listChatChannels,
+	createGroupChannel,
+	getOrCreateDmChannel,
+	saveChatUpload,
+	getChatAttachment,
+	getChatAttachmentMessage,
+	isChannelMember,
 	getChatMessage,
 	getChatUnread,
 	markChatRead,
@@ -1241,20 +1251,55 @@ app.post("/api/activity", sameOrigin, (req, res) => {
 
 /* ------------------------------ chat interno ------------------------------ */
 
+function chatOnlineUsers() {
+	const cutoff = Date.now() - 5 * 60 * 1000;
+	const names = new Map();
+	for (const session of listSessions()) {
+		const seen = new Date(session.lastSeenAt).getTime();
+		if (Number.isFinite(seen) && seen >= cutoff) {
+			names.set(String(session.username).toLowerCase(), session.username);
+		}
+	}
+	return [...names.values()].sort((a, b) => a.localeCompare(b, "es"));
+}
+
+function chatChannelOf(req, fallback = "general") {
+	return String(req.query.channel || req.body?.channel || fallback).slice(0, 80) || "general";
+}
+
+function chatEnriched(messages, user, roles) {
+	return messages.map((message) => enrichChatMessage(message, user, roles));
+}
+
 app.get("/chat", (req, res) => {
 	const settings = getSettings();
 	const canModerate = isChatModerator(req.user);
 	const notice = req.query.ok === "sent" ? "Mensaje enviado." : req.query.ok === "deleted" ? "Mensaje eliminado." : "";
 	const error = CHAT_ERRORS[req.query.error] || "";
+	const roles = chatRoleMap();
+	const channels = settings.chatEnabled ? listChatChannels(req.user.username) : [];
+	const onlineUsers = settings.chatShowOnline
+		? hideCreatorData(req, chatOnlineUsers(), (name) => name)
+		: [];
+	let currentChannel = chatChannelOf(req);
+	if (!channels.some((channel) => channel.id === currentChannel)) {
+		currentChannel = channels[0]?.id || "general";
+	}
 	let messages = [];
 	let latestSeq = 0;
-	let generation = 1;
+	let revision = 0;
 	if (settings.chatEnabled) {
-		const result = listChat({ after: 0, limit: 200 });
-		const roles = chatRoleMap();
-		messages = result.messages.map((m) => enrichChatMessage(m, req.user, roles));
-		latestSeq = result.latestSeq;
-		generation = result.generation;
+		const result = listChat({
+			username: req.user.username,
+			channelId: currentChannel,
+			after: 0,
+			limit: 200,
+		});
+		if (!result.error) {
+			messages = chatEnriched(result.messages, req.user, roles);
+			latestSeq = result.latestSeq;
+			revision = result.revision;
+		}
 	}
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -1263,8 +1308,16 @@ app.get("/chat", (req, res) => {
 			settings,
 			messages,
 			latestSeq,
-			generation,
-			online: settings.chatShowOnline ? chatOnlineCount() : 0,
+			revision,
+			online: onlineUsers.length,
+			onlineUsers,
+			channels,
+			currentChannel,
+			users: listUsers().filter(
+				(entry) =>
+					entry.username.toLowerCase() !== req.user.username.toLowerCase() &&
+					!entry.effectivelyBlocked,
+			),
 			canModerate,
 			notice,
 			error,
@@ -1274,36 +1327,59 @@ app.get("/chat", (req, res) => {
 
 app.get("/api/chat/unread", (req, res) => {
 	const settings = getSettings();
-	if (!settings.chatEnabled) {
-		return res.json({ enabled: false, unread: 0, latestSeq: 0 });
-	}
+	if (!settings.chatEnabled) return res.json({ enabled: false, unread: 0, latestSeq: 0 });
 	res.set("Cache-Control", "no-store");
-	res.json({
-		enabled: true,
-		...getChatUnread(req.user.username),
-		currentUser: req.user.username,
-	});
+	res.json({ enabled: true, ...getChatUnread(req.user.username), currentUser: req.user.username });
+});
+
+app.get("/api/chat/channels", (req, res) => {
+	const settings = getSettings();
+	if (!settings.chatEnabled) return res.status(403).json({ error: "disabled" });
+	res.set("Cache-Control", "no-store");
+	res.json({ channels: listChatChannels(req.user.username), online: settings.chatShowOnline ? hideCreatorData(req, chatOnlineUsers(), (name) => name) : [] });
+});
+
+app.post("/api/chat/channels/dm", sameOrigin, (req, res) => {
+	const other = String(req.body.username || "").trim();
+	if (!getUser(other) || other.toLowerCase() === req.user.username.toLowerCase()) {
+		return res.status(400).json({ error: "invalid-user" });
+	}
+	const result = getOrCreateDmChannel(req.user.username, other);
+	if (result.error) return res.status(400).json({ error: result.error });
+	res.status(201).json({ channel: result.channel });
+});
+
+app.post("/api/chat/channels/group", sameOrigin, (req, res) => {
+	const known = new Set(listUsers().map((entry) => entry.username.toLowerCase()));
+	const members = (Array.isArray(req.body.members) ? req.body.members : [req.body.members])
+		.map((member) => String(member || "").trim())
+		.filter((member) => member && known.has(member.toLowerCase()));
+	const result = createGroupChannel(req.user.username, req.body.name, members);
+	if (result.error) return res.status(400).json({ error: result.error });
+	audit(req, "chat.channel", result.channel.name, "grupo");
+	res.status(201).json({ channel: result.channel });
 });
 
 app.post("/api/chat/read", sameOrigin, (req, res) => {
 	if (!getSettings().chatEnabled) return res.status(403).json({ error: "disabled" });
-	markChatRead(req.user.username, req.body.seq);
+	const result = markChatRead(req.user.username, chatChannelOf(req), req.body.seq);
+	if (result.error) return res.status(403).json({ error: result.error });
 	res.status(204).end();
 });
 
 app.get("/api/chat/messages", (req, res) => {
 	const settings = getSettings();
-	if (!settings.chatEnabled) {
-		return res.status(403).json({ error: "disabled" });
-	}
+	if (!settings.chatEnabled) return res.status(403).json({ error: "disabled" });
+	const channelId = chatChannelOf(req);
 	const after = Math.max(0, Number.parseInt(req.query.after, 10) || 0);
-	const result = listChat({ after, limit: 200 });
+	const result = listChat({ username: req.user.username, channelId, after, limit: 200 });
+	if (result.error) return res.status(403).json({ error: result.error });
 	const roles = chatRoleMap();
 	res.set("Cache-Control", "no-store");
 	res.json({
 		...result,
-		messages: result.messages.map((m) => enrichChatMessage(m, req.user, roles)),
-		online: settings.chatShowOnline ? chatOnlineCount() : null,
+		messages: chatEnriched(result.messages, req.user, roles),
+		online: settings.chatShowOnline ? hideCreatorData(req, chatOnlineUsers(), (name) => name) : null,
 		canModerate: isChatModerator(req.user),
 		allowUserDelete: !!settings.chatAllowUserDelete,
 		maxLength: settings.chatMaxLength,
@@ -1314,17 +1390,13 @@ app.get("/api/chat/messages", (req, res) => {
 
 app.post("/api/chat/messages", sameOrigin, (req, res) => {
 	const json = wantsChatJson(req);
-	const result = postChatMessage(req.user.username, req.body.text);
+	const result = postChatMessage(req.user.username, req.body.text, {
+		channelId: chatChannelOf(req),
+		attachmentId: String(req.body.attachment || ""),
+	});
 	if (result.error) {
-		if (!json) {
-			return res.redirect(303, `/chat?error=${encodeURIComponent(result.error)}`);
-		}
-		const status =
-			result.error === "disabled"
-				? 403
-				: result.error === "slow" || result.error === "rate"
-					? 429
-					: 400;
+		if (!json) return res.redirect(303, `/chat?error=${encodeURIComponent(result.error)}`);
+		const status = result.error === "disabled" ? 403 : result.error === "slow" || result.error === "rate" ? 429 : 400;
 		return res.status(status).json({
 			error: result.error,
 			message: CHAT_ERRORS[result.error] || "No se pudo enviar el mensaje.",
@@ -1332,10 +1404,64 @@ app.post("/api/chat/messages", sameOrigin, (req, res) => {
 		});
 	}
 	if (!json) return res.redirect(303, "/chat?ok=sent");
-	const roles = chatRoleMap();
-	res.status(201).json({
-		message: enrichChatMessage(result.message, req.user, roles),
+	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+});
+
+app.post("/api/chat/polls", sameOrigin, (req, res) => {
+	const result = postChatPoll(req.user.username, {
+		channelId: chatChannelOf(req),
+		question: req.body.question,
+		options: Array.isArray(req.body.options) ? req.body.options : String(req.body.options || "").split("\n"),
 	});
+	if (result.error) return res.status(400).json({ error: result.error, message: "Encuesta no válida." });
+	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+});
+
+app.post("/api/chat/polls/:id/vote", sameOrigin, (req, res) => {
+	const result = votePoll(req.user.username, req.params.id, req.body.option, chatChannelOf(req));
+	if (result.error) return res.status(400).json({ error: result.error });
+	res.json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+});
+
+app.post("/api/chat/messages/:id/reaction", sameOrigin, (req, res) => {
+	const result = toggleReaction(req.user.username, req.params.id, req.body.emoji, chatChannelOf(req));
+	if (result.error) return res.status(400).json({ error: result.error });
+	res.json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+});
+
+app.post("/api/chat/upload", sameOrigin, express.raw({ type: "application/octet-stream", limit: "6mb" }), (req, res) => {
+	if (!getSettings().chatEnabled) return res.status(403).json({ error: "disabled" });
+	let fileName = String(req.headers["x-file-name"] || "archivo");
+	try {
+		fileName = decodeURIComponent(fileName);
+	} catch {}
+	const result = saveChatUpload(req.user.username, req.body, {
+		name: fileName,
+		type: req.headers["x-file-type"],
+	});
+	if (result.error) {
+		const status = result.error === "too_large" ? 413 : 400;
+		return res.status(status).json({ error: result.error });
+	}
+	res.status(201).json({ upload: result.upload });
+});
+
+app.get("/api/chat/files/:id", (req, res) => {
+	const message = getChatAttachmentMessage(req.params.id);
+	if (!message) return res.status(404).end();
+	const allowed = listChatChannels(req.user.username).some((channel) => channel.id === message.channelId);
+	if (!allowed) return res.status(403).end();
+	const file = getChatAttachment(req.params.id);
+	if (!file) return res.status(404).end();
+	const attachment = message.attachment;
+	res.set("Cache-Control", "private, max-age=3600");
+	res.set("X-Content-Type-Options", "nosniff");
+	res.type(attachment.type || "application/octet-stream");
+	res.set(
+		"Content-Disposition",
+		`inline; filename*=UTF-8''${encodeURIComponent(attachment.name || "archivo")}`,
+	);
+	res.sendFile(file.path);
 });
 
 app.post("/api/chat/messages/:id/delete", sameOrigin, (req, res) => {
@@ -1346,15 +1472,12 @@ app.post("/api/chat/messages/:id/delete", sameOrigin, (req, res) => {
 		return res.status(403).json({ error: "disabled", message: CHAT_ERRORS.disabled });
 	}
 	const message = getChatMessage(req.params.id);
-	if (!message) {
+	if (!message || !isChannelMember(req.user.username, message.channelId)) {
 		if (!json) return res.redirect(303, "/chat?error=notfound");
 		return res.status(404).json({ error: "notfound", message: CHAT_ERRORS.notfound });
 	}
-	const own =
-		String(message.username).toLowerCase() ===
-		String(req.user.username).toLowerCase();
-	const allowed =
-		isChatModerator(req.user) || (!!settings.chatAllowUserDelete && own);
+	const own = String(message.username).toLowerCase() === String(req.user.username).toLowerCase();
+	const allowed = isChatModerator(req.user) || (!!settings.chatAllowUserDelete && own);
 	if (!allowed) {
 		if (!json) return res.redirect(303, "/chat?error=forbidden");
 		return res.status(403).json({ error: "forbidden", message: CHAT_ERRORS.forbidden });

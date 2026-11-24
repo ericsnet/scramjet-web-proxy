@@ -1,15 +1,22 @@
 (() => {
 	const box = document.getElementById("chat-messages");
 	if (!box) return;
+
+	const channelSelect = document.getElementById("chat-channel");
+	const channelHidden = document.getElementById("chat-channel-hidden");
 	const form = document.getElementById("chat-form");
 	const input = document.getElementById("chat-input");
 	const send = document.getElementById("chat-send");
 	const counter = document.getElementById("chat-counter");
 	const onlineEl = document.getElementById("chat-online");
+	const onlineUsersEl = document.getElementById("chat-online-users");
 	const errorEl = document.getElementById("chat-error");
+	const fileInput = document.getElementById("chat-file");
+	const fileName = document.getElementById("chat-file-name");
 
+	let channelId = String(box.dataset.channel || "general");
 	let lastSeq = Number(box.dataset.lastSeq) || 0;
-	let generation = String(box.dataset.generation || "1");
+	let revision = String(box.dataset.revision || "0");
 	let maxLength = Number(box.dataset.maxLength) || 500;
 	const currentUser = String(box.dataset.currentUser || "");
 	const seen = new Set(
@@ -17,6 +24,10 @@
 	);
 	let inFlight = false;
 	let stopped = false;
+	let selectedFile = null;
+	let cooldownUntil = 0;
+
+	const allowedReactions = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 	function showError(text) {
 		if (!errorEl) return;
@@ -55,10 +66,91 @@
 			return String(value || "");
 		}
 	}
+	function roleBadge(role) {
+		if (!["admin", "moderator", "creator"].includes(role)) return null;
+		const badge = document.createElement("span");
+		badge.className = `badge role-${role}`;
+		badge.textContent = role === "creator" ? "creador" : role === "admin" ? "admin" : "moderador";
+		return badge;
+	}
+	function makeAttachment(attachment) {
+		if (!attachment) return null;
+		const url = `/api/chat/files/${encodeURIComponent(attachment.id)}`;
+		if (String(attachment.type || "").startsWith("image/")) {
+			const link = document.createElement("a");
+			link.className = "chat-attachment";
+			link.href = url;
+			link.target = "_blank";
+			link.rel = "noopener";
+			const image = document.createElement("img");
+			image.src = url;
+			image.alt = attachment.name || "imagen";
+			image.loading = "lazy";
+			link.appendChild(image);
+			return link;
+		}
+		const link = document.createElement("a");
+		link.className = "chat-attachment file";
+		link.href = url;
+		link.target = "_blank";
+		link.rel = "noopener";
+		link.textContent = `${attachment.name || "archivo"} · ${Math.ceil((attachment.size || 0) / 1024)} KB`;
+		return link;
+	}
+	function makePoll(message) {
+		if (!message.poll) return null;
+		const poll = document.createElement("div");
+		poll.className = "chat-poll";
+		(message.poll.options || []).forEach((option, index) => {
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = "chat-poll-option";
+			button.dataset.chatVote = String(index);
+			const label = document.createElement("span");
+			label.textContent = option.text;
+			const count = document.createElement("b");
+			count.textContent = String(option.votes?.length || 0);
+			button.append(label, count);
+			poll.appendChild(button);
+		});
+		return poll;
+	}
+	function makeReactions(message) {
+		const wrap = document.createElement("div");
+		wrap.className = "chat-reactions";
+		for (const [emoji, votes] of Object.entries(message.reactions || {})) {
+			if (!votes?.length) continue;
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = "chat-reaction";
+			if (votes.some((v) => String(v).toLowerCase() === currentUser.toLowerCase())) {
+				button.classList.add("mine");
+			}
+			button.dataset.chatReaction = emoji;
+			button.textContent = `${emoji} ${votes.length}`;
+			wrap.appendChild(button);
+		}
+		const menu = document.createElement("details");
+		menu.className = "chat-reaction-menu";
+		const summary = document.createElement("summary");
+		summary.title = "Reaccionar";
+		summary.textContent = "☺";
+		const picker = document.createElement("div");
+		picker.className = "chat-reaction-picker";
+		for (const emoji of allowedReactions) {
+			const button = document.createElement("button");
+			button.type = "button";
+			button.dataset.chatReact = emoji;
+			button.textContent = emoji;
+			picker.appendChild(button);
+		}
+		menu.append(summary, picker);
+		wrap.appendChild(menu);
+		return wrap;
+	}
 	function makeMessage(message) {
 		const article = document.createElement("article");
-		const own =
-			String(message.username).toLowerCase() === currentUser.toLowerCase();
+		const own = String(message.username).toLowerCase() === currentUser.toLowerCase();
 		article.className = `chat-message${own ? " own" : ""}`;
 		article.dataset.chatMessage = "";
 		article.dataset.chatId = String(message.id);
@@ -66,7 +158,6 @@
 
 		const bubble = document.createElement("div");
 		bubble.className = "chat-bubble";
-
 		const meta = document.createElement("div");
 		meta.className = "chat-meta";
 		if (!own) {
@@ -75,19 +166,12 @@
 			author.textContent = String(message.username);
 			meta.appendChild(author);
 		}
-
-		if (["admin", "moderator", "creator"].includes(message.role)) {
-			const badge = document.createElement("span");
-			badge.className = `badge role-${message.role}`;
-			badge.textContent = message.role === "creator" ? "creador" : message.role === "admin" ? "admin" : "moderador";
-			meta.appendChild(badge);
-		}
-
+		const badge = roleBadge(message.role);
+		if (badge) meta.appendChild(badge);
 		const time = document.createElement("time");
 		time.dateTime = String(message.at);
 		time.textContent = timeText(message.at);
 		meta.appendChild(time);
-
 		if (message.canDelete) {
 			const remove = document.createElement("button");
 			remove.type = "button";
@@ -96,14 +180,26 @@
 			remove.textContent = "Eliminar";
 			meta.appendChild(remove);
 		}
-
-		const text = document.createElement("p");
-		text.className = "chat-text";
-		text.textContent = String(message.text);
-
-		bubble.append(meta, text);
+		bubble.appendChild(meta);
+		if (message.text) {
+			const text = document.createElement("p");
+			text.className = "chat-text";
+			text.textContent = String(message.text);
+			bubble.appendChild(text);
+		}
+		const attachment = makeAttachment(message.attachment);
+		if (attachment) bubble.appendChild(attachment);
+		const poll = makePoll(message);
+		if (poll) bubble.appendChild(poll);
+		bubble.appendChild(makeReactions(message));
 		article.appendChild(bubble);
 		return article;
+	}
+	function clearMessages() {
+		for (const el of box.querySelectorAll("[data-chat-message]")) el.remove();
+		seen.clear();
+		lastSeq = 0;
+		ensureEmpty();
 	}
 	function appendMessages(messages) {
 		let added = false;
@@ -118,18 +214,28 @@
 		if (added) removeEmpty();
 		return added;
 	}
-	function clearMessages() {
-		for (const el of box.querySelectorAll("[data-chat-message]")) el.remove();
-		seen.clear();
-		lastSeq = 0;
-		ensureEmpty();
+	function replaceMessage(message) {
+		const old = box.querySelector(`[data-chat-id="${CSS.escape(String(message.id))}"]`);
+		if (!old) return;
+		old.replaceWith(makeMessage(message));
 	}
 	function updateOnline(value) {
-		if (!onlineEl || value === null || value === undefined) return;
-		const n = Math.max(0, Number(value) || 0);
-		onlineEl.textContent = `${n} conectado${n === 1 ? "" : "s"}`;
+		if (value === null || value === undefined) return;
+		const list = Array.isArray(value) ? value : [];
+		if (onlineEl) {
+			const n = list.length;
+			onlineEl.textContent = `${n} conectado${n === 1 ? "" : "s"}`;
+		}
+		if (onlineUsersEl) {
+			onlineUsersEl.textContent = "";
+			for (const name of list) {
+				const chip = document.createElement("span");
+				chip.className = "chat-user-chip";
+				chip.textContent = name;
+				onlineUsersEl.appendChild(chip);
+			}
+		}
 	}
-
 	async function request(url, options = {}) {
 		const response = await fetch(url, {
 			cache: "no-store",
@@ -154,25 +260,27 @@
 		}
 		return data;
 	}
-
 	function markRead() {
 		if (document.hidden || lastSeq <= 0) return;
 		fetch("/api/chat/read", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Accept: "application/json" },
-			body: JSON.stringify({ seq: lastSeq }),
+			body: JSON.stringify({ channel: channelId, seq: lastSeq }),
 			keepalive: true,
 		}).catch(() => {});
 	}
-
 	async function refresh() {
 		if (inFlight || stopped || document.hidden) return;
 		inFlight = true;
 		try {
-			let data = await request(`/api/chat/messages?after=${lastSeq}`);
-			if (String(data.generation) !== generation || data.reset) {
-				data = await request("/api/chat/messages?after=0");
-				generation = String(data.generation || "1");
+			let data = await request(
+				`/api/chat/messages?channel=${encodeURIComponent(channelId)}&after=${lastSeq}`,
+			);
+			if (String(data.revision) !== revision || data.reset) {
+				data = await request(
+					`/api/chat/messages?channel=${encodeURIComponent(channelId)}&after=0`,
+				);
+				revision = String(data.revision || "0");
 				clearMessages();
 				appendMessages(data.messages);
 			} else {
@@ -197,42 +305,98 @@
 			inFlight = false;
 		}
 	}
+	async function refreshChannels() {
+		const data = await request("/api/chat/channels").catch(() => null);
+		if (!data) return;
+		updateOnline(data.online);
+		if (!channelSelect) return;
+		const current = channelSelect.value;
+		channelSelect.textContent = "";
+		for (const channel of data.channels || []) {
+			const option = document.createElement("option");
+			option.value = channel.id;
+			option.textContent = `${channel.name}${channel.unread ? ` (${channel.unread})` : ""}`;
+			if (channel.id === current) option.selected = true;
+			channelSelect.appendChild(option);
+		}
+	}
+	function switchChannel(value) {
+		channelId = value || "general";
+		box.dataset.channel = channelId;
+		if (channelHidden) channelHidden.value = channelId;
+		const url = new URL(location.href);
+		if (channelId === "general") url.searchParams.delete("channel");
+		else url.searchParams.set("channel", channelId);
+		history.replaceState(null, "", url);
+		seen.clear();
+		lastSeq = 0;
+		revision = "0";
+		for (const el of box.querySelectorAll("[data-chat-message]")) el.remove();
+		ensureEmpty();
+		clearError();
+		refresh();
+	}
+	async function uploadAndSend(text) {
+		let attachment = "";
+		if (selectedFile) {
+			if (selectedFile.size > 5 * 1024 * 1024) throw new Error("El archivo supera 5 MB.");
+			const response = await fetch("/api/chat/upload", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/octet-stream",
+					"X-File-Name": encodeURIComponent(selectedFile.name),
+					"X-File-Type": selectedFile.type,
+					Accept: "application/json",
+				},
+				body: selectedFile,
+			});
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) throw new Error(data.error === "invalid-type" ? "Tipo de archivo no permitido." : "No se pudo subir el archivo.");
+			attachment = data.upload.id;
+		}
+		return request("/api/chat/messages", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ text, channel: channelId, attachment }),
+		});
+	}
 
-	if (form && input) {
-		let cooldownUntil = 0;
-		const updateCounter = () => {
+	if (channelSelect) channelSelect.addEventListener("change", () => switchChannel(channelSelect.value));
+	if (input) {
+		input.addEventListener("input", () => {
 			if (counter) counter.textContent = String(input.value.length);
-		};
-		input.addEventListener("input", updateCounter);
+		});
 		input.addEventListener("keydown", (event) => {
 			if (event.key === "Enter" && !event.shiftKey) {
 				event.preventDefault();
-				form.requestSubmit();
+				form?.requestSubmit();
 			}
 		});
+	}
+	if (fileInput) {
+		fileInput.addEventListener("change", () => {
+			selectedFile = fileInput.files?.[0] || null;
+			if (fileName) fileName.textContent = selectedFile ? selectedFile.name : "";
+		});
+	}
+	if (form && input) {
 		form.addEventListener("submit", async (event) => {
 			event.preventDefault();
 			const text = input.value.trim();
-			if (!text) return;
+			if (!text && !selectedFile) return;
 			clearError();
 			if (send) send.disabled = true;
 			try {
-				const data = await request("/api/chat/messages", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ text }),
-				});
+				const data = await uploadAndSend(text);
 				input.value = "";
-				updateCounter();
-				if (data.message) {
-					if (String(data.message.id) && !seen.has(String(data.message.id))) {
-						seen.add(String(data.message.id));
-						box.appendChild(makeMessage(data.message));
-						lastSeq = Math.max(lastSeq, Number(data.message.seq) || 0);
-						removeEmpty();
-					}
-					scrollBottom(true);
-				}
+				selectedFile = null;
+				if (fileInput) fileInput.value = "";
+				if (fileName) fileName.textContent = "";
+				if (counter) counter.textContent = "0";
+				if (data.message) replaceMessage(data.message);
+				await refresh();
+				await refreshChannels();
+				scrollBottom(true);
 			} catch (error) {
 				showError(error.message);
 				if (error.data?.retryAfter) {
@@ -249,26 +413,137 @@
 			}
 		});
 	}
-
 	box.addEventListener("click", async (event) => {
-		const button = event.target.closest("[data-chat-delete]");
-		if (!button) return;
-		if (!confirm("¿Eliminar este mensaje?")) return;
-		const id = String(button.dataset.chatDelete || "");
-		if (!id) return;
-		button.disabled = true;
+		const deleteButton = event.target.closest("[data-chat-delete]");
+		if (deleteButton) {
+			if (!confirm("¿Eliminar este mensaje?")) return;
+			deleteButton.disabled = true;
+			try {
+				await request(`/api/chat/messages/${encodeURIComponent(deleteButton.dataset.chatDelete)}/delete`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ channel: channelId }),
+				});
+				const article = deleteButton.closest("[data-chat-message]");
+				seen.delete(String(deleteButton.dataset.chatDelete));
+				article?.remove();
+				ensureEmpty();
+				await refreshChannels();
+			} catch (error) {
+				showError(error.message);
+				deleteButton.disabled = false;
+			}
+			return;
+		}
+		const reaction = event.target.closest("[data-chat-react],[data-chat-reaction]");
+		if (reaction) {
+			event.preventDefault();
+			const article = reaction.closest("[data-chat-message]");
+			const messageId = article?.dataset.chatId;
+			const emoji = reaction.dataset.chatReact || reaction.dataset.chatReaction;
+			if (!messageId || !emoji) return;
+			try {
+				const data = await request(
+					`/api/chat/messages/${encodeURIComponent(messageId)}/reaction`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ emoji, channel: channelId }),
+					},
+				);
+				if (data.message) replaceMessage(data.message);
+			} catch (error) {
+				showError(error.message);
+			}
+			return;
+		}
+		const vote = event.target.closest("[data-chat-vote]");
+		if (vote) {
+			const article = vote.closest("[data-chat-message]");
+			const messageId = article?.dataset.chatId;
+			if (!messageId) return;
+			try {
+				const data = await request(
+					`/api/chat/polls/${encodeURIComponent(messageId)}/vote`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ option: Number(vote.dataset.chatVote), channel: channelId }),
+					},
+				);
+				if (data.message) replaceMessage(data.message);
+			} catch (error) {
+				showError(error.message);
+			}
+		}
+	});
+
+	function bindDialog(openId, dialogId) {
+		const open = document.getElementById(openId);
+		const dialog = document.getElementById(dialogId);
+		open?.addEventListener("click", () => dialog?.showModal());
+	}
+	bindDialog("chat-new-dm", "chat-dm-dialog");
+	bindDialog("chat-new-group", "chat-group-dialog");
+	bindDialog("chat-new-poll", "chat-poll-dialog");
+	document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+		button.addEventListener("click", () => button.closest("dialog")?.close());
+	});
+
+	document.getElementById("chat-dm-create")?.addEventListener("click", async () => {
+		const select = document.getElementById("chat-dm-user");
+		if (!select?.value) return;
 		try {
-			await request(`/api/chat/messages/${encodeURIComponent(id)}/delete`, {
+			await request("/api/chat/channels/dm", {
 				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ username: select.value }),
 			});
-			const article = button.closest("[data-chat-message]");
-			seen.delete(id);
-			article?.remove();
-			ensureEmpty();
-			clearError();
+			document.getElementById("chat-dm-dialog")?.close();
+			await refreshChannels();
+			const channels = await request("/api/chat/channels").catch(() => null);
+			const dm = channels?.channels?.find((c) => c.type === "dm" && c.name.toLowerCase() === select.value.toLowerCase());
+			if (dm) switchChannel(dm.id);
 		} catch (error) {
 			showError(error.message);
-			button.disabled = false;
+		}
+	});
+	document.getElementById("chat-group-create")?.addEventListener("click", async () => {
+		const name = document.getElementById("chat-group-name");
+		const members = document.getElementById("chat-group-members");
+		const selected = [...(members?.selectedOptions || [])].map((option) => option.value);
+		if (!name?.value.trim() || !selected.length) {
+			showError("Pon un nombre y elige al menos un miembro.");
+			return;
+		}
+		try {
+			const data = await request("/api/chat/channels/group", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: name.value, members: selected }),
+			});
+			document.getElementById("chat-group-dialog")?.close();
+			await refreshChannels();
+			if (data.channel) switchChannel(data.channel.id);
+		} catch (error) {
+			showError(error.message);
+		}
+	});
+	document.getElementById("chat-poll-create")?.addEventListener("click", async () => {
+		const question = document.getElementById("chat-poll-question");
+		const options = document.getElementById("chat-poll-options");
+		const values = String(options?.value || "").split("\n").map((v) => v.trim()).filter(Boolean);
+		try {
+			const data = await request("/api/chat/polls", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ channel: channelId, question: question?.value || "", options: values }),
+			});
+			document.getElementById("chat-poll-dialog")?.close();
+			if (data.message) replaceMessage(data.message);
+			await refresh();
+		} catch (error) {
+			showError(error.message);
 		}
 	});
 
@@ -279,6 +554,7 @@
 		}
 	});
 	setInterval(refresh, 4000);
+	setInterval(refreshChannels, 15000);
 	markRead();
 	refresh();
 	scrollBottom(true);
