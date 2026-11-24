@@ -248,7 +248,8 @@ usuario puede vaciar su propio historial.
 - `data/bookmarks.json`: favoritos por usuario.
 - `data/chat.json`: mensajes del chat interno.
 - `data/security.json`: alertas, IPs baneadas e historial reciente de logins para detección de intercambio de cuentas.
-- `backups/`: copias automáticas.
+- `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
+- Clave de cifrado: `BACKUP_KEY_FILE` (`/etc/webproxy/backup.key` en producción).
 
 Todo se guarda con permisos `600`. **No subas `data/` ni `backups/` a Git**:
 contienen datos personales. El `.gitignore` ya los excluye.
@@ -257,7 +258,7 @@ Medidas de seguridad incluidas:
 
 - nombres de usuario normalizados (Unicode NFKC, espacios y mayúsculas) antes de
   autenticar y aplicar políticas;
-- límite de intentos por IP, sin bloquear la cuenta (evita *lockout* DoS);
+- límite configurable de 20 intentos por minuto y IP, sin bloquear la cuenta (evita *lockout* DoS);
 - validación de `Origin`/`Referer` con HTTPS obligatorio (salvo localhost);
 - `/api/navigate-check` bloquea loopback, RFC1918, CGNAT, link-local, ULA y
   direcciones IPv4 mapeadas en IPv6, resolviendo DNS;
@@ -271,8 +272,16 @@ Medidas de seguridad incluidas:
 - cabeceras HSTS, CSP, `X-Frame-Options`, `X-Content-Type-Options`,
   `Referrer-Policy` y `Permissions-Policy` en el proxy inverso.
 
-Copia de seguridad desde `Sistema` o con el botón de descarga. Protege la copia:
-incluye hashes, IPs y navegadores.
+Las copias se guardan cifradas con AES-256-GCM fuera del web root
+(`/var/backups/proxy` en producción), con permisos `600`. Incluyen usuarios sin
+contraseñas, hashes, notas, IPs ni mensajes de bloqueo, y no incluyen actividad,
+auditoría ni chat. La clave se guarda en `BACKUP_KEY_FILE` (por defecto
+`/etc/webproxy/backup.key`) y la ruta con `BACKUP_DIR`.
+
+La descarga exige contraseña y auditoría; la restauración también exige
+contraseña y confirmación. Al restaurar se conservan las contraseñas actuales
+de las cuentas existentes. Protege la clave de cifrado: sin ella no se pueden
+restaurar las copias.
 
 ## Desarrollo
 

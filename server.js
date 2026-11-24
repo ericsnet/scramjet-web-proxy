@@ -163,6 +163,25 @@ function creatorNameSet() {
 	return set;
 }
 
+const ALLOWED_HOSTS = new Set(
+	String(
+		process.env.ALLOWED_HOSTS ||
+			"raspi-eric.tail41ccf3.ts.net,raspi-eric,localhost,127.0.0.1,[::1]",
+	)
+		.split(",")
+		.map((value) => value.trim().toLowerCase())
+		.filter(Boolean),
+);
+
+function hostName(req) {
+	const raw = String(req.headers.host || "").trim().toLowerCase();
+	if (raw.startsWith("[")) {
+		const end = raw.indexOf("]");
+		return end > 0 ? raw.slice(0, end + 1) : raw;
+	}
+	return raw.split(":")[0];
+}
+
 function hideCreatorData(req, items, getUsername) {
 	if (req.user?.role === "creator") return items;
 	const creators = creatorNameSet();
@@ -185,6 +204,12 @@ app.set("trust proxy", true);
 app.disable("x-powered-by");
 app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(express.json({ limit: "64kb" }));
+app.use((req, res, next) => {
+	if (!ALLOWED_HOSTS.has(hostName(req))) {
+		return res.status(421).type("text/plain").send("Host no válido.");
+	}
+	next();
+});
 app.use(securityMiddleware);
 app.use((req, res, next) => {
 	metric("requests_total");
@@ -713,11 +738,48 @@ function checkUrlPolicy(user, value) {
 const LOGIN_ERRORS = {
 	1: "Usuario o contraseña incorrectos.",
 	password: "La contraseña no es correcta.",
-	rate: "Demasiados intentos fallidos. Espera unos minutos.",
+	rate: "Demasiados intentos fallidos. Espera un minuto.",
 	blocked: "Esta cuenta está bloqueada. Contacta con el administrador.",
 	temporary: "Esta cuenta está bloqueada temporalmente. Contacta con el administrador.",
 	maintenance: "El proxy está en mantenimiento. Solo los administradores pueden entrar.",
 };
+
+const CSRF_COOKIE = "pw_csrf";
+
+function cookieValue(req, name) {
+	for (const part of String(req.headers.cookie || "").split(";")) {
+		const index = part.indexOf("=");
+		if (index < 0) continue;
+		if (part.slice(0, index).trim() === name) {
+			try {
+				return decodeURIComponent(part.slice(index + 1).trim());
+			} catch {
+				return part.slice(index + 1).trim();
+			}
+		}
+	}
+	return "";
+}
+
+function ensureCsrf(req, res) {
+	let token = cookieValue(req, CSRF_COOKIE);
+	if (!/^[a-f0-9]{48}$/.test(token)) {
+		token = crypto.randomBytes(24).toString("hex");
+		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+		res.setHeader(
+			"Set-Cookie",
+			`${CSRF_COOKIE}=${token}; Path=/; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`,
+		);
+	}
+	return token;
+}
+
+function validCsrf(req) {
+	const token = cookieValue(req, CSRF_COOKIE);
+	const provided = String(req.body.csrf || "");
+	if (!/^[a-f0-9]{48}$/.test(token) || !/^[a-f0-9]{48}$/.test(provided)) return false;
+	return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(provided));
+}
 
 const ACCOUNT_ERRORS = {
 	current: "La contraseña actual no es correcta.",
@@ -775,6 +837,18 @@ app.get("/robots.txt", (req, res) => {
 	res.type("text/plain").send("User-agent: *\nDisallow: /\n");
 });
 
+app.get("/.well-known/security.txt", (req, res) => {
+	res.type("text/plain").send(
+		[
+			"Contact: https://github.com/ericsnet/scramjet-web-proxy/security/advisories/new",
+			"Preferred-Languages: es, en",
+			"Canonical: https://raspi-eric.tail41ccf3.ts.net/.well-known/security.txt",
+			"Expires: 2027-11-24T00:00:00Z",
+			"",
+		].join("\n"),
+	);
+});
+
 app.get("/favicon.svg", (req, res) => {
 	res.set("Cache-Control", "public, max-age=86400");
 	res.type("image/svg+xml").sendFile(path.join(__dirname, "public/favicon.svg"));
@@ -789,18 +863,22 @@ app.get("/page-i18n.js", (req, res) => {
 
 app.get("/api/config", (req, res) => {
 	const settings = getSettings();
-	res.set("Cache-Control", "no-store");
-	res.json({
+	const session = getSession(req);
+	const payload = {
 		landingTitle: settings.landingTitle,
 		landingSubtitle: settings.landingSubtitle,
 		quickLinks: settings.quickLinks,
 		defaultSearchEngine: settings.defaultSearchEngine,
 		maintenanceMode: settings.maintenanceMode,
 		maintenanceMessage: settings.maintenanceMessage,
-		blockedSites: settings.blockedSites || [],
-		allowedSites: settings.allowedSites || [],
-		accessMode: settings.accessMode,
-	});
+	};
+	if (session) {
+		payload.blockedSites = settings.blockedSites || [];
+		payload.allowedSites = settings.allowedSites || [];
+		payload.accessMode = settings.accessMode;
+	}
+	res.set("Cache-Control", "no-store");
+	res.json(payload);
 });
 
 app.get("/metrics", (req, res) => {
@@ -863,6 +941,7 @@ app.get("/login", (req, res) => {
 			next: safeNext(req.query.next),
 			error,
 			maintenance: settings.maintenanceMode ? settings.maintenanceMessage : "",
+			csrf: ensureCsrf(req, res),
 		}),
 	);
 });
@@ -916,6 +995,9 @@ app.get("/denied", (req, res) => {
 });
 
 app.post("/api/login", sameOrigin, (req, res) => {
+	if (!validCsrf(req)) {
+		return res.status(403).type("text/plain").send("Token CSRF no válido. Recarga el login.");
+	}
 	const username = normalizeUsername(req.body.username);
 	const password = String(req.body.password || "");
 	const next = safeNext(req.body.next);
@@ -930,7 +1012,19 @@ app.post("/api/login", sameOrigin, (req, res) => {
 			ip,
 			userAgent: clientUa(req),
 		});
-		return res.redirect(303, `/login?error=rate&next=${encodeURIComponent(next)}`);
+		res.set("Retry-After", "60");
+		const wantsJson =
+			req.is("application/json") ||
+			String(req.get("accept") || "").includes("application/json");
+		if (wantsJson) return res.status(429).json({ error: "rate" });
+		return res.status(429).type("html").send(
+			loginPage({
+				next,
+				error: LOGIN_ERRORS.rate,
+				maintenance: settings.maintenanceMode ? settings.maintenanceMessage : "",
+				csrf: ensureCsrf(req, res),
+			}),
+		);
 	}
 
 	const user = verifyLogin(username, password);
@@ -1821,6 +1915,7 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		maxSessionsPerUser: req.body.maxSessionsPerUser,
 		sessionIdleHours: req.body.sessionIdleHours,
 		maxLoginAttempts: req.body.maxLoginAttempts,
+		loginAttemptsPerMinute: req.body.loginAttemptsPerMinute,
 		lockoutMinutes: req.body.lockoutMinutes,
 		activityEnabled: req.body.activityEnabled === "on",
 		activityPerUser: req.body.activityPerUser,
@@ -2052,40 +2147,22 @@ app.get("/admin/system", requireAdmin, async (req, res) => {
 	);
 });
 
-app.get("/admin/backup.json", requireAdmin, (req, res) => {
-	audit(req, "backup.download");
-	const usersFile = JSON.parse(
-		fs.readFileSync(path.join(__dirname, "data/users.json"), "utf8"),
-	);
-	const backup = {
-		version: 1,
-		exportedAt: new Date().toISOString(),
-		users: usersFile.users || {},
-		activity: exportActivity(),
-		settings: getSettings(),
-		audit: exportAudit(),
-		bookmarks: exportBookmarks(),
-		requests: exportRequests(),
-	};
-	res.setHeader("Content-Type", "application/json; charset=utf-8");
-	res.setHeader(
-		"Content-Disposition",
-		`attachment; filename="proxy-backup-${new Date().toISOString().slice(0, 10)}.json"`,
-	);
-	res.send(JSON.stringify(backup, null, 2));
+app.post("/api/admin/backup/download", requireAdmin, sameOrigin, (req, res) => {
+	const name = String(req.body.name || "");
+	const password = String(req.body.password || "");
+	if (!verifyUserPassword(req.user.username, password)) {
+		return res.status(403).type("text/plain").send("Contraseña incorrecta.");
+	}
+	const full = backupPath(name);
+	if (!full) return res.status(404).type("text/plain").send("Copia no encontrada.");
+	audit(req, "backup.download", path.basename(full));
+	res.download(full, path.basename(full));
 });
 
 app.post("/api/admin/backup/create", requireAdmin, sameOrigin, (req, res) => {
 	const info = createBackup("manual");
 	audit(req, "backup.create", info.name);
 	res.redirect(303, "/admin/system?ok=backup");
-});
-
-app.get("/admin/backup/download/:name", requireAdmin, sameSiteRequest, (req, res) => {
-	const full = backupPath(req.params.name);
-	if (!full) return res.status(404).type("text/plain").send("Copia no encontrada.");
-	audit(req, "backup.download", req.params.name);
-	res.download(full, path.basename(full));
 });
 
 app.post("/api/admin/backup/restore", requireAdmin, sameOrigin, (req, res) => {

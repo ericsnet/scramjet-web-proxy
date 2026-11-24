@@ -8,9 +8,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
-const ABSOLUTE_SESSION_MS = 90 * 24 * 60 * 60 * 1000; // 90 días como máximo
+const ABSOLUTE_SESSION_MS = 7 * 24 * 60 * 60 * 1000; // 7 días como máximo
 
-export const SESSION_COOKIE = "pw_session";
+export const SESSION_COOKIE = "__Host-pw_session";
+const LEGACY_SESSION_COOKIE = "pw_session";
 
 const sessions = new Map(); // tokenHash -> { id, username, createdAt, lastSeenAt, expires, absoluteExpires, ip, userAgent }
 const loginAttempts = new Map(); // username -> { count, resetAt }
@@ -732,7 +733,8 @@ function parseCookies(header) {
 }
 
 export function getSession(req) {
-	const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+	const cookies = parseCookies(req.headers.cookie);
+	const token = cookies[SESSION_COOKIE] || cookies[LEGACY_SESSION_COOKIE];
 	if (!token) return null;
 	const key = hashToken(token);
 	const session = sessions.get(key);
@@ -792,12 +794,17 @@ export function sessionCookie(req, token, expires) {
 		0,
 		Math.floor(((expires || Date.now() + settings.sessionHours * 3600_000) - Date.now()) / 1000),
 	);
-	return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
+	const name = secure ? SESSION_COOKIE : LEGACY_SESSION_COOKIE;
+	return `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
 }
 
 export function clearSessionCookie(req) {
 	const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-	return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`;
+	const suffix = secure ? "; Secure" : "";
+	return [
+		`${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${suffix}`,
+		`${LEGACY_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${suffix}`,
+	];
 }
 
 export function flushSessions() {
@@ -839,14 +846,14 @@ export function isIpRateLimited(ip) {
 		ipAttempts.delete(ip);
 		return false;
 	}
-	return entry.count >= Math.max(20, settings.maxLoginAttempts * 4);
+	return entry.count >= Math.max(5, Number(settings.loginAttemptsPerMinute) || 20);
 }
 
 export function recordIpFailure(ip) {
 	if (!ip) return;
 	const settings = getSettings();
 	const entry = ipAttempts.get(ip);
-	const windowMs = settings.lockoutMinutes * 60_000;
+	const windowMs = 60_000;
 	if (!entry || entry.resetAt < Date.now()) {
 		ipAttempts.set(ip, { count: 1, resetAt: Date.now() + windowMs });
 	} else {

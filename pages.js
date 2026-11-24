@@ -411,7 +411,7 @@ function toLocalInput(iso) {
 	}
 }
 
-export function loginPage({ next = "/", error = "", maintenance = "" } = {}) {
+export function loginPage({ next = "/", error = "", maintenance = "", csrf = "" } = {}) {
 	const body = `<div class="card login-card">
   <div class="login-logo">${LOGO}</div>
   <h1>Proxy <span style="color:var(--accent)">Web</span></h1>
@@ -419,6 +419,7 @@ export function loginPage({ next = "/", error = "", maintenance = "" } = {}) {
   ${maintenance ? `<p class="warn">${esc(maintenance)}</p>` : ""}
   <form method="post" action="/api/login">
     <input type="hidden" name="next" value="${esc(next)}">
+    <input type="hidden" name="csrf" value="${esc(csrf)}">
     <label for="username">Usuario</label>
     <input id="username" name="username" autocomplete="username" required autofocus>
     <label for="password">Contraseña</label>
@@ -1411,7 +1412,11 @@ ${adminTabs("settings")}
         <input id="sessionIdleHours" name="sessionIdleHours" type="number" min="1" max="720" value="${settings.sessionIdleHours || 12}" required>
       </div>
       <div>
-        <label for="maxLoginAttempts">Intentos de login antes de bloquear</label>
+        <label for="loginAttemptsPerMinute">Intentos de login por minuto y IP</label>
+        <input id="loginAttemptsPerMinute" name="loginAttemptsPerMinute" type="number" min="5" max="100" value="${settings.loginAttemptsPerMinute || 20}" required>
+      </div>
+      <div>
+        <label for="maxLoginAttempts">Intentos fallidos por usuario (referencia)</label>
         <input id="maxLoginAttempts" name="maxLoginAttempts" type="number" min="3" max="20" value="${settings.maxLoginAttempts}" required>
       </div>
       <div>
@@ -1734,9 +1739,8 @@ ${adminTabs("system")}
   <p class="muted">URL pública: <a href="${esc(url)}">${esc(url)}</a></p>
   <pre class="panel">${esc(funnel.output || "Sin información")}</pre>
   <h2>Copias de seguridad</h2>
-  <p class="muted">Incluye usuarios (con hashes), actividad, ajustes, auditoría y favoritos. Guárdala en un sitio seguro.</p>
+  <p class="muted">Cifradas con AES-256-GCM. No incluyen hashes de contraseña, notas, IPs, mensajes de bloqueo ni historial/chat. Al restaurar se conservan las contraseñas actuales de las cuentas existentes.</p>
   <div class="actions" style="margin-bottom:14px">
-    <a class="small" href="/admin/backup.json">Descargar copia actual</a>
     <form method="post" action="/api/admin/backup/create">
       <button class="small" type="submit">Crear copia ahora</button>
     </form>
@@ -1751,11 +1755,19 @@ ${adminTabs("system")}
       <td class="mono">${esc(b.name)}</td>
       <td class="mono">${esc(fmtDate(b.createdAt))}</td>
       <td>${esc(fmtBytes(b.size))}</td>
-      <td><a class="small" href="/admin/backup/download/${encodeURIComponent(b.name)}">Descargar</a></td>
+      <td><span class="muted">cifrada</span></td>
     </tr>`,
 			)
 			.join("")}</tbody>
   </table></div>
+  <form method="post" action="/api/admin/backup/download" class="actions" style="margin-top:16px"
+    onsubmit="return confirm('¿Descargar esta copia cifrada?')">
+    <select name="name" required aria-label="Copia a descargar">
+      ${backups.map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join("")}
+    </select>
+    <input name="password" type="password" placeholder="Tu contraseña" required aria-label="Contraseña para descargar">
+    <button class="small" type="submit">Descargar cifrada</button>
+  </form>
   <form method="post" action="/api/admin/backup/restore" style="margin-top:16px"
     onsubmit="return confirm('¿Restaurar esta copia? Se sobrescribirán los datos actuales.')">
     <label for="restore-name">Restaurar copia</label>
