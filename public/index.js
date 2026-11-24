@@ -161,7 +161,11 @@ async function init() {
 	const cachePlugin = new $scramjetUtils.HttpCachePlugin();
 	const urlWatcher = new $scramjetUtils.UrlWatcherPlugin(handleFrameUrl);
 	const catchEscapedLinks = new $scramjetUtils.CatchEscapedLinksPlugin(
-		(url) => new URL(`/?goto=${encodeURIComponent(url.href)}`, location.origin),
+		(url) =>
+			new URL(
+				`/?goto=${encodeURIComponent(url.href)}&gid=${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+				location.origin,
+			),
 	);
 
 	frame = controller.createFrame(frameElement, {
@@ -471,6 +475,7 @@ function goHome() {
 	frameWrapper.style.display = "none";
 	landing.style.display = "flex";
 	document.title = "Proxy Web";
+	if (address) address.value = "";
 	address.focus();
 }
 
@@ -755,8 +760,27 @@ window.addEventListener("message", (event) => {
 	}
 });
 
-const goto = new URL(location.href).searchParams.get("goto");
+const initialParams = new URL(location.href).searchParams;
+const goto = initialParams.get("goto");
+const gotoId = initialParams.get("gid") || goto;
 if (goto) {
 	history.replaceState(null, "", location.pathname);
-	navigate(goto).catch((err) => showErrorScreen(err.message, err.stack));
+	let alreadyOpened = false;
+	try {
+		const seen = JSON.parse(sessionStorage.getItem("pw_consumed_gotos") || "[]");
+		alreadyOpened = seen.includes(gotoId);
+		if (!alreadyOpened) {
+			seen.push(gotoId);
+			sessionStorage.setItem(
+				"pw_consumed_gotos",
+				JSON.stringify(seen.slice(-30)),
+			);
+		}
+	} catch {}
+	if (!alreadyOpened) {
+		navigate(goto).catch((err) => showErrorScreen(err.message, err.stack));
+	}
+} else if (address) {
+	// Evita que el navegador restaure la última URL y la envíe sin querer.
+	address.value = "";
 }
