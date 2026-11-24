@@ -672,6 +672,7 @@ function checkUrlPolicy(user, value) {
 }
 const LOGIN_ERRORS = {
 	1: "Usuario o contraseña incorrectos.",
+	password: "La contraseña no es correcta.",
 	rate: "Demasiados intentos fallidos. Espera unos minutos.",
 	blocked: "Esta cuenta está bloqueada. Contacta con el administrador.",
 	temporary: "Esta cuenta está bloqueada temporalmente. Contacta con el administrador.",
@@ -892,6 +893,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 
 	const user = verifyLogin(username, password);
 	if (!user) {
+		const accountExists = !!getUser(username);
 		recordFailedLogin(username);
 		recordIpFailure(ip);
 		metric("logins_failed_total");
@@ -901,7 +903,10 @@ app.post("/api/login", sameOrigin, (req, res) => {
 			ip,
 			userAgent: clientUa(req),
 		});
-		return res.redirect(303, `/login?error=1&next=${encodeURIComponent(next)}`);
+		return res.redirect(
+			303,
+			`/login?error=${accountExists ? "password" : "1"}&next=${encodeURIComponent(next)}`,
+		);
 	}
 	if (user.blocked) {
 		metric("logins_blocked_total");
