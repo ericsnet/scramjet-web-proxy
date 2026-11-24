@@ -53,6 +53,7 @@ import {
 import {
 	loginPage,
 	accountPage,
+	errorPage,
 	adminPage,
 	activityPage,
 	sessionsPage,
@@ -216,7 +217,7 @@ app.use((req, res, next) => {
 		return next();
 	}
 	if (!ALLOWED_HOSTS.has(host)) {
-		return res.status(421).type("text/plain").send("Host no válido.");
+		return sendHttpError(req, res, 421, "Destino no válido", "El dominio usado para acceder no está permitido.");
 	}
 	next();
 });
@@ -436,6 +437,28 @@ function safeNext(next) {
 	}
 }
 
+function wantsJsonRequest(req) {
+	return (
+		req.path.startsWith("/api/") ||
+		req.is("application/json") ||
+		String(req.get("accept") || "").includes("application/json")
+	);
+}
+
+function sendHttpError(req, res, status, title = "", message = "") {
+	if (res.headersSent) return;
+	if (wantsJsonRequest(req)) {
+		return res.status(status).json({
+			error: title || `http_${status}`,
+			message: message || "No se pudo completar la petición.",
+		});
+	}
+	return res
+		.status(status)
+		.type("html")
+		.send(errorPage({ status, title, message, user: req.user || null }));
+}
+
 function requireAuth(req, res, next) {
 	const session = getSession(req);
 	if (!session) {
@@ -517,14 +540,14 @@ function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
 	if (!req.user || !isAdminRole(req.user.role)) {
-		return res.status(403).type("text/plain").send("Solo administradores.");
+		return sendHttpError(req, res, 403, "Acceso restringido", "Solo administradores.");
 	}
 	next();
 }
 
 function requireStaff(req, res, next) {
 	if (!req.user || !isStaffRole(req.user.role)) {
-		return res.status(403).type("text/plain").send("Solo administradores o moderadores.");
+		return sendHttpError(req, res, 403, "Acceso restringido", "Solo administradores o moderadores.");
 	}
 	next();
 }
@@ -586,7 +609,7 @@ function wantsChatJson(req) {
 function sameOrigin(req, res, next) {
 	const site = req.headers["sec-fetch-site"];
 	if (site && site !== "same-origin" && site !== "none") {
-		return res.status(403).type("text/plain").send("Origen no válido.");
+		return sendHttpError(req, res, 403, "Origen no válido", "La petición no proviene del origen correcto.");
 	}
 	const origin = req.headers.origin;
 	if (!origin || origin === "null") {
@@ -602,7 +625,7 @@ function sameOrigin(req, res, next) {
 				}
 			} catch {}
 		}
-		return res.status(403).type("text/plain").send("Origen requerido.");
+		return sendHttpError(req, res, 403, "Origen requerido", "Falta la cabecera de origen de la petición.");
 	}
 	try {
 		const parsed = new URL(origin);
@@ -610,13 +633,13 @@ function sameOrigin(req, res, next) {
 			parsed.protocol === "http:" &&
 			["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
 		if (parsed.protocol !== "https:" && !local) {
-			return res.status(403).type("text/plain").send("Origen no válido.");
+			return sendHttpError(req, res, 403, "Origen no válido", "La petición no proviene del origen correcto.");
 		}
 		if (parsed.host !== req.headers.host) {
-			return res.status(403).type("text/plain").send("Origen no válido.");
+			return sendHttpError(req, res, 403, "Origen no válido", "La petición no proviene del origen correcto.");
 		}
 	} catch {
-		return res.status(403).type("text/plain").send("Origen no válido.");
+		return sendHttpError(req, res, 403, "Origen no válido", "La petición no proviene del origen correcto.");
 	}
 	next();
 }
@@ -625,16 +648,16 @@ function sameOrigin(req, res, next) {
 function sameSiteRequest(req, res, next) {
 	const site = req.headers["sec-fetch-site"];
 	if (site && site !== "same-origin" && site !== "none") {
-		return res.status(403).type("text/plain").send("Origen no válido.");
+		return sendHttpError(req, res, 403, "Origen no válido", "La petición no proviene del origen correcto.");
 	}
 	const referer = req.headers.referer;
 	if (referer) {
 		try {
 			if (new URL(referer).host !== req.headers.host) {
-				return res.status(403).type("text/plain").send("Origen no válido.");
+				return sendHttpError(req, res, 403, "Origen no válido", "La petición no proviene del origen correcto.");
 			}
 		} catch {
-			return res.status(403).type("text/plain").send("Origen no válido.");
+			return sendHttpError(req, res, 403, "Origen no válido", "La petición no proviene del origen correcto.");
 		}
 	}
 	next();
@@ -1072,7 +1095,7 @@ app.get("/denied", (req, res) => {
 
 app.post("/api/login", sameOrigin, (req, res) => {
 	if (!validCsrf(req)) {
-		return res.status(403).type("text/plain").send("Token CSRF no válido. Recarga el login.");
+		return sendHttpError(req, res, 403, "Token de seguridad no válido", "Recarga el login e inténtalo de nuevo.");
 	}
 	const username = normalizeUsername(req.body.username);
 	const password = String(req.body.password || "");
@@ -2617,6 +2640,25 @@ app.get("/sw.js", (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, "public")));
+
+app.use((req, res) => {
+	sendHttpError(req, res, 404, "Página no encontrada", "La dirección no existe o se ha movido.");
+});
+
+app.use((err, req, res, next) => {
+	console.error("HTTP error:", err?.message || err);
+	const status =
+		err?.type === "entity.too.large"
+			? 413
+			: Number(err?.status || err?.statusCode) || 500;
+	sendHttpError(
+		req,
+		res,
+		status,
+		status === 413 ? "Contenido demasiado grande" : "",
+		status === 413 ? "El contenido enviado supera el límite permitido." : "",
+	);
+});
 
 /* --------------------------------- servidor --------------------------------- */
 

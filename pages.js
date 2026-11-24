@@ -496,6 +496,17 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
   padding-left:max(14px,calc((100vw - 860px)/2));padding-right:max(14px,calc((100vw - 860px)/2))}
 .tabs::-webkit-scrollbar{display:none}
 .tabs a{white-space:nowrap;flex:0 0 auto}
+.error-screen{text-align:center;padding:48px 20px 56px;position:relative;overflow:hidden}
+.error-orbit{display:grid;place-items:center;width:92px;height:92px;margin:0 auto 16px;border-radius:28px;
+  background:radial-gradient(circle at 30% 20%,#1d3d66,#0e1b2c);border:1px solid #2f4c6b;
+  box-shadow:0 18px 50px rgba(37,99,235,.2)}
+.error-orbit span{font-size:38px;filter:saturate(.9)}
+.error-code{font-size:clamp(68px,14vw,120px);font-weight:800;letter-spacing:-.08em;line-height:.9;
+  background:linear-gradient(180deg,#dbeafe,#3b82f6 65%,#1d4ed8);-webkit-background-clip:text;background-clip:text;color:transparent}
+.error-screen h1{font-size:clamp(24px,4vw,34px);margin:18px 0 8px}
+.error-screen p{max-width:520px;margin:0 auto;color:var(--muted);font-size:14.5px;line-height:1.6}
+.error-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:24px}
+.error-actions .small{margin:0}
 .topbar{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-left:20px;padding-right:20px}
 .topbar::-webkit-scrollbar{display:none}
 `;
@@ -630,6 +641,46 @@ export function loginPage({ next = "/", error = "", maintenance = "", csrf = "" 
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
 </div>`;
 	return shell("Entrar · Proxy Web", body);
+}
+
+const HTTP_ERRORS = {
+	400: ["Solicitud no válida", "La petición no tiene el formato esperado.", "🧩"],
+	401: ["Necesitas iniciar sesión", "Tu sesión no es válida o ha caducado.", "🔐"],
+	403: ["Acceso restringido", "No tienes permisos para ver este contenido.", "⛔"],
+	404: ["Página no encontrada", "La dirección no existe o se ha movido.", "🧭"],
+	405: ["Método no permitido", "Esta acción no está permitida en esta ruta.", "🛑"],
+	408: ["Tiempo de espera agotado", "La petición tardó demasiado. Inténtalo de nuevo.", "⏳"],
+	413: ["Contenido demasiado grande", "El archivo o formulario supera el límite permitido.", "📦"],
+	418: ["Soy una tetera", "El servidor está haciendo café, no té.", "🫖"],
+	421: ["Destino no válido", "El dominio usado para acceder no está permitido.", "🌐"],
+	429: ["Demasiadas peticiones", "Has hecho demasiadas solicitudes en poco tiempo.", "🐢"],
+	451: ["Contenido no disponible", "Este contenido no está disponible por motivos legales.", "⚖️"],
+	500: ["Error interno", "Algo falló en el servidor. Ya se está revisando.", "🧯"],
+	501: ["Aún no implementado", "Esta función todavía no está disponible.", "🚧"],
+	502: ["Pasarela incorrecta", "Un servicio intermedio devolvió una respuesta no válida.", "🔌"],
+	503: ["Servicio no disponible", "El servicio está temporalmente fuera de línea.", "🛠️"],
+	504: ["Pasarela sin respuesta", "El servicio tardó demasiado en responder.", "📡"],
+};
+
+export function errorPage({ status = 500, title = "", message = "", user = null } = {}) {
+	const code = Number(status) || 500;
+	const info = HTTP_ERRORS[code] || ["Error del servidor", "No se pudo completar la operación.", "⚠️"];
+	const heading = title || info[0];
+	const detail = message || info[1];
+	const icon = info[2];
+	const body = `<div class="error-screen">
+  <div class="error-orbit" aria-hidden="true"><span>${esc(icon)}</span></div>
+  <div class="error-code">${esc(code)}</div>
+  <h1>${esc(heading)}</h1>
+  <p>${esc(detail)}</p>
+  <div class="error-actions">
+    <a class="small primary-small" href="/">Volver al inicio</a>
+    ${user ? '<a class="small" href="/account">Mi cuenta</a>' : '<a class="small" href="/login">Iniciar sesión</a>'}
+    <button class="small" type="button" onclick="history.back()">Volver atrás</button>
+  </div>
+  ${code >= 500 ? '<p class="hint">Si el problema continúa, contacta con el administrador.</p>' : ""}
+</div>`;
+	return shell(`${code} · ${heading}`, body, { topbar: user ? topbar(user) : "", chatFab: false });
 }
 
 export function accountPage({
