@@ -491,10 +491,12 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
   .chat-form button.primary{width:100%}}
 @media(max-width:640px){.field-grid{grid-template-columns:1fr}.link-row{grid-template-columns:1fr}
   .tabs a{font-size:12px;padding:7px 10px}}
-.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;width:100vw;max-width:100vw;
+  margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);border-radius:0;border-left:0;border-right:0;
+  padding-left:max(14px,calc((100vw - 860px)/2));padding-right:max(14px,calc((100vw - 860px)/2))}
 .tabs::-webkit-scrollbar{display:none}
 .tabs a{white-space:nowrap;flex:0 0 auto}
-.topbar{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;white-space:nowrap}
+.topbar{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-left:20px;padding-right:20px}
 .topbar::-webkit-scrollbar{display:none}
 `;
 
