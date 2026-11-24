@@ -1038,7 +1038,7 @@ ${
 		? `<div class="card" style="margin-bottom:22px">
   <h2>Escáner de seguridad</h2>
   <p class="muted" style="margin-bottom:10px">
-    ${security.open ? `${security.open} alerta${security.open === 1 ? "" : "s"} abierta${security.open === 1 ? "" : "s"} · ${security.bots} con comportamiento de bot · ${security.banned} IP${security.banned === 1 ? "" : "s"} baneada${security.banned === 1 ? "" : "s"}.` : "Sin alertas abiertas. El escáner sigue observando patrones sospechosos y comportamiento automatizado."}
+    ${security.open ? `${security.open} alerta${security.open === 1 ? "" : "s"} abierta${security.open === 1 ? "" : "s"} · ${security.bots} con comportamiento de bot · ${security.banned} bloqueo${security.banned === 1 ? "" : "s"} activo${security.banned === 1 ? "" : "s"}.` : "Sin alertas abiertas. El escáner sigue observando patrones sospechosos y comportamiento automatizado."}
   </p>
   <a class="small" href="/admin/security">Abrir escáner</a>
 </div>`
@@ -1263,6 +1263,7 @@ export function securityPage({
 	bans = [],
 	summary = {},
 	currentIp = "",
+	currentDevice = "",
 	includeDismissed = false,
 	notice = "",
 	error = "",
@@ -1293,7 +1294,7 @@ export function securityPage({
 			const botExtra = a.bot && kind === "hacking" ? ' <span class="badge bot">bot</span>' : "";
 			return `<tr>
   <td>${badge}${botExtra}<br><span class="mono">${esc(fmtDate(a.lastSeen))}</span></td>
-  <td><strong class="mono">${esc(a.ip)}</strong>${a.banned ? '<br><span class="badge blocked">baneada</span>' : ""}<br><span class="muted">${esc(a.username || "sin sesión")}</span></td>
+  <td><strong class="mono">${esc(a.ip)}</strong>${a.banned ? '<br><span class="badge blocked">bloqueado</span>' : ""}<br><span class="muted">${esc(a.username || "sin sesión")}</span>${a.device ? `<br><span class="mono" title="ID de dispositivo">${esc(a.device.slice(0, 10))}…</span>` : ""}</td>
   <td><strong>${esc(a.score)}</strong><br><span class="muted">${esc(a.count)} eventos</span></td>
   <td>${reasons || "—"}</td>
   <td class="mono">${esc(a.lastMethod || "")} ${esc(a.lastPath || "")}<br><span class="muted">${esc(a.userAgent || "sin user-agent")}</span></td>
@@ -1306,20 +1307,46 @@ export function securityPage({
     </form>`
 				: '<span class="muted">descartada</span>'
 		}
-    ${
-			a.banned
-				? `<form method="post" action="/api/admin/security/unban" onsubmit="return confirm('¿Quitar el bloqueo de esta IP?')">
-      <input type="hidden" name="ip" value="${esc(a.ip)}">
-      <button class="small" type="submit">Desbanear</button>
-    </form>`
-				: `<form method="post" action="/api/admin/security/ban" onsubmit="return confirm('¿Banear esta IP? El usuario no podrá acceder hasta que la desbanees.')">
-      <input type="hidden" name="ip" value="${esc(a.ip)}">
-      <input type="hidden" name="alert" value="${esc(a.id)}">
-      <input type="hidden" name="kind" value="${kind === "bot" ? "bot" : "hack"}">
-      <input name="reason" maxlength="200" placeholder="Motivo (opcional)" aria-label="Motivo del baneo">
-      <button class="small danger" type="submit"${a.ip === currentIp ? " disabled" : ""}>Banear IP</button>
-    </form>`
-		}
+    ${(() => {
+			const currentBans = a.bans || [];
+			const has = (type) => currentBans.some((b) => b.type === type);
+			const kindValue = kind === "bot" ? "bot" : "hack";
+			const forms = [];
+			if (a.device && !has("device")) {
+				forms.push(`<form method="post" action="/api/admin/security/ban" onsubmit="return confirm('¿Bloquear este dispositivo/navegador? Solo se bloqueará este navegador, no toda la IP.')">
+          <input type="hidden" name="type" value="device">
+          <input type="hidden" name="target" value="${esc(a.device)}">
+          <input type="hidden" name="alert" value="${esc(a.id)}">
+          <input type="hidden" name="kind" value="${kindValue}">
+          <button class="small danger" type="submit"${a.device === currentDevice ? " disabled" : ""}>Banear dispositivo</button>
+        </form>`);
+			}
+			if (a.username && !has("user")) {
+				forms.push(`<form method="post" action="/api/admin/security/ban" onsubmit="return confirm('¿Bloquear esta cuenta? Se cerrarán sus sesiones y no podrá iniciar sesión hasta desbanearla.')">
+          <input type="hidden" name="type" value="user">
+          <input type="hidden" name="target" value="${esc(a.username)}">
+          <input type="hidden" name="alert" value="${esc(a.id)}">
+          <input type="hidden" name="kind" value="user">
+          <button class="small danger" type="submit">Banear usuario</button>
+        </form>`);
+			}
+			if (!has("ip")) {
+				forms.push(`<form method="post" action="/api/admin/security/ban" onsubmit="return confirm('¿Banear la IP completa? Afectará a todos los dispositivos de esa conexión, incluida tu casa si comparten IP.')">
+          <input type="hidden" name="type" value="ip">
+          <input type="hidden" name="target" value="${esc(a.ip)}">
+          <input type="hidden" name="alert" value="${esc(a.id)}">
+          <input type="hidden" name="kind" value="${kindValue}">
+          <button class="small danger" type="submit"${a.ip === currentIp ? " disabled" : ""}>Banear IP</button>
+        </form>`);
+			}
+			for (const ban of currentBans) {
+				forms.push(`<form method="post" action="/api/admin/security/unban">
+          <input type="hidden" name="key" value="${esc(ban.key)}">
+          <button class="small" type="submit">Desbanear ${ban.type === "device" ? "dispositivo" : ban.type === "user" ? "usuario" : "IP"}</button>
+        </form>`);
+			}
+			return forms.join("");
+		})()}
   </div></td>
 </tr>`;
 		})
@@ -1327,13 +1354,14 @@ export function securityPage({
 	const banRows = bans
 		.map(
 			(b) => `<tr>
-  <td class="mono">${esc(b.ip)}</td>
+  <td class="mono">${esc(b.value || b.key)}</td>
+  <td><span class="badge ${b.type === "device" ? "admin" : "blocked"}">${b.type === "device" ? "dispositivo" : b.type === "user" ? "usuario" : "IP"}</span></td>
   <td><span class="badge ${b.kind === "bot" ? "bot" : "blocked"}">${b.kind === "bot" ? "bot" : b.kind === "hack" ? "hacking" : "manual"}</span></td>
   <td>${esc(b.by || "—")}</td>
   <td>${esc(b.reason || "—")}</td>
   <td class="mono">${esc(fmtDate(b.at))}</td>
-  <td><form method="post" action="/api/admin/security/unban" onsubmit="return confirm('¿Quitar el bloqueo de esta IP?')">
-    <input type="hidden" name="ip" value="${esc(b.ip)}">
+  <td><form method="post" action="/api/admin/security/unban" onsubmit="return confirm('¿Quitar este bloqueo?')">
+    <input type="hidden" name="key" value="${esc(b.key)}">
     <button class="small" type="submit">Desbanear</button>
   </form></td>
 </tr>`,
@@ -1344,15 +1372,16 @@ ${adminTabs("security", user.role)}
 <div class="stats">
   <div class="stat"><div class="k">Alertas abiertas</div><div class="v">${esc(summary.open || 0)}</div></div>
   <div class="stat"><div class="k">Bots detectados</div><div class="v">${esc(summary.bots || 0)}</div></div>
-  <div class="stat"><div class="k">IPs baneadas</div><div class="v">${esc(summary.banned || 0)}</div></div>
+  <div class="stat"><div class="k">Bloqueos activos</div><div class="v">${esc(summary.banned || 0)}</div></div>
   <div class="stat"><div class="k">Últimas 24 h</div><div class="v">${esc(summary.last24h || 0)}</div></div>
 </div>
 <div class="card">
   <h1>Escáner de seguridad</h1>
   <p class="muted">
     El escáner observa peticiones y comportamiento: rutas de escaneo, intentos de inyección, accesos no autorizados,
-    enumeración de API, ráfagas, intervalos automatizados y user-agents de bot. No bloquea automáticamente:
-    decide tú si baneas una IP.
+    enumeración de API, ráfagas, intervalos automatizados y user-agents de bot. No bloquea automáticamente.
+    Puedes bloquear un <strong>dispositivo/navegador</strong>, una <strong>cuenta</strong> o una <strong>IP completa</strong>;
+    la IP afecta a todos los dispositivos de esa conexión.
   </p>
   <div class="filter">
     <a class="small${includeDismissed ? "" : " active"}" href="/admin/security">Abiertas</a>
@@ -1370,8 +1399,8 @@ ${adminTabs("security", user.role)}
 	}
 </div>
 <div class="card">
-  <h2>IPs baneadas (${bans.length})</h2>
-  ${banRows ? `<div class="scroll"><table><thead><tr><th>IP</th><th>Tipo</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay IPs baneadas.</p>'}
+  <h2>Bloqueos activos (${bans.length})</h2>
+  ${banRows ? `<div class="scroll"><table><thead><tr><th>Objetivo</th><th>Tipo</th><th>Categoría</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay bloqueos activos.</p>'}
 </div>`;
 	return shell("Seguridad · Administración", body, { topbar: topbar(user) });
 }

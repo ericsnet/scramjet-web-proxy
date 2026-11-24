@@ -113,8 +113,9 @@ import {
 	securitySummary,
 	listSecurityAlerts,
 	listBans,
-	banIp,
-	unbanIp,
+	banTarget,
+	unbanTarget,
+	isUserBanned,
 	dismissAlert,
 	recordSuccessfulLogin,
 	flushSecurity,
@@ -381,6 +382,17 @@ function requireAuth(req, res, next) {
 		}
 		const nextUrl = encodeURIComponent(req.originalUrl || "/");
 		return res.redirect(303, `/login?next=${nextUrl}`);
+	}
+
+	if (isUserBanned(session.username)) {
+		destroySession(session.token);
+		const token = createBlockFlash(
+			"Tu cuenta está bloqueada por seguridad. Contacta con un administrador.",
+		);
+		if (req.path.startsWith("/api/")) {
+			return res.status(403).json({ error: "user_banned" });
+		}
+		return res.redirect(303, `/blocked?t=${token}`);
 	}
 
 	const settings = getSettings();
@@ -766,10 +778,12 @@ function ensureCsrf(req, res) {
 	if (!/^[a-f0-9]{48}$/.test(token)) {
 		token = crypto.randomBytes(24).toString("hex");
 		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-		res.setHeader(
-			"Set-Cookie",
-			`${CSRF_COOKIE}=${token}; Path=/; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`,
-		);
+		const cookie = `${CSRF_COOKIE}=${token}; Path=/; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`;
+		try {
+			res.append("Set-Cookie", cookie);
+		} catch {
+			res.setHeader("Set-Cookie", cookie);
+		}
 	}
 	return token;
 }
@@ -1043,6 +1057,19 @@ app.post("/api/login", sameOrigin, (req, res) => {
 			303,
 			`/login?error=${accountExists ? "password" : "1"}&next=${encodeURIComponent(next)}`,
 		);
+	}
+	if (isUserBanned(user.username)) {
+		metric("logins_blocked_total");
+		addAudit({
+			actor: user.username,
+			action: "login.banned",
+			ip,
+			userAgent: clientUa(req),
+		});
+		const token = createBlockFlash(
+			"Tu cuenta está bloqueada por seguridad. Contacta con un administrador.",
+		);
+		return res.redirect(303, `/blocked?t=${token}`);
 	}
 	if (user.blocked) {
 		metric("logins_blocked_total");
@@ -1600,14 +1627,14 @@ app.get("/admin", requireStaff, (req, res) => {
 app.get("/admin/security", requireAdmin, (req, res) => {
 	const includeDismissed = req.query.all === "1";
 	const notices = {
-		banned: "IP baneada.",
-		unbanned: "IP desbaneada.",
+		banned: "Bloqueo aplicado.",
+		unbanned: "Bloqueo retirado.",
 		dismissed: "Alerta descartada.",
 	};
 	const errors = {
 		"invalid-ip": "La IP no es válida.",
 		notfound: "Esa IP o alerta ya no existe.",
-		"self-ban": "No puedes banear tu propia IP actual.",
+		"self-ban": "No puedes banear tu propio dispositivo, usuario o IP actual.",
 	};
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -1617,6 +1644,7 @@ app.get("/admin/security", requireAdmin, (req, res) => {
 			bans: listBans(),
 			summary: securitySummary(),
 			currentIp: clientIp(req),
+			currentDevice: req._deviceId || "",
 			includeDismissed,
 			notice: notices[req.query.ok] || "",
 			error: errors[req.query.error] || "",
@@ -1625,24 +1653,42 @@ app.get("/admin/security", requireAdmin, (req, res) => {
 });
 
 app.post("/api/admin/security/ban", requireAdmin, sameOrigin, (req, res) => {
-	const ip = String(req.body.ip || "").trim();
-	if (ip === clientIp(req)) return res.redirect(303, "/admin/security?error=self-ban");
-	const result = banIp(ip, {
+	const type = ["ip", "device", "user"].includes(String(req.body.type))
+		? String(req.body.type)
+		: "device";
+	const target = String(req.body.target || req.body.ip || "").trim();
+	if (type === "ip" && target === clientIp(req)) {
+		return res.redirect(303, "/admin/security?error=self-ban");
+	}
+	if (type === "device" && target === req._deviceId) {
+		return res.redirect(303, "/admin/security?error=self-ban");
+	}
+	if (type === "user" && target.toLowerCase() === req.user.username.toLowerCase()) {
+		return res.redirect(303, "/admin/security?error=self-ban");
+	}
+	if (type === "user" && !getUser(target)) {
+		return res.redirect(303, "/admin/security?error=notfound");
+	}
+	const result = banTarget(type, target, {
 		by: req.user.username,
 		reason: String(req.body.reason || "").slice(0, 200),
 		alertId: String(req.body.alert || ""),
-		kind: String(req.body.kind || ""),
+		kind: String(req.body.kind || (type === "user" ? "user" : "")),
 	});
 	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
-	audit(req, "security.ban", ip, String(req.body.reason || "").slice(0, 200));
+	if (type === "user") {
+		destroySessionsOf(target);
+		closeUserConnections(target);
+	}
+	audit(req, "security.ban", `${type}:${target}`, String(req.body.reason || "").slice(0, 200));
 	res.redirect(303, "/admin/security?ok=banned");
 });
 
 app.post("/api/admin/security/unban", requireAdmin, sameOrigin, (req, res) => {
-	const ip = String(req.body.ip || "").trim();
-	const result = unbanIp(ip);
+	const key = String(req.body.key || req.body.ip || "").trim();
+	const result = key.includes(":") ? unbanTarget(key) : unbanTarget(`ip:${key}`);
 	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
-	audit(req, "security.unban", ip);
+	audit(req, "security.unban", key);
 	res.redirect(303, "/admin/security?ok=unbanned");
 });
 

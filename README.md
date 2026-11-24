@@ -14,7 +14,7 @@ administración.
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
-- **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento, intercambio de cuentas e IPs baneadas manualmente.
+- **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento, intercambio de cuentas y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios**, con texto plano, moderación y ajustes de capacidad, retención y ritmo.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
@@ -247,7 +247,7 @@ usuario puede vaciar su propio historial.
 - `data/audit.json`: auditoría.
 - `data/bookmarks.json`: favoritos por usuario.
 - `data/chat.json`: mensajes del chat interno.
-- `data/security.json`: alertas, IPs baneadas e historial reciente de logins para detección de intercambio de cuentas.
+- `data/security.json`: alertas, bloqueos e historial reciente de logins para detección de intercambio de cuentas.
 - `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
 - Clave de cifrado: `BACKUP_KEY_FILE` (`/etc/webproxy/backup.key` en producción).
 

@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const FILE = path.join(DATA_DIR, "security.json");
 const MAX_ALERTS = 500;
+const DEVICE_COOKIE = "pw_device";
 const WINDOW_MS = 10 * 60 * 1000;
 const ALERT_THRESHOLD = 8;
 const ALERT_COOLDOWN_MS = 2 * 60 * 1000;
@@ -55,7 +56,13 @@ function load() {
 		const data = JSON.parse(fs.readFileSync(FILE, "utf8"));
 		if (Array.isArray(data.alerts)) state.alerts = data.alerts.slice(-MAX_ALERTS);
 		if (data.banned && typeof data.banned === "object" && !Array.isArray(data.banned)) {
-			state.banned = data.banned;
+			state.banned = {};
+			for (const [rawKey, entry] of Object.entries(data.banned)) {
+				const type = entry?.type || (rawKey.includes(":") ? rawKey.split(":")[0] : "ip");
+				const value = entry?.value || (rawKey.includes(":") ? rawKey.slice(rawKey.indexOf(":") + 1) : rawKey);
+				const key = `${type}:${value}`;
+				state.banned[key] = { ...entry, type, value };
+			}
 		}
 		if (Array.isArray(data.logins)) {
 			state.logins = data.logins
@@ -80,6 +87,43 @@ function clientIp(req) {
 			req.socket?.remoteAddress ||
 			"",
 	).slice(0, 64);
+}
+
+function cookieValue(req, name) {
+	for (const part of String(req.headers.cookie || "").split(";")) {
+		const index = part.indexOf("=");
+		if (index < 0) continue;
+		if (part.slice(0, index).trim() === name) {
+			try {
+				return decodeURIComponent(part.slice(index + 1).trim());
+			} catch {
+				return part.slice(index + 1).trim();
+			}
+		}
+	}
+	return "";
+}
+
+function deviceId(req, res) {
+	let value = cookieValue(req, DEVICE_COOKIE);
+	if (/^[a-f0-9]{32,64}$/i.test(value)) return value;
+	value = crypto
+		.createHash("sha256")
+		.update(
+			`${clientIp(req)}|${req.headers["user-agent"] || ""}|${req.headers["accept-language"] || ""}|${req.headers["sec-ch-ua"] || ""}`,
+		)
+		.digest("hex")
+		.slice(0, 32);
+	if (res) {
+		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+		const cookie = `${DEVICE_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
+		try {
+			res.append("Set-Cookie", cookie);
+		} catch {
+			res.setHeader("Set-Cookie", cookie);
+		}
+	}
+	return value;
 }
 
 function flatten(value, depth = 0, key = "") {
@@ -259,6 +303,7 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 		open.lastPath = safePath(req);
 		open.lastMethod = String(req.method || "").slice(0, 10);
 		open.bot = open.bot || bot;
+		open.device = open.device || req._deviceId || "";
 		open.reasons = [...new Set([...(open.reasons || []), ...reasons])].slice(0, 12);
 		open.kind = alertKind(open.reasons, open.bot) || open.kind || "";
 		open.statusCode = Number(res.statusCode) || 0;
@@ -275,6 +320,7 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 		count: 1,
 		bot,
 		kind: alertKind(reasons, bot),
+		device: req._deviceId || "",
 		reasons: [...new Set(reasons)].slice(0, 12),
 		firstSeen: new Date(now).toISOString(),
 		lastSeen: new Date(now).toISOString(),
@@ -342,24 +388,6 @@ function observe(req, res) {
 	}
 }
 
-export function securityMiddleware(req, res, next) {
-	const ip = clientIp(req);
-	if (ip && state.banned[ip]) {
-		if (req.path.startsWith("/api/")) {
-			return res.status(403).json({ error: "ip_banned" });
-		}
-		return res.status(403).type("text/plain").send("Esta dirección IP está bloqueada.");
-	}
-	res.once("finish", () => {
-		try {
-			observe(req, res);
-		} catch (err) {
-			console.error("Security scanner:", err.message);
-		}
-	});
-	next();
-}
-
 function uniqueRecent(values) {
 	return [...new Set(values)];
 }
@@ -390,7 +418,7 @@ export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
 		(entry) => now - new Date(entry.at).getTime() <= 30 * 60 * 1000,
 	);
 	const ipAccounts = uniqueRecent(
-		[...last30, ...recent.filter((entry) => entry.ip === address)]
+		recent
 			.filter((entry) => entry.ip === address)
 			.map((entry) => entry.username.toLowerCase()),
 	);
@@ -398,13 +426,14 @@ export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
 		recent
 			.filter(
 				(entry) =>
-					entry.username.toLowerCase() === name.toLowerCase() &&
-					now - new Date(entry.at).getTime() <= 24 * 60 * 60 * 1000,
+					entry.username.toLowerCase() === name.toLowerCase(),
 			)
 			.map((entry) => entry.ip),
 	);
 	const ipBurst = uniqueRecent(
-		last30.filter((entry) => entry.ip === address).map((entry) => entry.username.toLowerCase()),
+		last30
+			.filter((entry) => entry.ip === address)
+			.map((entry) => entry.username.toLowerCase()),
 	);
 	const accountBurst = uniqueRecent(
 		last30
@@ -421,6 +450,7 @@ export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
 	if (!reasons.length) return { blocked: false };
 
 	reasons = [...new Set(reasons)];
+	const until = new Date(now + 30 * 60 * 1000).toISOString();
 	const alert = upsertAlert(
 		{ alertId: "", lastAlertAt: 0 },
 		address,
@@ -440,7 +470,7 @@ export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
 	if (alert) {
 		alert.kind = "account_swap";
 		alert.blockedAccount = name;
-		alert.blockedUntil = new Date(now + 30 * 60 * 1000).toISOString();
+		alert.blockedUntil = until;
 		alert.accounts = ipAccounts.slice(0, 12);
 		alert.ips = accountIps.slice(0, 12);
 		alert.reasons = [
@@ -454,33 +484,85 @@ export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
 	}
 	return {
 		blocked: !exempt,
-		until: new Date(now + 30 * 60 * 1000).toISOString(),
+		until,
 		alert,
 		reasons,
 	};
 }
 
-export function isBanned(ip) {
-	return !!state.banned[String(ip || "")];
+export function securityMiddleware(req, res, next) {
+	const ip = clientIp(req);
+	const device = deviceId(req, res);
+	req._deviceId = device;
+	const keys = [`ip:${ip}`, `device:${device}`];
+	if (keys.some((key) => state.banned[key])) {
+		if (req.path.startsWith("/api/")) {
+			return res.status(403).json({ error: "banned" });
+		}
+		return res.status(403).type("text/plain").send("Este dispositivo o dirección está bloqueado.");
+	}
+	res.once("finish", () => {
+		try {
+			observe(req, res);
+		} catch (err) {
+			console.error("Security scanner:", err.message);
+		}
+	});
+	next();
 }
 
-export function banIp(ip, { by = "sistema", reason = "", alertId = "", kind = "" } = {}) {
-	const value = String(ip || "").trim();
-	if (!net.isIP(value)) return { error: "invalid-ip" };
-	state.banned[value] = {
+export function isBanned(ip) {
+	return !!state.banned[`ip:${String(ip || "")}`];
+}
+
+export function isDeviceBanned(device) {
+	return !!state.banned[`device:${String(device || "")}`];
+}
+
+export function isUserBanned(username) {
+	return !!state.banned[`user:${String(username || "").toLowerCase()}`];
+}
+
+export function banTarget(type, value, { by = "sistema", reason = "", alertId = "", kind = "" } = {}) {
+	const targetType = ["ip", "device", "user"].includes(type) ? type : "ip";
+	const raw = String(value || "").trim();
+	let clean = raw;
+	if (targetType === "ip") {
+		if (!net.isIP(raw)) return { error: "invalid-ip" };
+	}
+	if (targetType === "device") {
+		if (!/^[a-f0-9]{16,64}$/i.test(raw)) return { error: "invalid-device" };
+		clean = raw.toLowerCase();
+	}
+	if (targetType === "user") {
+		clean = raw.toLowerCase();
+		if (!/^[a-z0-9._-]{3,32}$/i.test(clean)) return { error: "invalid-user" };
+	}
+	const key = `${targetType}:${clean}`;
+	state.banned[key] = {
+		type: targetType,
+		value: clean,
 		at: new Date().toISOString(),
 		by,
 		reason: String(reason || "").slice(0, 200),
 		alertId: String(alertId || ""),
-		kind: kind === "bot" ? "bot" : kind === "hack" ? "hack" : "",
+		kind: kind === "bot" ? "bot" : kind === "hack" ? "hack" : kind === "user" ? "user" : "",
 	};
 	dirty = true;
 	saveNow();
-	return { ok: true };
+	return { ok: true, key };
 }
 
-export function unbanIp(ip) {
-	const value = String(ip || "").trim();
+export function banIp(ip, options = {}) {
+	return banTarget("ip", ip, options);
+}
+
+export function banDevice(device, options = {}) {
+	return banTarget("device", device, options);
+}
+
+export function unbanTarget(key) {
+	const value = String(key || "").trim();
 	if (!state.banned[value]) return { error: "notfound" };
 	delete state.banned[value];
 	dirty = true;
@@ -488,9 +570,16 @@ export function unbanIp(ip) {
 	return { ok: true };
 }
 
+export function unbanIp(ip) {
+	const raw = String(ip || "").trim();
+	if (state.banned[`ip:${raw}`]) return unbanTarget(`ip:${raw}`);
+	if (state.banned[raw] && !raw.includes(":")) return unbanTarget(raw);
+	return { error: "notfound" };
+}
+
 export function listBans() {
 	return Object.entries(state.banned)
-		.map(([ip, info]) => ({ ip, ...info }))
+		.map(([key, info]) => ({ key, ...info }))
 		.sort((a, b) => new Date(b.at) - new Date(a.at));
 }
 
@@ -499,7 +588,17 @@ export function listSecurityAlerts({ includeDismissed = false, limit = 200 } = {
 		.filter((alert) => includeDismissed || alert.status === "open")
 		.sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen))
 		.slice(0, limit)
-		.map((alert) => ({ ...alert, banned: !!state.banned[alert.ip] }));
+		.map((alert) => {
+			const keys = [
+				`ip:${alert.ip}`,
+				...(alert.device ? [`device:${alert.device}`] : []),
+				...(alert.username ? [`user:${String(alert.username).toLowerCase()}`] : []),
+			];
+			const bans = keys
+				.filter((key) => state.banned[key])
+				.map((key) => ({ key, ...state.banned[key] }));
+			return { ...alert, banned: bans.length > 0, bans };
+		});
 }
 
 export function dismissAlert(id) {

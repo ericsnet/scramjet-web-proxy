@@ -1,4 +1,4 @@
-import { listBans, unbanIp } from "../security.js";
+import { listBans, unbanIp, unbanTarget } from "../security.js";
 
 const value = String(process.argv[2] || "").trim();
 
@@ -16,7 +16,7 @@ if (!value || value === "--list") {
 	process.exit(0);
 }
 
-const result = unbanIp(value);
+const result = value.includes(":") ? unbanTarget(value) : unbanIp(value);
 if (result.error === "invalid-ip" || result.error === "notfound") {
 	console.error(result.error === "notfound" ? "Esa IP no está baneada." : "IP no válida.");
 	process.exit(1);
