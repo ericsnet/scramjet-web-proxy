@@ -9,6 +9,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const FILE = path.join(DATA_DIR, "security.json");
 const MAX_ALERTS = 500;
 const DEVICE_COOKIE = "pw_device";
+const DEVICE_KEY_FILE = path.join(DATA_DIR, "device.key");
 const WINDOW_MS = 10 * 60 * 1000;
 const ALERT_THRESHOLD = 8;
 const ALERT_COOLDOWN_MS = 2 * 60 * 1000;
@@ -104,10 +105,47 @@ function cookieValue(req, name) {
 	return "";
 }
 
+function deviceSecret() {
+	if (!fs.existsSync(DEVICE_KEY_FILE)) {
+		fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+		fs.writeFileSync(DEVICE_KEY_FILE, crypto.randomBytes(32).toString("hex"), {
+			mode: 0o600,
+		});
+	}
+	return fs.readFileSync(DEVICE_KEY_FILE, "utf8").trim();
+}
+
+function signDevice(id) {
+	return crypto
+		.createHmac("sha256", deviceSecret())
+		.update(String(id))
+		.digest("hex")
+		.slice(0, 16);
+}
+
+function validDeviceCookie(raw) {
+	const [id, signature] = String(raw || "").split(".");
+	if (!/^[a-f0-9]{32}$/i.test(id) || !/^[a-f0-9]{16}$/i.test(signature)) {
+		return "";
+	}
+	const expected = signDevice(id);
+	try {
+		return crypto.timingSafeEqual(
+			Buffer.from(signature.toLowerCase()),
+			Buffer.from(expected),
+		)
+			? id
+			: "";
+	} catch {
+		return "";
+	}
+}
+
 function deviceId(req, res) {
-	let value = cookieValue(req, DEVICE_COOKIE);
-	if (/^[a-f0-9]{32,64}$/i.test(value)) return value;
-	value = crypto
+	const existing = validDeviceCookie(cookieValue(req, DEVICE_COOKIE));
+	if (existing) return existing;
+
+	const id = crypto
 		.createHash("sha256")
 		.update(
 			`${clientIp(req)}|${req.headers["user-agent"] || ""}|${req.headers["accept-language"] || ""}|${req.headers["sec-ch-ua"] || ""}`,
@@ -116,14 +154,14 @@ function deviceId(req, res) {
 		.slice(0, 32);
 	if (res) {
 		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-		const cookie = `${DEVICE_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
+		const cookie = `${DEVICE_COOKIE}=${id}.${signDevice(id)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
 		try {
 			res.append("Set-Cookie", cookie);
 		} catch {
 			res.setHeader("Set-Cookie", cookie);
 		}
 	}
-	return value;
+	return id;
 }
 
 function flatten(value, depth = 0, key = "") {

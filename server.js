@@ -45,7 +45,9 @@ import {
 	revokeSessionById,
 	revokeUserSessions,
 	isIpRateLimited,
+	isAccountIpRateLimited,
 	recordIpFailure,
+	recordAccountIpFailure,
 	flushSessions,
 } from "./auth.js";
 import {
@@ -166,8 +168,7 @@ function creatorNameSet() {
 
 const ALLOWED_HOSTS = new Set(
 	String(
-		process.env.ALLOWED_HOSTS ||
-			"raspi-eric.tail41ccf3.ts.net,raspi-eric,localhost,127.0.0.1,[::1]",
+		process.env.ALLOWED_HOSTS || "raspi-eric.tail41ccf3.ts.net",
 	)
 		.split(",")
 		.map((value) => value.trim().toLowerCase())
@@ -206,7 +207,11 @@ app.disable("x-powered-by");
 app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(express.json({ limit: "64kb" }));
 app.use((req, res, next) => {
-	if (!ALLOWED_HOSTS.has(hostName(req))) {
+	const host = hostName(req);
+	if (req.path === "/healthz" && ["localhost", "127.0.0.1", "[::1]"].includes(host)) {
+		return next();
+	}
+	if (!ALLOWED_HOSTS.has(host)) {
 		return res.status(421).type("text/plain").send("Host no válido.");
 	}
 	next();
@@ -778,7 +783,7 @@ function ensureCsrf(req, res) {
 	if (!/^[a-f0-9]{48}$/.test(token)) {
 		token = crypto.randomBytes(24).toString("hex");
 		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-		const cookie = `${CSRF_COOKIE}=${token}; Path=/; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`;
+		const cookie = `${CSRF_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`;
 		try {
 			res.append("Set-Cookie", cookie);
 		} catch {
@@ -1018,7 +1023,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 	const settings = getSettings();
 	const ip = clientIp(req);
 
-	if (isIpRateLimited(ip)) {
+	if (isIpRateLimited(ip) || isAccountIpRateLimited(ip, username)) {
 		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
@@ -1026,7 +1031,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 			ip,
 			userAgent: clientUa(req),
 		});
-		res.set("Retry-After", "60");
+		res.set("Retry-After", "900");
 		const wantsJson =
 			req.is("application/json") ||
 			String(req.get("accept") || "").includes("application/json");
@@ -1043,9 +1048,9 @@ app.post("/api/login", sameOrigin, (req, res) => {
 
 	const user = verifyLogin(username, password);
 	if (!user) {
-		const accountExists = !!getUser(username);
 		recordFailedLogin(username);
 		recordIpFailure(ip);
+		recordAccountIpFailure(ip, username);
 		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
@@ -1053,10 +1058,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 			ip,
 			userAgent: clientUa(req),
 		});
-		return res.redirect(
-			303,
-			`/login?error=${accountExists ? "password" : "1"}&next=${encodeURIComponent(next)}`,
-		);
+		return res.redirect(303, `/login?error=1&next=${encodeURIComponent(next)}`);
 	}
 	if (isUserBanned(user.username)) {
 		metric("logins_blocked_total");

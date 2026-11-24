@@ -258,8 +258,10 @@ Medidas de seguridad incluidas:
 
 - nombres de usuario normalizados (Unicode NFKC, espacios y mayúsculas) antes de
   autenticar y aplicar políticas;
-- límite configurable de 20 intentos por minuto y IP, sin bloquear la cuenta (evita *lockout* DoS);
-- validación de `Origin`/`Referer` con HTTPS obligatorio (salvo localhost);
+- límite de 60 intentos por minuto y IP, 10 intentos por cuenta+IP cada 15 minutos y error de login genérico;
+- validación de `Origin`/`Referer` con HTTPS obligatorio y token CSRF en el login;
+- `Host` restringido al dominio canónico (salvo `/healthz` local);
+- cookie de dispositivo firmada con HMAC, usada para diagnóstico y bloqueos opcionales;
 - `/api/navigate-check` bloquea loopback, RFC1918, CGNAT, link-local, ULA y
   direcciones IPv4 mapeadas en IPv6, resolviendo DNS;
 - Wisp aplica además su propia comprobación de IPs privadas antes de conectar;

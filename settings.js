@@ -14,7 +14,7 @@ export const DEFAULTS = Object.freeze({
 	maxSessionsPerUser: 5,
 	sessionIdleHours: 12,
 	maxLoginAttempts: 8,
-	loginAttemptsPerMinute: 20,
+	loginAttemptsPerMinute: 60,
 	lockoutMinutes: 10,
 	chatEnabled: true,
 	chatTitle: "Chat de usuarios",

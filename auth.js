@@ -16,6 +16,9 @@ const LEGACY_SESSION_COOKIE = "pw_session";
 const sessions = new Map(); // tokenHash -> { id, username, createdAt, lastSeenAt, expires, absoluteExpires, ip, userAgent }
 const loginAttempts = new Map(); // username -> { count, resetAt }
 const ipAttempts = new Map(); // ip -> { count, resetAt }
+const accountIpAttempts = new Map(); // ip:username -> { count, resetAt }
+const ACCOUNT_IP_LIMIT = 10;
+const ACCOUNT_IP_WINDOW_MS = 15 * 60 * 1000;
 const lastSeenWrite = new Map(); // username -> timestamp
 
 /* ------------------------------ contraseñas ------------------------------ */
@@ -846,7 +849,31 @@ export function isIpRateLimited(ip) {
 		ipAttempts.delete(ip);
 		return false;
 	}
-	return entry.count >= Math.max(5, Number(settings.loginAttemptsPerMinute) || 20);
+	return entry.count >= Math.max(5, Number(settings.loginAttemptsPerMinute) || 60);
+}
+
+export function isAccountIpRateLimited(ip, username) {
+	const key = `${String(ip || "")}:${String(username || "").toLowerCase().slice(0, 64)}`;
+	const entry = accountIpAttempts.get(key);
+	if (!entry) return false;
+	if (entry.resetAt < Date.now()) {
+		accountIpAttempts.delete(key);
+		return false;
+	}
+	return entry.count >= ACCOUNT_IP_LIMIT;
+}
+
+export function recordAccountIpFailure(ip, username) {
+	const key = `${String(ip || "")}:${String(username || "").toLowerCase().slice(0, 64)}`;
+	const entry = accountIpAttempts.get(key);
+	if (!entry || entry.resetAt < Date.now()) {
+		accountIpAttempts.set(key, {
+			count: 1,
+			resetAt: Date.now() + ACCOUNT_IP_WINDOW_MS,
+		});
+	} else {
+		entry.count += 1;
+	}
 }
 
 export function recordIpFailure(ip) {
