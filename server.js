@@ -111,6 +111,7 @@ import {
 	backupCount,
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
+import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
 import { isPrivateDestination } from "./net-guard.js";
 import { recordHttp, trafficSnapshot, wispOpen, wispClose, wispBytes } from "./traffic.js";
 import { isAdminRole, isStaffRole, canManageRole, canAssignRole } from "./roles.js";
@@ -578,21 +579,26 @@ function chatOnlineCount() {
 	return users.size;
 }
 
-function chatRoleMap() {
+function chatUserMeta() {
 	const map = new Map();
 	for (const entry of listUsers()) {
-		map.set(String(entry.username).toLowerCase(), entry.role);
+		map.set(String(entry.username).toLowerCase(), {
+			role: entry.role,
+			icon: entry.icon,
+		});
 	}
 	return map;
 }
 
-function enrichChatMessage(message, user, roles) {
+function enrichChatMessage(message, user, meta) {
 	const own =
 		String(message.username).toLowerCase() ===
 		String(user?.username || "").toLowerCase();
+	const entry = meta.get(String(message.username).toLowerCase()) || {};
 	return {
 		...message,
-		role: roles.get(String(message.username).toLowerCase()) || "user",
+		role: entry.role || "user",
+		icon: entry.icon || null,
 		canDelete:
 			isChatModerator(user) || (!!getSettings().chatAllowUserDelete && own),
 	};
@@ -881,6 +887,7 @@ function validCsrf(req) {
 }
 
 const ACCOUNT_ERRORS = {
+	icon: "No se pudo eliminar el icono.",
 	current: "La contraseña actual no es correcta.",
 	match: "Las contraseñas nuevas no coinciden.",
 	short: "La nueva contraseña debe tener entre 8 y 128 caracteres.",
@@ -1281,9 +1288,21 @@ app.get("/api/me", (req, res) => {
 		username: req.user.username,
 		role: req.user.role,
 		mustChangePassword: req.user.mustChangePassword,
+		icon: user?.icon || null,
 		blockedSites: user?.blockedSites || [],
 		schedule: user?.schedule || null,
 	});
+});
+
+app.get("/avatar/:user", (req, res) => {
+	const target = getUser(req.params.user);
+	if (!target) return res.status(404).end();
+	const file = avatarFile(target.username);
+	if (!file) return res.status(404).end();
+	res.set("Cache-Control", "private, max-age=300");
+	res.set("X-Content-Type-Options", "nosniff");
+	res.set("Content-Disposition", 'inline; filename="avatar"');
+	res.type(file.type).sendFile(file.path);
 });
 
 app.get("/api/navigate-check", async (req, res) => {
@@ -1340,12 +1359,23 @@ function chatOnlineUsers() {
 	return [...names.values()].sort((a, b) => a.localeCompare(b, "es"));
 }
 
+function chatOnlineIcons(names) {
+	const wanted = new Set((names || []).map((name) => String(name).toLowerCase()));
+	const out = {};
+	for (const entry of listUsers()) {
+		if (entry.icon && wanted.has(String(entry.username).toLowerCase())) {
+			out[entry.username] = entry.icon;
+		}
+	}
+	return out;
+}
+
 function chatChannelOf(req, fallback = "general") {
 	return String(req.query.channel || req.body?.channel || fallback).slice(0, 80) || "general";
 }
 
-function chatEnriched(messages, user, roles) {
-	return messages.map((message) => enrichChatMessage(message, user, roles));
+function chatEnriched(messages, user, meta) {
+	return messages.map((message) => enrichChatMessage(message, user, meta));
 }
 
 app.get("/chat", (req, res) => {
@@ -1353,7 +1383,7 @@ app.get("/chat", (req, res) => {
 	const canModerate = isChatModerator(req.user);
 	const notice = req.query.ok === "sent" ? "Mensaje enviado." : req.query.ok === "deleted" ? "Mensaje eliminado." : "";
 	const error = CHAT_ERRORS[req.query.error] || "";
-	const roles = chatRoleMap();
+	const roles = chatUserMeta();
 	const channels = settings.chatEnabled ? listChatChannels(req.user.username) : [];
 	const onlineUsers = settings.chatShowOnline
 		? hideCreatorData(req, chatOnlineUsers(), (name) => name)
@@ -1412,8 +1442,15 @@ app.get("/api/chat/unread", (req, res) => {
 app.get("/api/chat/channels", (req, res) => {
 	const settings = getSettings();
 	if (!settings.chatEnabled) return res.status(403).json({ error: "disabled" });
+	const online = settings.chatShowOnline
+		? hideCreatorData(req, chatOnlineUsers(), (name) => name)
+		: [];
 	res.set("Cache-Control", "no-store");
-	res.json({ channels: listChatChannels(req.user.username), online: settings.chatShowOnline ? hideCreatorData(req, chatOnlineUsers(), (name) => name) : [] });
+	res.json({
+		channels: listChatChannels(req.user.username),
+		online,
+		onlineIcons: chatOnlineIcons(online),
+	});
 });
 
 app.post("/api/chat/channels/dm", sameOrigin, (req, res) => {
@@ -1451,12 +1488,16 @@ app.get("/api/chat/messages", (req, res) => {
 	const after = Math.max(0, Number.parseInt(req.query.after, 10) || 0);
 	const result = listChat({ username: req.user.username, channelId, after, limit: 200 });
 	if (result.error) return res.status(403).json({ error: result.error });
-	const roles = chatRoleMap();
+	const roles = chatUserMeta();
+	const online = settings.chatShowOnline
+		? hideCreatorData(req, chatOnlineUsers(), (name) => name)
+		: null;
 	res.set("Cache-Control", "no-store");
 	res.json({
 		...result,
 		messages: chatEnriched(result.messages, req.user, roles),
-		online: settings.chatShowOnline ? hideCreatorData(req, chatOnlineUsers(), (name) => name) : null,
+		online,
+		onlineIcons: chatOnlineIcons(online || []),
 		canModerate: isChatModerator(req.user),
 		allowUserDelete: !!settings.chatAllowUserDelete,
 		maxLength: settings.chatMaxLength,
@@ -1481,7 +1522,7 @@ app.post("/api/chat/messages", sameOrigin, (req, res) => {
 		});
 	}
 	if (!json) return res.redirect(303, "/chat?ok=sent");
-	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
 });
 
 app.post("/api/chat/polls", sameOrigin, (req, res) => {
@@ -1491,19 +1532,19 @@ app.post("/api/chat/polls", sameOrigin, (req, res) => {
 		options: Array.isArray(req.body.options) ? req.body.options : String(req.body.options || "").split("\n"),
 	});
 	if (result.error) return res.status(400).json({ error: result.error, message: "Encuesta no válida." });
-	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
 });
 
 app.post("/api/chat/polls/:id/vote", sameOrigin, (req, res) => {
 	const result = votePoll(req.user.username, req.params.id, req.body.option, chatChannelOf(req));
 	if (result.error) return res.status(400).json({ error: result.error });
-	res.json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+	res.json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
 });
 
 app.post("/api/chat/messages/:id/reaction", sameOrigin, (req, res) => {
 	const result = toggleReaction(req.user.username, req.params.id, req.body.emoji, chatChannelOf(req));
 	if (result.error) return res.status(400).json({ error: result.error });
-	res.json({ message: enrichChatMessage(result.message, req.user, chatRoleMap()) });
+	res.json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
 });
 
 app.post("/api/chat/upload", sameOrigin, express.raw({ type: "application/octet-stream", limit: "6mb" }), (req, res) => {
@@ -1632,7 +1673,11 @@ app.get("/account", (req, res) => {
 			? "Contraseña actualizada correctamente."
 			: req.query.ok === "session"
 				? "Sesión cerrada."
-				: "";
+				: req.query.ok === "icon"
+					? "Icono actualizado correctamente."
+					: req.query.ok === "icon-removed"
+						? "Icono eliminado."
+						: "";
 	const error = ACCOUNT_ERRORS[req.query.error] || "";
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -1696,6 +1741,50 @@ app.post("/api/account/language", sameOrigin, (req, res) => {
 		`pw_lang=${value}; Path=/; SameSite=Lax; Max-Age=31536000${req.secure ? "; Secure" : ""}`,
 	);
 	res.redirect(303, safeNext(req.body.next || "/account"));
+});
+
+app.post(
+	"/api/account/icon",
+	sameOrigin,
+	express.raw({
+		type: ["image/png", "image/jpeg", "image/webp", "application/octet-stream"],
+		limit: "2mb",
+	}),
+	(req, res) => {
+		if (
+			!req.is("image/png") &&
+			!req.is("image/jpeg") &&
+			!req.is("image/webp") &&
+			!req.is("application/octet-stream")
+		) {
+			return res.status(415).json({
+				error: "invalid_type",
+				message: "Usa una imagen PNG, JPG o WebP.",
+			});
+		}
+		const result = saveAvatar(req.user.username, req.body);
+		if (result.error) {
+			const messages = {
+				empty: "Selecciona una imagen.",
+				too_large: "La imagen supera el límite de 2 MB.",
+				invalid_type: "El archivo no es una imagen válida.",
+				save_failed: "No se pudo guardar el icono.",
+			};
+			return res.status(result.error === "too_large" ? 413 : 400).json({
+				error: result.error,
+				message: messages[result.error] || "No se pudo guardar el icono.",
+			});
+		}
+		audit(req, "user.icon", "", result.info?.type || "");
+		res.set("Cache-Control", "no-store").json({ ok: true, icon: result.info });
+	},
+);
+
+app.post("/api/account/icon/delete", sameOrigin, (req, res) => {
+	const result = deleteAvatar(req.user.username);
+	if (result.error) return res.redirect(303, "/account?error=icon");
+	audit(req, "user.icon_remove");
+	res.redirect(303, "/account?ok=icon-removed");
 });
 
 app.post("/api/account/password", sameOrigin, (req, res) => {

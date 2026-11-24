@@ -467,8 +467,8 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .dialog-x{position:absolute;right:12px;top:10px;background:none;border:0;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:2px 5px}
 .dialog-x:focus{outline:none;color:var(--text)}
 .dialog-x:hover{color:var(--text)}
-.primary-small{background:var(--accent);color:#fff;border-color:var(--accent)}
-.primary-small:hover{background:#2f6fdd}
+button.primary-small,a.primary-small{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color:#2f6fdd}
 @media(max-width:820px){
   .wrap.wide{width:calc(100% - 16px);margin-top:12px}
   .chat-app{grid-template-columns:1fr;height:auto;min-height:calc(100vh - 150px)}
@@ -512,9 +512,40 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .error-preview a{font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted);text-decoration:none;line-height:1}
 .error-preview a:hover{color:var(--text);border-color:#34506f;text-decoration:none}
 .error-preview a.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.topbar-avatar{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:7px;
+  overflow:hidden;color:#fff;font-size:10px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.topbar-avatar img,.user-avatar img,.account-avatar img,.chat-msg-avatar img,.chat-member-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.user-avatar{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:9px;
+  overflow:hidden;color:#fff;font-size:11px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.account-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.account-head h1{margin:0}
+.account-avatar{display:grid;place-items:center;flex:0 0 64px;width:64px;height:64px;border-radius:19px;
+  overflow:hidden;color:#fff;font-size:23px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.account-icon-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px}
+.account-icon-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.account-icon-actions form{margin:0}
+.chat-msg-avatar,.chat-member-avatar{overflow:hidden}
+.chat-msg-avatar img,.chat-member-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.chat-user-chip .chat-chip-avatar{display:grid;place-items:center;flex:0 0 21px;width:21px;height:21px;border-radius:7px;
+  overflow:hidden;color:#fff;font-size:10px;font-weight:700;font-style:normal}
+.chat-user-chip .chat-chip-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
 .topbar{flex-wrap:nowrap!important;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-left:20px;padding-right:20px}
 .topbar::-webkit-scrollbar{display:none}
 `;
+
+function avatarColor(name) {
+	let hash = 0;
+	for (const char of String(name || "?")) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+	return `hsl(${hash} 42% 32%)`;
+}
+
+function userAvatar(name, icon, className = "user-avatar") {
+	const initial = esc(String(name || "?").slice(0, 1).toUpperCase());
+	const image = icon?.url
+		? `<img src="${esc(icon.url)}" alt="" loading="lazy">`
+		: initial;
+	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${image}</span>`;
+}
 
 function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) {
 	return `<!doctype html>
@@ -553,6 +584,7 @@ function topbar(user) {
   <a href="/account">Mi cuenta</a>
   ${security}
   ${admin}
+  ${user ? userAvatar(user.username, user.icon, "topbar-avatar") : ""}
   <span class="who">${esc(user?.username || "")} · ${roleLabel(user?.role)}</span>
   <form method="post" action="/logout" class="inline"><button class="link" type="submit">Salir</button></form>
 </header>`;
@@ -741,11 +773,16 @@ ${
 		: ""
 }
 <div class="card" style="max-width:620px;margin:0 auto">
-  <h1>Mi cuenta</h1>
-  <p class="muted">
-    Usuario <strong>${esc(user.username)}</strong> ·
-    ${roleLabel(user.role)}
-  </p>
+  <div class="account-head">
+    ${userAvatar(user.username, user.icon, "account-avatar")}
+    <div>
+      <h1>Mi cuenta</h1>
+      <p class="muted">
+        Usuario <strong>${esc(user.username)}</strong> ·
+        ${roleLabel(user.role)}
+      </p>
+    </div>
+  </div>
   <p class="muted">
     <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a>
   </p>
@@ -774,6 +811,21 @@ ${
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
 </div>
+
+<div class="card" style="max-width:620px;margin:18px auto 0">
+  <h2>Icono de perfil</h2>
+  <div class="account-icon-row">
+    ${userAvatar(user.username, user.icon, "account-avatar")}
+    <div class="account-icon-actions">
+      <button type="button" class="small primary-small" id="account-icon-pick">Subir icono</button>
+      <input id="account-icon-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      ${user.icon ? `<form method="post" action="/api/account/icon/delete"><button class="small danger" type="submit">Quitar icono</button></form>` : ""}
+    </div>
+  </div>
+  <p class="hint" style="margin-top:10px">PNG, JPG o WebP · máximo 2 MB. Se mostrará en el chat, en tu cuenta y en la lista de usuarios.</p>
+  <p class="msg" id="account-icon-msg" role="status"></p>
+</div>
+<script src="/account-icon.js" defer></script>
 
 <div class="card" style="max-width:620px;margin:18px auto 0">
   <h2>Idioma</h2>
@@ -943,11 +995,11 @@ export function chatPage({
 	const current = String(user?.username || "");
 	const enabled = !!settings.chatEnabled;
 	const allowDelete = !!settings.chatAllowUserDelete;
-	const avatarColor = (name) => {
-		let hash = 0;
-		for (const char of String(name || "?")) hash = (hash * 31 + char.charCodeAt(0)) % 360;
-		return `hsl(${hash} 42% 32%)`;
-	};
+	const userByName = new Map();
+	for (const entry of users) {
+		userByName.set(String(entry.username).toLowerCase(), entry);
+	}
+	if (user) userByName.set(String(user.username).toLowerCase(), user);
 	const channelIcon = (channel) =>
 		channel.type === "public" ? "#" : channel.type === "group" ? "◆" : channel.name.slice(0, 1).toUpperCase();
 	const channelItems = channels
@@ -979,13 +1031,16 @@ export function chatPage({
 		.map(
 			(entry) => `<label class="chat-member-option" data-member-name="${esc(entry.username.toLowerCase())}">
       <input type="checkbox" name="members" value="${esc(entry.username)}">
-      <span class="chat-member-avatar" style="background:${avatarColor(entry.username)}">${esc(entry.username.slice(0, 1).toUpperCase())}</span>
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
       <span>${esc(entry.username)}</span>
     </label>`,
 		)
 		.join("");
 	const onlineChips = onlineUsers
-		.map((name) => `<span class="chat-user-chip"><i style="background:${avatarColor(name)}">${esc(name.slice(0, 1).toUpperCase())}</i>${esc(name)}</span>`)
+		.map((name) => {
+			const entry = userByName.get(String(name).toLowerCase());
+			return `<span class="chat-user-chip">${userAvatar(name, entry?.icon, "chat-chip-avatar")}${esc(name)}</span>`;
+		})
 		.join("");
 	const reactionSet = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 	const formatText = (text) =>
@@ -1031,7 +1086,7 @@ export function chatPage({
 				)
 				.join("")}</div></details>`;
 			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
-  ${own ? "" : `<span class="chat-msg-avatar" style="background:${avatarColor(m.username)}">${esc(String(m.username).slice(0, 1).toUpperCase())}</span>`}
+  ${own ? "" : userAvatar(m.username, m.icon, "chat-msg-avatar")}
   <div class="chat-bubble">
     <div class="chat-meta">
       ${own ? "" : `<span class="chat-author">${esc(m.username)}</span>`}
@@ -1320,6 +1375,7 @@ export function adminPage({
 				return `<div class="${wrapper}">
   <div class="user-summary">
     <span class="user-summary-main">
+      ${userAvatar(u.username, u.icon, "user-avatar")}
       <strong class="user-name">${esc(u.username)}</strong>
       <span class="badge role-${esc(u.role)}">${esc(roleLabel(u.role))}</span>
       ${self ? '<span class="badge">tú</span>' : ""}
@@ -1423,6 +1479,7 @@ export function adminPage({
 			return `<details class="user admin-user">
   <summary class="user-summary">
     <span class="user-summary-main">
+      ${userAvatar(u.username, u.icon, "user-avatar")}
       <strong class="user-name">${esc(u.username)}</strong>
       <span class="badge role-${esc(u.role)}">${esc(roleLabel(u.role))}</span>
       ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}

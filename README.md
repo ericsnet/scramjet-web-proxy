@@ -17,6 +17,7 @@ administración.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento, intercambio de cuentas y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados.
+- **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
@@ -252,6 +253,7 @@ usuario puede vaciar su propio historial.
 - `data/bookmarks.json`: favoritos por usuario.
 - `data/chat.json`: mensajes, canales y lecturas del chat interno.
 - `data/chat-uploads/`: adjuntos privados del chat.
+- `data/avatars/`: iconos de usuario validados por contenido y servidos solo con sesión iniciada.
 - `data/security.json`: alertas, bloqueos e historial reciente de logins para detección de intercambio de cuentas.
 - `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
 - Clave de cifrado: `BACKUP_KEY_FILE` (`/etc/webproxy/backup.key` en producción).
@@ -282,7 +284,7 @@ Medidas de seguridad incluidas:
 Las copias se guardan cifradas con AES-256-GCM fuera del web root
 (`/var/backups/proxy` en producción), con permisos `600`. Incluyen usuarios sin
 contraseñas, hashes, notas, IPs ni mensajes de bloqueo, y no incluyen actividad,
-auditoría ni chat. La clave se guarda en `BACKUP_KEY_FILE` (por defecto
+auditoría, chat ni iconos de usuario. La clave se guarda en `BACKUP_KEY_FILE` (por defecto
 `/etc/webproxy/backup.key`) y la ruta con `BACKUP_DIR`.
 
 La descarga exige contraseña y auditoría; la restauración también exige
@@ -302,6 +304,7 @@ Archivos principales:
 | --- | --- |
 | `server.js` | Express: rutas, auth, sesiones, ajustes, auditoría, Wisp |
 | `auth.js` | Usuarios, hashes, sesiones persistentes, bloqueos, horarios y límites |
+| `avatars.js` | Validación y almacenamiento privado de iconos de usuario |
 | `settings.js` | Ajustes y validación |
 | `activity.js` | Historial por usuario |
 | `audit.js` | Auditoría y CSV |
@@ -317,6 +320,7 @@ Archivos principales:
 | `public/traffic.js` | Actualización del panel de tráfico |
 | `roles.js` | Jerarquía y permisos de usuario/moderador/administrador/creador |
 | `public/chat.js` | Actualización y envío de mensajes en el navegador |
+| `public/account-icon.js` | Subida del icono desde Mi cuenta |
 | `public/chat-notify.js` | Avisos, pop-ups y contador de no leídos |
 | `public/page-i18n.js` | Traducciones de interfaz |
 | `.github/workflows/ci.yml` | Comprobación de sintaxis en CI |

@@ -158,6 +158,21 @@
 		wrap.appendChild(menu);
 		return wrap;
 	}
+	function makeUserAvatar(name, icon, className) {
+		const avatar = document.createElement("span");
+		avatar.className = className;
+		avatar.style.background = avatarColor(name);
+		if (icon?.url) {
+			const image = document.createElement("img");
+			image.src = icon.url;
+			image.alt = "";
+			image.loading = "lazy";
+			avatar.appendChild(image);
+		} else {
+			avatar.textContent = String(name || "?").slice(0, 1).toUpperCase();
+		}
+		return avatar;
+	}
 	function makeMessage(message) {
 		const article = document.createElement("article");
 		const own = String(message.username).toLowerCase() === currentUser.toLowerCase();
@@ -167,11 +182,7 @@
 		article.dataset.chatSeq = String(message.seq);
 
 		if (!own) {
-			const avatar = document.createElement("span");
-			avatar.className = "chat-msg-avatar";
-			avatar.style.background = avatarColor(message.username);
-			avatar.textContent = String(message.username).slice(0, 1).toUpperCase();
-			article.appendChild(avatar);
+			article.appendChild(makeUserAvatar(message.username, message.icon, "chat-msg-avatar"));
 		}
 
 		const bubble = document.createElement("div");
@@ -247,7 +258,7 @@
 		if (!old) return;
 		old.replaceWith(makeMessage(message));
 	}
-	function updateOnline(value) {
+	function updateOnline(value, icons = null) {
 		if (value === null || value === undefined) return;
 		const list = Array.isArray(value) ? value : [];
 		if (onlineEl) {
@@ -259,7 +270,8 @@
 			for (const name of list) {
 				const chip = document.createElement("span");
 				chip.className = "chat-user-chip";
-				chip.textContent = name;
+				chip.appendChild(makeUserAvatar(name, icons?.[name], "chat-chip-avatar"));
+				chip.appendChild(document.createTextNode(String(name)));
 				onlineUsersEl.appendChild(chip);
 			}
 		}
@@ -315,7 +327,7 @@
 				appendMessages(data.messages);
 			}
 			lastSeq = Math.max(lastSeq, Number(data.latestSeq) || 0);
-			updateOnline(data.online);
+			updateOnline(data.online, data.onlineIcons);
 			if (Number(data.maxLength) > 0) maxLength = Number(data.maxLength);
 			if (input && Number(input.maxLength) !== maxLength) input.maxLength = maxLength;
 			if (counter) counter.textContent = String((input?.value || "").length);
@@ -380,7 +392,7 @@
 		const data = await request("/api/chat/channels").catch(() => null);
 		if (!data) return;
 		channelsCache = data.channels || [];
-		updateOnline(data.online);
+		updateOnline(data.online, data.onlineIcons);
 		renderChannelList();
 		updateHeader();
 	}

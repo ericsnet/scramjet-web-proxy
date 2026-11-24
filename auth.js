@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { getSettings } from "./settings.js";
+import { avatarInfo, deleteAvatar } from "./avatars.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
@@ -167,6 +168,7 @@ export function listUsers() {
 				lastSeenAt: u.lastSeenAt || null,
 				loginCount: u.loginCount || 0,
 				sessionCount: sessionsForUser(username).length,
+				icon: avatarInfo(username),
 			};
 		})
 		.sort((a, b) => a.username.localeCompare(b.username, "es"));
@@ -188,6 +190,7 @@ export function getUser(username) {
 		...user,
 		blockedUntil: until,
 		effectivelyBlocked: !!user.blocked || !!until,
+		icon: avatarInfo(name),
 	};
 }
 
@@ -246,6 +249,7 @@ export function deleteUser(username) {
 	}
 	delete db.users[user.username];
 	save();
+	deleteAvatar(user.username);
 	destroySessionsOf(user.username);
 	return { ok: true };
 }
@@ -782,6 +786,7 @@ export function getSession(req) {
 		id: session.id,
 		username: user.username,
 		role: user.role,
+		icon: avatarInfo(user.username),
 		createdAt: session.createdAt,
 		lastSeenAt: session.lastSeenAt,
 		expires: session.expires,

@@ -1,6 +1,6 @@
 const MAX_EVENTS = 300;
 const SKIP_PATH =
-	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview)/;
+	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|avatar)/;
 
 const events = [];
 const streams = new Map();

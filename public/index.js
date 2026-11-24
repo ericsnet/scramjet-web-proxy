@@ -107,7 +107,17 @@ fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" })
 		const who = document.getElementById("session-who");
 		const adminLink = document.getElementById("admin-link");
 		const avatar = document.getElementById("session-avatar");
-		if (avatar) avatar.textContent = me.username.slice(0, 1).toUpperCase();
+		if (avatar) {
+			avatar.textContent = "";
+			if (me.icon?.url) {
+				const image = document.createElement("img");
+				image.src = me.icon.url;
+				image.alt = "";
+				avatar.appendChild(image);
+			} else {
+				avatar.textContent = me.username.slice(0, 1).toUpperCase();
+			}
+		}
 		if (who) {
 			const roleLabel = me.role === "creator"
 				? "creador"
