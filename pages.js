@@ -422,6 +422,7 @@ dialog h2{margin-top:0}
 .chat-member-option{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 8px;margin:0;border-radius:8px;
   color:var(--text);font-size:12.5px;cursor:pointer;border:1px solid transparent}
 .chat-member-option:hover{background:#1a2839;border-color:#2b3f59}
+.chat-member-option[hidden]{display:none!important}
 .chat-member-option:has(input:checked){background:rgba(59,130,246,.14);border-color:#2e5a91}
 .chat-member-option input{appearance:none;width:18px;height:18px;flex:0 0 18px;margin:0;border:1.5px solid #40536a;
   border-radius:6px;background:#0c141e;cursor:pointer;position:relative;transition:background .15s,border-color .15s}
@@ -1023,6 +1024,7 @@ export function chatPage({
     <label for="chat-group-search">Miembros</label>
     <input id="chat-group-search" class="chat-member-search" type="search" placeholder="Buscar usuario…" autocomplete="off">
     <div id="chat-group-members" class="chat-member-picker">${memberOptions || '<span class="muted">No hay otros usuarios disponibles.</span>'}</div>
+    <p class="muted" id="chat-group-empty" hidden style="padding:8px 4px">No hay usuarios que coincidan.</p>
     <div class="dialog-actions">
       <button class="small" type="button" data-close-dialog>Cancelar</button>
       <button class="small primary-small" type="button" id="chat-group-create">Crear grupo</button>

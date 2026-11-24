@@ -588,7 +588,16 @@
 	document.getElementById("chat-group-search")?.addEventListener("input", (event) => {
 		const query = String(event.target.value || "").toLowerCase().trim();
 		for (const option of document.querySelectorAll("#chat-group-members .chat-member-option")) {
-			option.hidden = query && !option.dataset.memberName.includes(query);
+			const matches = !query || option.dataset.memberName.includes(query);
+			option.hidden = !matches;
+			option.style.display = matches ? "" : "none";
+		}
+		const empty = document.getElementById("chat-group-empty");
+		if (empty) {
+			const anyVisible = [...document.querySelectorAll("#chat-group-members .chat-member-option")].some(
+				(option) => option.style.display !== "none",
+			);
+			empty.hidden = anyVisible;
 		}
 	});
 	document.getElementById("chat-group-create")?.addEventListener("click", async () => {
