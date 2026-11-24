@@ -3,6 +3,8 @@
 	if (!requestsBody) return;
 	let stopped = false;
 	let inFlight = false;
+	let sparkSamples = [];
+	let sparkSeeded = false;
 
 	const $ = (id) => document.getElementById(id);
 	const bytes = (value) => {
@@ -89,6 +91,79 @@
 			body.appendChild(tr);
 		}
 	};
+	const renderSparkline = (value) => {
+		const box = $("traffic-sparkline");
+		if (!box) return;
+		if (!sparkSeeded) {
+			sparkSamples = Array(39).fill(0);
+			sparkSeeded = true;
+		}
+		const number = Math.max(0, Number(value) || 0);
+		sparkSamples.push(number);
+		if (sparkSamples.length > 40) sparkSamples.shift();
+		const max = Math.max(1, ...sparkSamples);
+		box.textContent = "";
+		for (const sample of sparkSamples) {
+			const bar = document.createElement("i");
+			bar.className = "traffic-spark";
+			bar.style.height = `${Math.max(3, Math.round((sample / max) * 112))}px`;
+			bar.title = `${sample} peticiones/s`;
+			box.appendChild(bar);
+		}
+		if ($("traffic-spark-max")) $("traffic-spark-max").textContent = `máx. ${max}/s`;
+	};
+	const renderStatus = (counts = {}) => {
+		const box = $("traffic-status-bars");
+		if (!box) return;
+		const total = Object.values(counts).reduce((sum, n) => sum + Number(n || 0), 0) || 1;
+		box.textContent = "";
+		for (const code of ["2xx", "3xx", "4xx", "5xx"]) {
+			const row = document.createElement("div");
+			row.className = "traffic-bar-row";
+			const label = document.createElement("span");
+			label.textContent = code;
+			const track = document.createElement("div");
+			track.className = "traffic-bar";
+			const fill = document.createElement("i");
+			fill.className = `bar-${code}`;
+			fill.style.width = `${Math.round(((Number(counts[code]) || 0) / total) * 100)}%`;
+			track.appendChild(fill);
+			const count = document.createElement("b");
+			count.textContent = String(counts[code] || 0);
+			row.append(label, track, count);
+			box.appendChild(row);
+		}
+	};
+	const renderTopPaths = (paths = []) => {
+		const box = $("traffic-top-paths");
+		if (!box) return;
+		box.textContent = "";
+		if (!paths.length) {
+			const empty = document.createElement("p");
+			empty.className = "empty";
+			empty.textContent = "Sin datos todavía.";
+			box.appendChild(empty);
+			return;
+		}
+		const max = Number(paths[0]?.count) || 1;
+		for (const item of paths.slice(0, 6)) {
+			const row = document.createElement("div");
+			row.className = "traffic-bar-row";
+			const label = document.createElement("span");
+			label.className = "mono";
+			label.textContent = item.path;
+			const track = document.createElement("div");
+			track.className = "traffic-bar";
+			const fill = document.createElement("i");
+			fill.className = "bar-path";
+			fill.style.width = `${Math.round(((Number(item.count) || 0) / max) * 100)}%`;
+			track.appendChild(fill);
+			const count = document.createElement("b");
+			count.textContent = String(item.count || 0);
+			row.append(label, track, count);
+			box.appendChild(row);
+		}
+	};
 	const update = (data) => {
 		const http = data.http || {};
 		const wisp = data.wisp || {};
@@ -102,7 +177,10 @@
 		if ($("traffic-updated")) {
 			$("traffic-updated").textContent = `Actualizado: ${new Date(data.generatedAt || Date.now()).toLocaleTimeString("es-ES")}`;
 		}
-		renderRequests(http.recent || []);
+		renderSparkline(http.requestsPerSecond || 0);
+		renderStatus(http.statusCounts || {});
+		renderTopPaths(http.topPaths || []);
+		renderRequests((http.recent || []).slice(0, 20));
 		renderHosts(wisp.hosts || []);
 		renderStreams(wisp.streams || []);
 	};

@@ -128,6 +128,13 @@ td{padding:12px 10px;border-top:1px solid var(--border);vertical-align:middle}
 @media(max-width:640px){.grid{grid-template-columns:1fr}.wrap{margin-top:24px}.card{padding:20px}
   .activity li{flex-wrap:wrap;gap:4px}.user-head .meta{margin-left:0;width:100%}}
 footer{padding:0 20px 22px;text-align:center;color:#5b6b80;font-size:12px}
+.topbar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;white-space:nowrap;width:100%}
+.topbar::-webkit-scrollbar{display:none}
+.topbar .brand{flex:0 0 auto}
+.topbar .who{overflow:hidden;text-overflow:ellipsis;max-width:170px}
+.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{flex:0 0 auto}
 
 /* ---- acabado visual ---- */
 body{
@@ -323,6 +330,21 @@ dialog h2{margin-top:0}
 .traffic-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .traffic-live{display:inline-flex;align-items:center;gap:7px;color:#86efac;font-size:12px;font-weight:600;padding:6px 10px;border:1px solid rgba(74,222,128,.3);border-radius:999px;background:rgba(74,222,128,.07)}
 .traffic-live i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 4px rgba(74,222,128,.12);animation:trafficPulse 1.8s infinite}
+.traffic-visuals{margin-bottom:16px}
+.traffic-sparkline{height:118px;display:flex;align-items:flex-end;gap:3px;padding:10px 2px 0;border-bottom:1px solid var(--border)}
+.traffic-spark{flex:1;min-width:2px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#60a5fa,#2563eb);opacity:.8;transition:height .3s}
+.traffic-spark:hover{opacity:1}
+.traffic-legend{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:8px}
+.traffic-legend span{display:inline-flex;align-items:center;gap:5px}
+.dot-ok{display:inline-block;width:7px;height:7px;border-radius:50%;background:#60a5fa}
+.traffic-bars{display:flex;flex-direction:column;gap:7px}
+.traffic-bar-row{display:grid;grid-template-columns:58px minmax(0,1fr) 32px;gap:8px;align-items:center;font-size:11.5px;color:var(--muted)}
+.traffic-bar-row .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px}
+.traffic-bar{height:7px;border-radius:99px;background:#172538;overflow:hidden}
+.traffic-bar i{display:block;height:100%;border-radius:99px;transition:width .35s}
+.bar-2xx,.bar-path{background:#22c55e}.bar-3xx{background:#3b82f6}.bar-4xx{background:#f59e0b}.bar-5xx{background:#ef4444}
+.traffic-bar-row b{text-align:right;color:var(--text);font-size:11px}
+h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 @keyframes trafficPulse{0%,100%{opacity:1}50%{opacity:.35}}
 .badge.status-2xx{color:#bbf7d0;border-color:#166534;background:#0d2115}
 .badge.status-3xx{color:#bfdbfe;border-color:#1e40af;background:#101c33}
@@ -469,6 +491,11 @@ dialog h2{margin-top:0}
   .chat-form button.primary{width:100%}}
 @media(max-width:640px){.field-grid{grid-template-columns:1fr}.link-row{grid-template-columns:1fr}
   .tabs a{font-size:12px;padding:7px 10px}}
+.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{white-space:nowrap;flex:0 0 auto}
+.topbar{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;white-space:nowrap}
+.topbar::-webkit-scrollbar{display:none}
 `;
 
 function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) {
@@ -1758,7 +1785,7 @@ export function trafficPage({
   <td class="mono">${esc(h.host)}</td><td>${esc(h.active)}</td><td>${esc(h.opened)}</td>
   <td>${esc(fmtBytes(h.bytesOut || 0))}</td><td>${esc((h.users || []).slice(0, 3).join(", ") || "—")}</td>
 </tr>`).join("");
-	const requestRows = recent.slice(0, 25).map((r) => `<tr>
+	const requestRows = recent.slice(0, 20).map((r) => `<tr>
   <td class="mono">${esc((r.at || "").slice(11, 19))}</td>
   <td><span class="badge status-${Math.floor((r.status || 0) / 100)}xx">${esc(r.status)}</span></td>
   <td class="mono">${esc(r.method)} ${esc(r.path)}</td>
@@ -1785,9 +1812,29 @@ ${adminTabs("traffic", user.role)}
   <div class="stat"><div class="k">Tráfico Wisp</div><div class="v" id="traffic-bytes">${esc(fmtBytes((wisp.bytesIn || 0) + (wisp.bytesOut || 0)))}</div></div>
   <div class="stat"><div class="k">Alertas seguridad</div><div class="v" id="traffic-alerts">${esc(security.open || 0)}</div></div>
 </div>
+<div class="grid traffic-visuals">
+  <div class="card">
+    <h2>Actividad HTTP</h2>
+    <div class="traffic-sparkline" id="traffic-sparkline" aria-label="Actividad de peticiones"></div>
+    <div class="traffic-legend"><span><i class="dot-ok"></i>Peticiones por segundo</span><span id="traffic-spark-max">máx. —</span></div>
+  </div>
+  <div class="card">
+    <h2>Estados HTTP</h2>
+    <div class="traffic-bars" id="traffic-status-bars">${["2xx", "3xx", "4xx", "5xx"].map((code) => {
+			const count = http.statusCounts?.[code] || 0;
+			const total = Object.values(http.statusCounts || {}).reduce((sum, n) => sum + n, 0) || 1;
+			return `<div class="traffic-bar-row"><span>${code}</span><div class="traffic-bar"><i class="bar-${code}" style="width:${Math.round((count / total) * 100)}%"></i></div><b>${count}</b></div>`;
+		}).join("")}</div>
+    <h2 style="margin-top:20px">Rutas más usadas</h2>
+    <div class="traffic-bars" id="traffic-top-paths">${(http.topPaths || []).slice(0, 6).map((item) => {
+			const max = http.topPaths?.[0]?.count || 1;
+			return `<div class="traffic-bar-row"><span class="mono">${esc(item.path)}</span><div class="traffic-bar"><i class="bar-path" style="width:${Math.round((item.count / max) * 100)}%"></i></div><b>${item.count}</b></div>`;
+		}).join("") || '<p class="empty">Sin datos todavía.</p>'}</div>
+  </div>
+</div>
 <div class="grid">
   <div class="card">
-    <h2>Peticiones HTTP recientes</h2>
+    <h2>Peticiones HTTP recientes <small>últimas 20</small></h2>
     <div class="scroll"><table><thead><tr><th>Hora</th><th>Estado</th><th>Ruta</th><th>Duración</th><th>Usuario / IP</th></tr></thead><tbody id="traffic-requests">${requestRows || '<tr><td colspan="5" class="empty">Esperando tráfico…</td></tr>'}</tbody></table></div>
   </div>
   <div class="card">
