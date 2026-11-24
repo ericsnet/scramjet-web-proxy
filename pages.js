@@ -233,13 +233,23 @@ pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;p
 .chat-form button.primary{width:auto;margin:0;padding:12px 20px;flex:0 0 auto}
 .chat-counter{font-size:11.5px;color:var(--muted);text-align:right;margin-top:5px}
 .chat-disabled{text-align:center;padding:34px 10px}
+.chat-fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:80;
+  width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(180deg,#3b82f6,#2563eb);color:#fff;text-decoration:none;
+  border:1px solid rgba(255,255,255,.2);box-shadow:0 16px 32px -10px rgba(37,99,235,.85),0 5px 14px rgba(0,0,0,.35);
+  transition:transform .15s,background .15s}
+.chat-fab svg{width:26px;height:26px;display:block}
+.chat-fab:hover{background:#2f6fdd;text-decoration:none;transform:translateY(-2px)}
+.chat-fab:focus-visible{outline:3px solid rgba(96,165,250,.55);outline-offset:3px}
+@media(max-width:640px){.chat-fab{right:14px;width:50px;height:50px}
+  .chat-fab svg{width:24px;height:24px}}
 @media(max-width:640px){.chat-messages{height:58vh}.chat-form{flex-direction:column;align-items:stretch}
   .chat-form button.primary{width:100%}}
 @media(max-width:640px){.field-grid{grid-template-columns:1fr}.link-row{grid-template-columns:1fr}
   .tabs a{font-size:12px;padding:7px 10px}}
 `;
 
-function shell(title, body, { topbar = "" } = {}) {
+function shell(title, body, { topbar = "", chatFab = true } = {}) {
 	return `<!doctype html>
 <html lang="es">
 <head>
@@ -255,6 +265,7 @@ function shell(title, body, { topbar = "" } = {}) {
 ${topbar}
 <main class="wrap">${body}</main>
 <footer>Proxy Web</footer>
+${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a>' : ""}
 </body>
 </html>`;
 }
@@ -666,7 +677,7 @@ export function chatPage({
   </div>`
 	}
 </div>`;
-	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, { topbar: topbar(user) });
+	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, { topbar: topbar(user), chatFab: false });
 }
 
 export function statsPage({
