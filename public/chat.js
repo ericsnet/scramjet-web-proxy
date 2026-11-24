@@ -2,7 +2,7 @@
 	const box = document.getElementById("chat-messages");
 	if (!box) return;
 
-	const channelSelect = document.getElementById("chat-channel");
+	const channelList = document.getElementById("chat-channel-list");
 	const channelHidden = document.getElementById("chat-channel-hidden");
 	const form = document.getElementById("chat-form");
 	const input = document.getElementById("chat-input");
@@ -26,8 +26,18 @@
 	let stopped = false;
 	let selectedFile = null;
 	let cooldownUntil = 0;
+	let channelsCache = [];
+	const channelName = document.getElementById("chat-channel-name");
+	const channelMeta = document.getElementById("chat-channel-meta");
 
 	const allowedReactions = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+	const avatarColor = (name) => {
+		let hash = 0;
+		for (const char of String(name || "?")) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+		return `hsl(${hash} 42% 32%)`;
+	};
+	const channelIcon = (channel) =>
+		channel.type === "public" ? "#" : channel.type === "group" ? "◆" : String(channel.name || "?").slice(0, 1).toUpperCase();
 
 	function showError(text) {
 		if (!errorEl) return;
@@ -155,6 +165,14 @@
 		article.dataset.chatMessage = "";
 		article.dataset.chatId = String(message.id);
 		article.dataset.chatSeq = String(message.seq);
+
+		if (!own) {
+			const avatar = document.createElement("span");
+			avatar.className = "chat-msg-avatar";
+			avatar.style.background = avatarColor(message.username);
+			avatar.textContent = String(message.username).slice(0, 1).toUpperCase();
+			article.appendChild(avatar);
+		}
 
 		const bubble = document.createElement("div");
 		bubble.className = "chat-bubble";
@@ -315,20 +333,56 @@
 			inFlight = false;
 		}
 	}
+	function updateHeader() {
+		const channel = channelsCache.find((item) => item.id === channelId);
+		if (!channel) return;
+		if (channelName) channelName.textContent = channel.name;
+		if (channelMeta) {
+			channelMeta.textContent =
+				channel.type === "public"
+					? "Sala pública"
+					: channel.type === "group"
+						? `Grupo · ${channel.members?.length || 0} miembros`
+						: "Chat privado";
+		}
+	}
+	function renderChannelList() {
+		if (!channelList) return;
+		channelList.textContent = "";
+		for (const channel of channelsCache) {
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = `chat-channel-item${channel.id === channelId ? " active" : ""}`;
+			button.dataset.channelId = channel.id;
+			const avatar = document.createElement("span");
+			avatar.className = "chat-channel-avatar";
+			avatar.style.background = avatarColor(channel.name);
+			avatar.textContent = channelIcon(channel);
+			const text = document.createElement("span");
+			text.className = "chat-channel-text";
+			const title = document.createElement("strong");
+			title.textContent = channel.name;
+			const kind = document.createElement("small");
+			kind.textContent =
+				channel.type === "public" ? "Sala general" : channel.type === "group" ? "Grupo" : "Privado";
+			text.append(title, kind);
+			button.append(avatar, text);
+			if (channel.unread) {
+				const badge = document.createElement("span");
+				badge.className = "chat-unread";
+				badge.textContent = channel.unread > 99 ? "99+" : String(channel.unread);
+				button.appendChild(badge);
+			}
+			channelList.appendChild(button);
+		}
+	}
 	async function refreshChannels() {
 		const data = await request("/api/chat/channels").catch(() => null);
 		if (!data) return;
+		channelsCache = data.channels || [];
 		updateOnline(data.online);
-		if (!channelSelect) return;
-		const current = channelSelect.value;
-		channelSelect.textContent = "";
-		for (const channel of data.channels || []) {
-			const option = document.createElement("option");
-			option.value = channel.id;
-			option.textContent = `${channel.name}${channel.unread ? ` (${channel.unread})` : ""}`;
-			if (channel.id === current) option.selected = true;
-			channelSelect.appendChild(option);
-		}
+		renderChannelList();
+		updateHeader();
 	}
 	function switchChannel(value) {
 		channelId = value || "general";
@@ -338,6 +392,10 @@
 		if (channelId === "general") url.searchParams.delete("channel");
 		else url.searchParams.set("channel", channelId);
 		history.replaceState(null, "", url);
+		for (const item of channelList?.querySelectorAll("[data-channel-id]") || []) {
+			item.classList.toggle("active", item.dataset.channelId === channelId);
+		}
+		updateHeader();
 		seen.clear();
 		lastSeq = 0;
 		revision = "0";
@@ -371,7 +429,12 @@
 		});
 	}
 
-	if (channelSelect) channelSelect.addEventListener("change", () => switchChannel(channelSelect.value));
+	if (channelList) {
+		channelList.addEventListener("click", (event) => {
+			const item = event.target.closest("[data-channel-id]");
+			if (item) switchChannel(item.dataset.channelId);
+		});
+	}
 	if (input) {
 		input.addEventListener("input", () => {
 			if (counter) counter.textContent = String(input.value.length);
@@ -511,8 +574,12 @@
 			});
 			document.getElementById("chat-dm-dialog")?.close();
 			await refreshChannels();
-			const channels = await request("/api/chat/channels").catch(() => null);
-			const dm = channels?.channels?.find((c) => c.type === "dm" && c.name.toLowerCase() === select.value.toLowerCase());
+			await refreshChannels();
+			const dm = channelsCache.find(
+				(channel) =>
+					channel.type === "dm" &&
+					channel.name.toLowerCase() === select.value.toLowerCase(),
+			);
 			if (dm) switchChannel(dm.id);
 		} catch (error) {
 			showError(error.message);
@@ -567,5 +634,6 @@
 	setInterval(refreshChannels, 15000);
 	markRead();
 	refresh();
+	refreshChannels();
 	scrollBottom(true);
 })();

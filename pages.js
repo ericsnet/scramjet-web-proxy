@@ -248,7 +248,7 @@ details.more[open] summary{margin-bottom:10px}
 .stat .v small{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
 pre.panel{background:#080d13;border:1px solid var(--border);border-radius:10px;padding:12px;
   overflow:auto;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#93a7bd;max-height:260px}
-dialog{border:1px solid var(--border);border-radius:14px;background:var(--soft);color:var(--text);
+dialog{position:relative;border:1px solid var(--border);border-radius:14px;background:var(--soft);color:var(--text);
   padding:20px;width:min(430px,calc(100vw - 32px));box-shadow:0 24px 70px rgba(0,0,0,.5)}
 dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
 dialog h2{margin-top:0}
@@ -344,6 +344,98 @@ dialog h2{margin-top:0}
 .chat-toast.unread{border-left-color:#f59e0b}
 .chat-toast.mention{border-left-color:#60a5fa;background:#132033}
 @media(max-width:640px){.chat-toast-stack{left:10px;bottom:calc(10px + env(safe-area-inset-bottom,0px));width:calc(100vw - 20px)}}
+
+/* ---- chat: aplicación de mensajería ---- */
+.wrap.wide{width:min(1180px,calc(100% - 28px));margin-top:24px;margin-bottom:46px}
+.chat-app{display:grid;grid-template-columns:252px minmax(0,1fr);height:min(74vh,760px);min-height:540px;
+  border:1px solid var(--border);border-radius:18px;overflow:hidden;background:var(--soft);
+  box-shadow:0 26px 70px rgba(0,0,0,.38)}
+.chat-sidebar{display:flex;flex-direction:column;min-height:0;background:#0b121b;border-right:1px solid var(--border);padding:16px 12px;gap:7px}
+.chat-sidebar-head{display:flex;align-items:center;gap:10px;padding:2px 6px 10px}
+.chat-sidebar-brand{display:flex;align-items:center;gap:9px;min-width:0}
+.chat-sidebar-mark{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;
+  background:linear-gradient(145deg,#3b82f6,#1d4ed8);color:#fff;font-size:16px;box-shadow:0 6px 16px rgba(37,99,235,.3)}
+.chat-sidebar-brand strong{display:block;font-size:14px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-sidebar-brand small{display:block;color:#6f8197;font-size:10.5px;margin-top:2px}
+.chat-sidebar-label{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#64778c;padding:10px 8px 3px}
+.chat-channel-list{display:flex;flex-direction:column;gap:3px;min-height:0;overflow-y:auto;padding-right:2px}
+.chat-channel-item{display:flex;align-items:center;gap:9px;width:100%;padding:8px;border:1px solid transparent;
+  border-radius:10px;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.chat-channel-item:hover{background:rgba(59,130,246,.08)}
+.chat-channel-item.active{background:#162438;border-color:#263b55}
+.chat-channel-avatar{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:10px;
+  color:#fff;font-weight:700;font-size:13px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.chat-channel-avatar.large{width:40px;height:40px;border-radius:12px;font-size:16px}
+.chat-channel-text{min-width:0;flex:1}
+.chat-channel-text strong{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-channel-text small{display:block;font-size:10.5px;color:#6f8197;margin-top:2px}
+.chat-unread{min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#3b82f6;color:#fff;
+  font-size:10.5px;font-weight:700;line-height:19px;text-align:center}
+.chat-online-users{display:flex;flex-direction:column;gap:5px;padding:0 4px;overflow-y:auto;max-height:155px}
+.chat-user-chip{display:flex;align-items:center;gap:7px;color:#9aabbf;font-size:12px;min-height:22px}
+.chat-user-chip i{display:grid;place-items:center;width:21px;height:21px;border-radius:7px;color:#fff;
+  font-size:10px;font-weight:700;font-style:normal}
+.chat-sidebar-empty{color:#64778c;font-size:11.5px;padding:3px 8px}
+.chat-main{display:flex;flex-direction:column;min-width:0;min-height:0;background:linear-gradient(180deg,#101923,#0c131c)}
+.chat-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;
+  border-bottom:1px solid var(--border);background:rgba(13,20,28,.88)}
+.chat-header-info{display:flex;align-items:center;gap:11px;min-width:0}
+.chat-header-info h1{font-size:16px;line-height:1.2;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-header-info p{margin:4px 0 0;color:var(--muted);font-size:11.5px}
+.chat-header-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.chat-action{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border:1px solid var(--border);
+  border-radius:9px;background:var(--input);color:var(--muted);font:inherit;font-size:11.5px;cursor:pointer}
+.chat-action svg{width:14px;height:14px}
+.chat-action:hover{color:var(--text);border-color:#3d5672;background:#1a2839}
+.chat-app .chat-messages{flex:1;height:auto;min-height:0;padding:18px 20px 10px;gap:4px}
+.chat-app .chat-message{gap:8px;align-items:flex-end}
+.chat-app .chat-message.own{align-items:flex-end}
+.chat-msg-avatar{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:9px;
+  color:#fff;font-size:11px;font-weight:700;box-shadow:0 3px 9px rgba(0,0,0,.18)}
+.chat-app .chat-bubble{max-width:min(74%,610px);padding:8px 11px 9px;border-radius:15px 15px 15px 5px}
+.chat-app .chat-message.own .chat-bubble{border-radius:15px 15px 5px 15px}
+.chat-composer{display:flex;align-items:flex-end;gap:7px;margin:6px 16px 16px;padding:7px 8px 6px;
+  border:1px solid var(--border);border-radius:16px;background:#111b26;transition:border-color .15s,box-shadow .15s}
+.chat-composer:focus-within{border-color:#36547a;box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.chat-attach{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#8fa4bc}
+.chat-attach:hover{background:#1a2839;color:#dbeafe}
+.chat-attach svg{width:17px;height:17px}
+.chat-compose-input{flex:1;min-width:0;display:flex;flex-direction:column}
+.chat-composer textarea{width:100%;min-height:30px;max-height:130px;margin:0;padding:5px 4px 1px;border:0;
+  border-radius:0;background:transparent;box-shadow:none;resize:none;font-size:14px;line-height:1.45}
+.chat-compose-meta{display:flex;justify-content:space-between;gap:10px;padding:1px 4px 2px;min-height:14px}
+.chat-compose-meta .chat-counter{font-size:10px;color:#64778c}
+.chat-send{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border:0;border-radius:11px;
+  background:linear-gradient(145deg,#3b82f6,#2563eb);color:#fff;cursor:pointer;box-shadow:0 6px 14px rgba(37,99,235,.25)}
+.chat-send:hover{background:#2f6fdd}
+.chat-send:disabled{opacity:.45;cursor:not-allowed}
+.chat-send svg{width:17px;height:17px}
+.chat-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  min-height:100%;margin:auto;color:#71859b;font-size:12px}
+.chat-empty strong{color:#bfd0e3;font-size:14px}
+.chat-empty-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:#142235;font-size:22px;margin-bottom:4px}
+.chat-dialog{max-width:440px}
+.chat-dialog .muted{margin:0 0 4px}
+.dialog-x{position:absolute;right:12px;top:10px;background:none;border:0;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:2px 5px}
+.dialog-x:hover{color:var(--text)}
+.primary-small{background:var(--accent);color:#fff;border-color:var(--accent)}
+.primary-small:hover{background:#2f6fdd}
+@media(max-width:820px){
+  .wrap.wide{width:calc(100% - 16px);margin-top:12px}
+  .chat-app{grid-template-columns:1fr;height:auto;min-height:calc(100vh - 150px)}
+  .chat-sidebar{border-right:0;border-bottom:1px solid var(--border);padding:10px;max-height:190px}
+  .chat-sidebar-head{padding-bottom:4px}
+  .chat-channel-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;gap:5px}
+  .chat-channel-item{min-width:150px;width:auto;flex:0 0 auto;padding:6px}
+  .chat-online-users{flex-direction:row;flex-wrap:wrap;max-height:none}
+  .chat-header{padding:11px 12px}
+  .chat-header-actions span{display:none}
+  .chat-action{padding:7px}
+  .chat-app .chat-messages{padding:12px 12px 6px}
+  .chat-app .chat-bubble{max-width:86%}
+  .chat-composer{margin:5px 10px 10px}
+}
+
 @media(max-width:640px){.chat-fab{right:14px;width:50px;height:50px}
   .chat-fab svg{width:24px;height:24px}}
 @media(max-width:640px){.chat-messages{height:58vh}.chat-form{flex-direction:column;align-items:stretch}
@@ -352,7 +444,7 @@ dialog h2{margin-top:0}
   .tabs a{font-size:12px;padding:7px 10px}}
 `;
 
-function shell(title, body, { topbar = "", chatFab = true } = {}) {
+function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) {
 	return `<!doctype html>
 <html lang="es">
 <head>
@@ -366,7 +458,7 @@ function shell(title, body, { topbar = "", chatFab = true } = {}) {
 </head>
 <body>
 ${topbar}
-<main class="wrap">${body}</main>
+<main class="wrap${wide ? " wide" : ""}">${body}</main>
 <footer>Proxy Web</footer>
 ${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js" defer></script>' : ""}
 </body>
@@ -725,6 +817,29 @@ export function chatPage({
 	const current = String(user?.username || "");
 	const enabled = !!settings.chatEnabled;
 	const allowDelete = !!settings.chatAllowUserDelete;
+	const avatarColor = (name) => {
+		let hash = 0;
+		for (const char of String(name || "?")) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+		return `hsl(${hash} 42% 32%)`;
+	};
+	const channelIcon = (channel) =>
+		channel.type === "public" ? "#" : channel.type === "group" ? "◆" : channel.name.slice(0, 1).toUpperCase();
+	const channelItems = channels
+		.map(
+			(channel) => `<button type="button" class="chat-channel-item${channel.id === currentChannel ? " active" : ""}" data-channel-id="${esc(channel.id)}">
+  <span class="chat-channel-avatar" style="background:${avatarColor(channel.name)}">${esc(channelIcon(channel))}</span>
+  <span class="chat-channel-text"><strong>${esc(channel.name)}</strong><small>${channel.type === "public" ? "Sala general" : channel.type === "group" ? "Grupo" : "Privado"}</small></span>
+  ${channel.unread ? `<span class="chat-unread">${channel.unread > 99 ? "99+" : channel.unread}</span>` : ""}
+</button>`,
+		)
+		.join("");
+	const currentInfo = channels.find((channel) => channel.id === currentChannel) || channels[0] || { name: "General", type: "public" };
+	const channelMeta =
+		currentInfo.type === "public"
+			? "Sala pública"
+			: currentInfo.type === "group"
+				? `Grupo · ${currentInfo.members?.length || 0} miembros`
+				: "Chat privado";
 	const channelOptions = channels
 		.map(
 			(channel) =>
@@ -735,7 +850,7 @@ export function chatPage({
 		.map((entry) => `<option value="${esc(entry.username)}">${esc(entry.username)}</option>`)
 		.join("");
 	const onlineChips = onlineUsers
-		.map((name) => `<span class="chat-user-chip">${esc(name)}</span>`)
+		.map((name) => `<span class="chat-user-chip"><i style="background:${avatarColor(name)}">${esc(name.slice(0, 1).toUpperCase())}</i>${esc(name)}</span>`)
 		.join("");
 	const reactionSet = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 	const formatText = (text) =>
@@ -781,6 +896,7 @@ export function chatPage({
 				)
 				.join("")}</div></details>`;
 			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
+  ${own ? "" : `<span class="chat-msg-avatar" style="background:${avatarColor(m.username)}">${esc(String(m.username).slice(0, 1).toUpperCase())}</span>`}
   <div class="chat-bubble">
     <div class="chat-meta">
       ${own ? "" : `<span class="chat-author">${esc(m.username)}</span>`}
@@ -797,31 +913,41 @@ export function chatPage({
 		})
 		.join("");
 
-	const body = `
-<div class="card">
-  <h1>${esc(settings.chatTitle || "Chat de usuarios")}</h1>
-  <p class="muted">${esc(settings.chatWelcome || "")}</p>
-  ${
-		enabled
-			? `
-  <div class="chat-toolbar">
-    <div class="chat-channel-bar">
-      <select id="chat-channel" aria-label="Canal">${channelOptions}</select>
-      <button class="small" type="button" id="chat-new-dm">Privado</button>
-      <button class="small" type="button" id="chat-new-group">Grupo</button>
-      <button class="small" type="button" id="chat-new-poll">Encuesta</button>
+	const body = enabled ? `
+<div class="chat-app">
+  <aside class="chat-sidebar">
+    <div class="chat-sidebar-head">
+      <div class="chat-sidebar-brand"><span class="chat-sidebar-mark">◉</span><div><strong>${esc(settings.chatTitle || "Chat")}</strong><small>Mensajería interna</small></div></div>
     </div>
-    ${
-			settings.chatShowOnline
-				? `<span class="chat-online" id="chat-online">${esc(online)} conectado${online === 1 ? "" : "s"}</span>`
-				: ""
-		}
-  </div>
-  ${onlineChips ? `<div class="chat-online-users" id="chat-online-users">${onlineChips}</div>` : ""}
-  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
-  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
-  <p class="msg error" id="chat-error" hidden></p>
-  <div class="chat-box">
+    <div class="chat-sidebar-label">Conversaciones</div>
+    <div class="chat-channel-list" id="chat-channel-list">${channelItems}</div>
+    <div class="chat-sidebar-label">En línea</div>
+    <div class="chat-online-users" id="chat-online-users">${onlineChips || '<span class="chat-sidebar-empty">Nadie conectado</span>'}</div>
+  </aside>
+  <section class="chat-main">
+    <header class="chat-header">
+      <div class="chat-header-info">
+        <span class="chat-channel-avatar large" style="background:${avatarColor(currentInfo.name)}">${esc(channelIcon(currentInfo))}</span>
+        <div>
+          <h1 id="chat-channel-name">${esc(currentInfo.name)}</h1>
+          <p><span id="chat-channel-meta">${esc(channelMeta)}</span>${settings.chatShowOnline ? ` <span class="chat-online" id="chat-online">${esc(online)} conectado${online === 1 ? "" : "s"}</span>` : ""}</p>
+        </div>
+      </div>
+      <div class="chat-header-actions">
+        <button class="chat-action" type="button" id="chat-new-dm" title="Nuevo chat privado">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Privado</span>
+        </button>
+        <button class="chat-action" type="button" id="chat-new-group" title="Nuevo grupo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Grupo</span>
+        </button>
+        <button class="chat-action" type="button" id="chat-new-poll" title="Nueva encuesta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Encuesta</span>
+        </button>
+      </div>
+    </header>
+    ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+    ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+    <p class="msg error" id="chat-error" hidden></p>
     <div class="chat-messages" id="chat-messages"
       data-channel="${esc(currentChannel)}"
       data-last-seq="${esc(latestSeq)}"
@@ -830,67 +956,75 @@ export function chatPage({
       data-max-length="${esc(settings.chatMaxLength)}"
       data-can-moderate="${canModerate ? "1" : "0"}"
       data-allow-delete="${allowDelete ? "1" : "0"}">
-      ${rows || '<p class="chat-empty" id="chat-empty">Todavía no hay mensajes. Escribe el primero.</p>'}
+      ${rows || '<div class="chat-empty"><span class="chat-empty-icon">💬</span><strong>Todavía no hay mensajes</strong><span>Escribe el primero en este canal.</span></div>'}
     </div>
-    <form method="post" action="/api/chat/messages" class="chat-form" id="chat-form" autocomplete="off" enctype="application/x-www-form-urlencoded">
+    <form method="post" action="/api/chat/messages" class="chat-composer" id="chat-form" autocomplete="off">
       <input type="hidden" name="channel" id="chat-channel-hidden" value="${esc(currentChannel)}">
-      <div style="flex:1">
-        <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" placeholder="Escribe un mensaje…" aria-label="Mensaje"></textarea>
-        <div class="chat-attach-row">
-          <label class="small chat-file-label" for="chat-file">Adjuntar</label>
-          <input id="chat-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" hidden>
-          <span id="chat-file-name" class="muted"></span>
-          <span class="chat-counter"><span id="chat-counter">0</span>/${esc(settings.chatMaxLength)}</span>
-        </div>
+      <label class="chat-attach" for="chat-file" title="Adjuntar archivo" aria-label="Adjuntar archivo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </label>
+      <input id="chat-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" hidden>
+      <div class="chat-compose-input">
+        <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje"></textarea>
+        <div class="chat-compose-meta"><span id="chat-file-name" class="muted"></span><span class="chat-counter"><span id="chat-counter">0</span>/${esc(settings.chatMaxLength)}</span></div>
       </div>
-      <button class="primary" type="submit" id="chat-send">Enviar</button>
+      <button class="chat-send" type="submit" id="chat-send" title="Enviar" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+      </button>
     </form>
-  </div>
-  <dialog id="chat-dm-dialog">
-    <form method="dialog">
-      <h2>Nuevo chat privado</h2>
-      <label for="chat-dm-user">Usuario</label>
-      <select id="chat-dm-user">${userOptions}</select>
-      <div class="dialog-actions">
-        <button class="small" type="button" data-close-dialog>Cancelar</button>
-        <button class="small" type="button" id="chat-dm-create">Crear privado</button>
-      </div>
-    </form>
-  </dialog>
-  <dialog id="chat-group-dialog">
-    <form method="dialog">
-      <h2>Nuevo grupo</h2>
-      <label for="chat-group-name">Nombre</label>
-      <input id="chat-group-name" maxlength="40" placeholder="Equipo, amigos…">
-      <label for="chat-group-members">Miembros</label>
-      <select id="chat-group-members" multiple size="7">${userOptions}</select>
-      <div class="dialog-actions">
-        <button class="small" type="button" data-close-dialog>Cancelar</button>
-        <button class="small" type="button" id="chat-group-create">Crear grupo</button>
-      </div>
-    </form>
-  </dialog>
-  <dialog id="chat-poll-dialog">
-    <form method="dialog">
-      <h2>Nueva encuesta</h2>
-      <label for="chat-poll-question">Pregunta</label>
-      <input id="chat-poll-question" maxlength="120" placeholder="¿Qué opción prefieres?">
-      <label for="chat-poll-options">Opciones (una por línea, 2–6)</label>
-      <textarea id="chat-poll-options" rows="4" placeholder="Opción 1&#10;Opción 2"></textarea>
-      <div class="dialog-actions">
-        <button class="small" type="button" data-close-dialog>Cancelar</button>
-        <button class="small" type="button" id="chat-poll-create">Crear encuesta</button>
-      </div>
-    </form>
-  </dialog>
-  <script src="/chat.js" defer></script>`
-			: `<div class="chat-disabled">
+  </section>
+</div>
+<dialog id="chat-dm-dialog" class="chat-dialog">
+  <form method="dialog">
+    <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
+    <h2>Nuevo chat privado</h2>
+    <p class="muted">Solo vosotros podréis leer este canal.</p>
+    <label for="chat-dm-user">Usuario</label>
+    <select id="chat-dm-user">${userOptions}</select>
+    <div class="dialog-actions">
+      <button class="small" type="button" data-close-dialog>Cancelar</button>
+      <button class="small primary-small" type="button" id="chat-dm-create">Crear privado</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="chat-group-dialog" class="chat-dialog">
+  <form method="dialog">
+    <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
+    <h2>Nuevo grupo</h2>
+    <p class="muted">Elige un nombre y los miembros del grupo.</p>
+    <label for="chat-group-name">Nombre</label>
+    <input id="chat-group-name" maxlength="40" placeholder="Equipo, amigos…">
+    <label for="chat-group-members">Miembros</label>
+    <select id="chat-group-members" multiple size="7">${userOptions}</select>
+    <div class="dialog-actions">
+      <button class="small" type="button" data-close-dialog>Cancelar</button>
+      <button class="small primary-small" type="button" id="chat-group-create">Crear grupo</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="chat-poll-dialog" class="chat-dialog">
+  <form method="dialog">
+    <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
+    <h2>Nueva encuesta</h2>
+    <p class="muted">Añade una pregunta y entre 2 y 6 opciones.</p>
+    <label for="chat-poll-question">Pregunta</label>
+    <input id="chat-poll-question" maxlength="120" placeholder="¿Qué opción prefieres?">
+    <label for="chat-poll-options">Opciones (una por línea)</label>
+    <textarea id="chat-poll-options" rows="4" placeholder="Opción 1&#10;Opción 2"></textarea>
+    <div class="dialog-actions">
+      <button class="small" type="button" data-close-dialog>Cancelar</button>
+      <button class="small primary-small" type="button" id="chat-poll-create">Crear encuesta</button>
+    </div>
+  </form>
+</dialog>
+<script src="/chat.js" defer></script>` : `
+<div class="card">
+  <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
     ${["admin", "creator"].includes(user?.role) ? '<a class="small" href="/admin/settings">Activar en Ajustes</a>' : '<a class="small" href="/">Volver al proxy</a>'}
-  </div>`
-	}
+  </div>
 </div>`;
-	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, { topbar: topbar(user), chatFab: false });
+	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, { topbar: topbar(user), chatFab: false, wide: true });
 }
 
 export function statsPage({
