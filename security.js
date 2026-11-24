@@ -238,6 +238,15 @@ function behaviorSignals(tracker, now) {
 	return { score, reasons };
 }
 
+function alertKind(reasons, bot) {
+	const attack = (reasons || []).some((reason) =>
+		/^(Ruta de escaneo|Inyección|XSS|Path traversal|Exploit|Byte nulo|Destino local)/.test(
+			String(reason),
+		),
+	);
+	return attack ? "hack" : bot ? "bot" : "";
+}
+
 function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 	const now = Date.now();
 	const open = state.alerts.find(
@@ -251,6 +260,7 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 		open.lastMethod = String(req.method || "").slice(0, 10);
 		open.bot = open.bot || bot;
 		open.reasons = [...new Set([...(open.reasons || []), ...reasons])].slice(0, 12);
+		open.kind = alertKind(open.reasons, open.bot) || open.kind || "";
 		open.statusCode = Number(res.statusCode) || 0;
 		dirty = true;
 		scheduleSave();
@@ -264,6 +274,7 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 		score,
 		count: 1,
 		bot,
+		kind: alertKind(reasons, bot),
 		reasons: [...new Set(reasons)].slice(0, 12),
 		firstSeen: new Date(now).toISOString(),
 		lastSeen: new Date(now).toISOString(),
@@ -453,7 +464,7 @@ export function isBanned(ip) {
 	return !!state.banned[String(ip || "")];
 }
 
-export function banIp(ip, { by = "sistema", reason = "", alertId = "" } = {}) {
+export function banIp(ip, { by = "sistema", reason = "", alertId = "", kind = "" } = {}) {
 	const value = String(ip || "").trim();
 	if (!net.isIP(value)) return { error: "invalid-ip" };
 	state.banned[value] = {
@@ -461,6 +472,7 @@ export function banIp(ip, { by = "sistema", reason = "", alertId = "" } = {}) {
 		by,
 		reason: String(reason || "").slice(0, 200),
 		alertId: String(alertId || ""),
+		kind: kind === "bot" ? "bot" : kind === "hack" ? "hack" : "",
 	};
 	dirty = true;
 	saveNow();

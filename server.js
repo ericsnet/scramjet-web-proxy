@@ -1537,6 +1537,7 @@ app.post("/api/admin/security/ban", requireAdmin, sameOrigin, (req, res) => {
 		by: req.user.username,
 		reason: String(req.body.reason || "").slice(0, 200),
 		alertId: String(req.body.alert || ""),
+		kind: String(req.body.kind || ""),
 	});
 	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
 	audit(req, "security.ban", ip, String(req.body.reason || "").slice(0, 200));

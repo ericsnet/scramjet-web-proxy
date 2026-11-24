@@ -24,3 +24,4 @@ jobs:
             node --check "$f"
           done
           bash -n setup.sh status.sh scripts/healthcheck.sh
+          node --check scripts/security-unban.mjs

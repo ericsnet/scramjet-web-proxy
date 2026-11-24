@@ -7,6 +7,7 @@
 	"scripts": {
 		"dev": "node server.js",
 		"start": "node server.js",
+		"security:unban": "node scripts/security-unban.mjs",
 		"postinstall": "node scripts/patch-wisp.mjs"
 	},
 	"keywords": [],

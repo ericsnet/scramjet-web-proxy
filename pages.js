@@ -1271,8 +1271,27 @@ export function securityPage({
 			const reasons = (a.reasons || [])
 				.map((reason) => `<span class="badge">${esc(reason)}</span>`)
 				.join(" ");
+			const attack = (a.reasons || []).some((reason) =>
+				/^(Ruta de escaneo|Inyección|XSS|Path traversal|Exploit|Byte nulo|Destino local)/.test(
+					String(reason),
+				),
+			);
+			const kind =
+				a.kind === "account_swap"
+					? "cuentas"
+					: a.kind === "bot"
+						? "bot"
+						: a.kind === "hack"
+							? "hacking"
+							: attack
+								? "hacking"
+								: a.bot
+									? "bot"
+									: "alerta";
+			const badge = `<span class="badge ${kind === "bot" ? "bot" : "blocked"}">${kind}</span>`;
+			const botExtra = a.bot && kind === "hacking" ? ' <span class="badge bot">bot</span>' : "";
 			return `<tr>
-  <td><span class="badge ${a.bot ? "bot" : "blocked"}">${a.bot ? "bot" : "alerta"}</span><br><span class="mono">${esc(fmtDate(a.lastSeen))}</span></td>
+  <td>${badge}${botExtra}<br><span class="mono">${esc(fmtDate(a.lastSeen))}</span></td>
   <td><strong class="mono">${esc(a.ip)}</strong>${a.banned ? '<br><span class="badge blocked">baneada</span>' : ""}<br><span class="muted">${esc(a.username || "sin sesión")}</span></td>
   <td><strong>${esc(a.score)}</strong><br><span class="muted">${esc(a.count)} eventos</span></td>
   <td>${reasons || "—"}</td>
@@ -1295,6 +1314,7 @@ export function securityPage({
 				: `<form method="post" action="/api/admin/security/ban" onsubmit="return confirm('¿Banear esta IP? El usuario no podrá acceder hasta que la desbanees.')">
       <input type="hidden" name="ip" value="${esc(a.ip)}">
       <input type="hidden" name="alert" value="${esc(a.id)}">
+      <input type="hidden" name="kind" value="${kind === "bot" ? "bot" : "hack"}">
       <input name="reason" maxlength="200" placeholder="Motivo (opcional)" aria-label="Motivo del baneo">
       <button class="small danger" type="submit"${a.ip === currentIp ? " disabled" : ""}>Banear IP</button>
     </form>`
@@ -1307,6 +1327,7 @@ export function securityPage({
 		.map(
 			(b) => `<tr>
   <td class="mono">${esc(b.ip)}</td>
+  <td><span class="badge ${b.kind === "bot" ? "bot" : "blocked"}">${b.kind === "bot" ? "bot" : b.kind === "hack" ? "hacking" : "manual"}</span></td>
   <td>${esc(b.by || "—")}</td>
   <td>${esc(b.reason || "—")}</td>
   <td class="mono">${esc(fmtDate(b.at))}</td>
@@ -1349,7 +1370,7 @@ ${adminTabs("security", user.role)}
 </div>
 <div class="card">
   <h2>IPs baneadas (${bans.length})</h2>
-  ${banRows ? `<div class="scroll"><table><thead><tr><th>IP</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay IPs baneadas.</p>'}
+  ${banRows ? `<div class="scroll"><table><thead><tr><th>IP</th><th>Tipo</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay IPs baneadas.</p>'}
 </div>`;
 	return shell("Seguridad · Administración", body, { topbar: topbar(user) });
 }

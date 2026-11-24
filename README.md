@@ -204,7 +204,8 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - Genera alertas con IP, usuario, motivos, puntuación y última petición.
 - Detecta bots por intervalos, user-agent y patrones de uso; no usa captcha.
 - Detecta **intercambio de cuentas** por varias cuentas en la misma IP o una cuenta desde varias IPs y bloquea temporalmente la cuenta implicada.
-- Desde `/admin/security` puedes banear o desbanear la IP y descartar alertas.
+- Desde `/admin/security` puedes banear o desbanear la IP (bot o hacking) y descartar alertas.
+- Emergencia si te bloqueas a ti mismo: `npm run security:unban -- 1.2.3.4` y reinicia `webproxy`.
 - El creador y los administradores ven el resumen en Administración.
 
 ### Chat interno
