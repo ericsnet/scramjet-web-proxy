@@ -300,13 +300,13 @@ Archivos principales:
 
 La combinación “latest” de npm puede ser incompatible. Este proyecto fija:
 
-- `@mercuryworkshop/scramjet` 2.0.67-alpha.1
-- `@mercuryworkshop/scramjet-controller` 0.0.13
+- `@mercuryworkshop/scramjet` 2.1.0
+- `@mercuryworkshop/scramjet-controller` 0.1.0
 - `@mercuryworkshop/scramjet-utils` 0.0.3
 - `@mercuryworkshop/libcurl-transport` 2.0.6
 - `@mercuryworkshop/wisp-js` 0.5.3
 
-No actualices esas versiones por separado sin probar la combinación completa.
+No actualices esas versiones por separado sin probar la combinación completa. La caché HTTP de Scramjet no se usa: se prioriza compatibilidad y streaming.
 
 ## Limitaciones
 
