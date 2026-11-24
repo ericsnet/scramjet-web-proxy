@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,7 @@ export const DEFAULTS = Object.freeze({
 	backupRetentionDays: 14,
 	metricsToken: "",
 	allowUserHistoryClear: false,
+	revision: "",
 });
 
 const LIMITS = {
@@ -66,6 +68,7 @@ function save() {
 function load() {
 	fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 	if (!fs.existsSync(FILE)) {
+		settings.revision = crypto.randomBytes(8).toString("hex");
 		save();
 		return;
 	}
@@ -74,11 +77,17 @@ function load() {
 		const result = normalize({ ...DEFAULTS, ...data }, true);
 		if (result.settings) {
 			settings = result.settings;
-			if (result.changed) save();
+			let changed = result.changed;
+			if (!settings.revision) {
+				settings.revision = crypto.randomBytes(8).toString("hex");
+				changed = true;
+			}
+			if (changed) save();
 		}
 	} catch (err) {
 		console.error("No se pudo cargar settings.json:", err.message);
 		settings = clone(DEFAULTS);
+		settings.revision = crypto.randomBytes(8).toString("hex");
 		save();
 	}
 }
@@ -269,10 +278,24 @@ export function getSettings() {
 }
 
 export function saveSettings(input) {
-	const result = normalize(input || {});
+	const data = input || {};
+	if (
+		data.revision !== undefined &&
+		String(data.revision) !== String(settings.revision)
+	) {
+		return {
+			stale: true,
+			error: "Los ajustes han cambiado desde otra pestaña o sesión.",
+			settings: getSettings(),
+		};
+	}
+	const result = normalize(data);
 	if (result.errors) return { errors: result.errors, error: result.errors[0] };
 	if (result.changed) {
-		settings = result.settings;
+		settings = {
+			...result.settings,
+			revision: crypto.randomBytes(8).toString("hex"),
+		};
 		save();
 	}
 	return { settings: getSettings() };
@@ -280,6 +303,7 @@ export function saveSettings(input) {
 
 export function resetSettings() {
 	settings = clone(DEFAULTS);
+	settings.revision = crypto.randomBytes(8).toString("hex");
 	save();
 	return getSettings();
 }

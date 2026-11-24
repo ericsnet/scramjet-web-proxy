@@ -866,10 +866,12 @@ export function settingsPage({ user, settings, notice = "", error = "" } = {}) {
 
 	const body = `
 ${adminTabs("settings")}
-<form method="post" action="/api/admin/settings">
+<form method="post" action="/api/admin/settings" autocomplete="off">
+<input type="hidden" name="revision" value="${esc(settings.revision || "")}">
 <div class="card">
   <h1>Ajustes</h1>
   <p class="muted">Los cambios se aplican sin reiniciar la aplicación.</p>
+  <p class="hint">Se guardan solo al pulsar “Guardar ajustes”. Si otra pestaña ha cambiado los ajustes, se mostrará un aviso en vez de sobrescribirlos.</p>
 
   <div class="section">
     <h3>Seguridad y sesiones</h3>
@@ -996,6 +998,8 @@ function addLink() {
   row.querySelector("button").addEventListener("click", () => row.remove());
   document.getElementById("links-editor").appendChild(row);
 }
+const settingsForm = document.querySelector('form[action="/api/admin/settings"]');
+if (settingsForm) settingsForm.reset();
 </script>`;
 	return shell("Ajustes · Administración", body, { topbar: topbar(user) });
 }

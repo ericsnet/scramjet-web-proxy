@@ -40,7 +40,38 @@ administración.
 - Un dominio o túnel con HTTPS para producción.
 - Opcional: Apache/Nginx como reverse proxy y systemd para el servicio.
 
-## Instalación
+## Configuración rápida (recomendada)
+
+```bash
+git clone https://github.com/ericsnet/scramjet-web-proxy.git
+cd scramjet-web-proxy
+./setup.sh
+```
+
+El asistente:
+
+1. comprueba Node/npm e instala dependencias;
+2. crea el administrador (o conserva los usuarios existentes);
+3. pregunta cómo publicar: **Tailscale Funnel**, **Cloudflare Tunnel rápido**,
+   **Cloudflare con token/dominio**, **solo local** o **reverse proxy propio**;
+4. instala y arranca el servicio systemd;
+5. espera a que responda y te muestra la **URL final** y las credenciales.
+
+Modo no interactivo (útil para automatizar):
+
+```bash
+PROXY_SETUP_NONINTERACTIVE=1 \
+PROXY_SETUP_MODE=cloudflare \
+PROXY_SETUP_ADMIN_USER=admin \
+PROXY_SETUP_ADMIN_PASSWORD='CAMBIAME-1234' \
+./setup.sh --yes
+```
+
+Modos: `local`, `tailscale`, `cloudflare`, `cloudflare-token`, `custom`.
+Para Cloudflare con dominio: `PROXY_SETUP_PUBLIC_HOST=proxy.example.com` y
+`PROXY_SETUP_CLOUDFLARE_TOKEN=...`.
+
+## Instalación manual
 
 ```bash
 git clone https://github.com/ericsnet/scramjet-web-proxy.git
@@ -195,6 +226,7 @@ Archivos principales:
 | `public/` | Interfaz del proxy |
 | `sw.js` | Service worker de Scramjet |
 | `Dockerfile`, `docker-compose.yml`, `Caddyfile` | Despliegue con Docker + Caddy |
+| `setup.sh` | Asistente de configuración rápida (admin, túnel, systemd, URL) |
 | `scripts/patch-wisp.mjs` | Excepción de admins y listas por usuario en Wisp |
 
 ## Versiones fijadas

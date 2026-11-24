@@ -997,14 +997,17 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		backupRetentionDays: req.body.backupRetentionDays,
 		metricsToken: req.body.metricsToken,
 		allowUserHistoryClear: req.body.allowUserHistoryClear === "on",
+		revision: req.body.revision,
 	};
 	const result = saveSettings(payload);
 	if (result.error) {
-		return res.status(400).type("html").send(
+		return res.status(result.stale ? 409 : 400).type("html").send(
 			settingsPage({
 				user: req.user,
 				settings: getSettings(),
-				error: result.error,
+				error: result.stale
+					? "Los ajustes han cambiado en otra pestaña. Se muestran los valores actuales; revisa y vuelve a guardar."
+					: result.error,
 			}),
 		);
 	}
@@ -1510,6 +1513,7 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 const HOST = process.env.HOST || "127.0.0.1";
-server.listen(3030, HOST, () => {
-	console.log(`Proxy web escuchando en http://${HOST}:3030`);
+const PORT = Number(process.env.PORT) || 3030;
+server.listen(PORT, HOST, () => {
+	console.log(`Proxy web escuchando en http://${HOST}:${PORT}`);
 });

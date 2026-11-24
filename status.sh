@@ -4,6 +4,14 @@
 cd "$(dirname "$0")" || exit 1
 
 URL="${PROXY_URL:-}"
+if [ -z "$URL" ] && [ -f data/public-url.txt ]; then
+	URL="$(head -n1 data/public-url.txt)"
+fi
+APP_PORT="${PORT:-}"
+if [ -z "$APP_PORT" ] && [ -f data/app-port.txt ]; then
+	APP_PORT="$(head -n1 data/app-port.txt)"
+fi
+APP_PORT="${APP_PORT:-3030}"
 
 echo "=== App (Node) ==="
 if systemctl is-active --quiet webproxy; then
@@ -12,7 +20,7 @@ else
 	echo "webproxy: PARADO"
 fi
 printf 'healthz local: '
-curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3030/healthz || echo "sin respuesta"
+curl -s -m 5 -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:${APP_PORT}/healthz" || echo "sin respuesta"
 
 echo
 echo "=== Apache / reverse proxy ==="
