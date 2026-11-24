@@ -19,7 +19,6 @@ import {
 	getSession,
 	verifyLogin,
 	verifyUserPassword,
-	isRateLimited,
 	recordFailedLogin,
 	clearFailedLogins,
 	validatePassword,
@@ -47,7 +46,6 @@ import {
 	revokeUserSessions,
 	isIpRateLimited,
 	recordIpFailure,
-	clearIpFailures,
 	flushSessions,
 } from "./auth.js";
 import {
@@ -889,7 +887,6 @@ app.post("/api/login", sameOrigin, (req, res) => {
 	}
 
 	clearFailedLogins(username);
-	clearIpFailures(ip);
 	metric("logins_success_total");
 	const session = createSession(user.username, {
 		ip,
