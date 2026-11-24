@@ -1,0 +1,7 @@
+[Unit]
+Description=Scramjet Web Proxy health watchdog
+After=webproxy.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/web-proxy/scripts/healthcheck.sh

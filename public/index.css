@@ -186,6 +186,47 @@ h1 span {
 	max-width: 640px;
 }
 
+.blocked-request {
+	margin-top: 18px;
+	padding: 14px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--panel);
+	width: min(520px, 100%);
+	text-align: left;
+}
+
+.blocked-request p {
+	margin: 0 0 8px;
+	font-size: 13px;
+	color: var(--muted);
+}
+
+.blocked-request textarea {
+	width: 100%;
+	min-height: 60px;
+	background: var(--panel-2);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	color: var(--text);
+	font: inherit;
+	font-size: 13px;
+	padding: 8px 10px;
+	outline: none;
+	resize: vertical;
+}
+
+.blocked-request .secondary {
+	background: var(--panel-2);
+	border: 1px solid var(--border);
+	color: var(--text);
+	border-radius: 8px;
+	font: inherit;
+	font-size: 13px;
+	padding: 8px 12px;
+	cursor: pointer;
+}
+
 #sj-error-code {
 	display: none;
 }
@@ -286,6 +327,64 @@ h1 span {
 	background: var(--panel);
 	border: 1px solid var(--border);
 	flex-wrap: wrap;
+}
+
+.tab-bar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	overflow-x: auto;
+}
+
+.tab {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: 220px;
+	padding: 6px 10px;
+	border: 1px solid var(--border);
+	border-radius: 7px 7px 0 0;
+	background: var(--panel-2);
+	color: var(--muted);
+	font-size: 12.5px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.tab.active {
+	color: var(--text);
+	background: var(--panel);
+	border-color: var(--border-strong);
+}
+
+.tab span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tab button {
+	background: none;
+	border: 0;
+	color: var(--dim);
+	font: inherit;
+	cursor: pointer;
+	padding: 0;
+}
+
+.tab button:hover {
+	color: var(--error);
+}
+
+#new-tab-btn {
+	width: 30px;
+	height: 30px;
+	flex: 0 0 auto;
+	border: 1px solid var(--border);
+	border-radius: 7px;
+	background: var(--panel-2);
+	color: var(--text);
+	font-size: 16px;
+	cursor: pointer;
 }
 
 .toolbar .home {
@@ -437,6 +536,20 @@ dialog input:focus {
 .dialog-actions .secondary {
 	background: var(--panel-2);
 	color: var(--text);
+}
+
+.qr-content {
+	display: grid;
+	place-items: center;
+	background: #fff;
+	border-radius: 8px;
+	padding: 8px;
+	min-height: 240px;
+}
+
+.qr-content svg {
+	width: 240px;
+	height: 240px;
 }
 
 /* ------------------------------ pie ------------------------------ */

@@ -5,6 +5,7 @@ const counters = {
 	logins_blocked_total: 0,
 	wisp_connections_total: 0,
 	blocked_hosts_total: 0,
+	quarantine_rejected_total: 0,
 };
 
 export function count(name, value = 1) {

@@ -65,6 +65,9 @@ function migrateUsers() {
 			lastSeenAt: null,
 			loginCount: 0,
 			blockedSites: [],
+			siteMessages: {},
+			unblockOverrides: [],
+			lang: "",
 			schedule: null,
 		};
 		for (const [key, value] of Object.entries(defaults)) {
@@ -115,6 +118,9 @@ function seedIfNeeded() {
 			lastSeenAt: null,
 			loginCount: 0,
 			blockedSites: [],
+			siteMessages: {},
+			unblockOverrides: [],
+			lang: "",
 			schedule: null,
 		};
 	}
@@ -147,6 +153,9 @@ export function listUsers() {
 				effectivelyBlocked: !!u.blocked || !!until,
 				notes: u.notes || "",
 				blockedSites: Array.isArray(u.blockedSites) ? u.blockedSites : [],
+				siteMessages: u.siteMessages && typeof u.siteMessages === "object" ? u.siteMessages : {},
+				unblockOverrides: Array.isArray(u.unblockOverrides) ? u.unblockOverrides : [],
+				lang: u.lang || "",
 				schedule: u.schedule || null,
 				mustChangePassword: !!u.mustChangePassword,
 				createdAt: u.createdAt,
@@ -215,6 +224,9 @@ export function createUser(username, password, role) {
 		lastSeenAt: null,
 		loginCount: 0,
 		blockedSites: [],
+		siteMessages: {},
+		unblockOverrides: [],
+		lang: "",
 		schedule: null,
 	};
 	save();
@@ -322,28 +334,64 @@ function normalizeHosts(input) {
 		? input
 		: String(input || "").split(/\r?\n/);
 	const hosts = [];
+	const messages = {};
 	for (let line of lines) {
 		line = String(line).trim();
 		if (!line || line.startsWith("#")) continue;
-		line = line.replace(/^\*\./, "");
-		const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(line)
-			? line
-			: `https://${line}`;
+		const [hostPart, ...messageParts] = line.split("|");
+		const message = messageParts.join("|").trim().slice(0, 300);
+		const cleaned = hostPart.trim().replace(/^\*\./, "");
+		if (!cleaned) continue;
+		const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned)
+			? cleaned
+			: `https://${cleaned}`;
 		try {
 			const host = new URL(candidate).hostname.toLowerCase().replace(/\.$/, "");
-			if (/^[a-z0-9.-]+$/.test(host) && host.includes(".")) hosts.push(host);
+			if (/^[a-z0-9.-]+$/.test(host) && host.includes(".")) {
+				hosts.push(host);
+				if (message) messages[host] = message;
+			}
 		} catch {}
 		if (hosts.length >= 100) break;
 	}
-	return [...new Set(hosts)];
+	return { hosts: [...new Set(hosts)], messages };
 }
 
 export function setUserBlockedSites(username, input) {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
-	db.users[user.username].blockedSites = normalizeHosts(input);
+	const parsed = normalizeHosts(input);
+	db.users[user.username].blockedSites = parsed.hosts;
+	db.users[user.username].siteMessages = parsed.messages;
 	save();
-	return { ok: true, blockedSites: db.users[user.username].blockedSites };
+	return {
+		ok: true,
+		blockedSites: db.users[user.username].blockedSites,
+		siteMessages: db.users[user.username].siteMessages,
+	};
+}
+
+export function setUserLanguage(username, lang) {
+	const user = getUser(username);
+	if (!user) return { error: "notfound" };
+	const value = ["es", "en", "ca"].includes(lang) ? lang : "";
+	db.users[user.username].lang = value;
+	save();
+	return { ok: true };
+}
+
+export function addUnblockOverride(username, host) {
+	const user = getUser(username);
+	if (!user) return { error: "notfound" };
+	const clean = String(host || "").toLowerCase().replace(/^\*\./, "").replace(/\.$/, "");
+	if (!/^[a-z0-9.-]+$/.test(clean) || !clean.includes(".")) return { error: "invalid-host" };
+	const list = Array.isArray(db.users[user.username].unblockOverrides)
+		? db.users[user.username].unblockOverrides
+		: [];
+	if (!list.includes(clean)) list.push(clean);
+	db.users[user.username].unblockOverrides = list;
+	save();
+	return { ok: true };
 }
 
 export function setUserSchedule(username, schedule) {
@@ -723,6 +771,7 @@ export function getSession(req) {
 		lastSeenAt: session.lastSeenAt,
 		expires: session.expires,
 		mustChangePassword: !!user.mustChangePassword,
+		lang: user.lang || "",
 	};
 }
 

@@ -21,6 +21,23 @@ const bookmarkCancel = document.getElementById("bookmark-cancel");
 const favoritesWrap = document.getElementById("favorites-wrap");
 const favoritesBox = document.getElementById("favorites");
 const suggestions = document.getElementById("url-suggestions");
+const qrButton = document.getElementById("qr-btn");
+const qrToolbarButton = document.getElementById("qr-toolbar-btn");
+const qrDialog = document.getElementById("qr-dialog");
+const qrContent = document.getElementById("qr-content");
+const qrClose = document.getElementById("qr-close");
+const tabList = document.getElementById("tab-list");
+const newTabButton = document.getElementById("new-tab-btn");
+
+let tabs = [{ id: 1, url: "", label: "Nueva pestaña" }];
+let activeTab = 1;
+let nextTabId = 2;
+const blockedRequest = document.getElementById("blocked-request");
+const blockedHost = document.getElementById("blocked-host");
+const blockedReason = document.getElementById("blocked-reason");
+const blockedRequestBtn = document.getElementById("blocked-request-btn");
+const blockedRequestMsg = document.getElementById("blocked-request-msg");
+let blockedUrl = "";
 
 let currentBookmarks = [];
 
@@ -52,17 +69,34 @@ function isBlockedUrl(url) {
 	return false;
 }
 
-function showBlocked(url) {
+function showBlocked(url, message = "") {
 	let host = "";
 	try {
 		host = new URL(url).hostname;
 	} catch {}
 	showErrorScreen(
-		host ? `Sitio prohibido: ${host}` : "Ese sitio está prohibido.",
+		message || (host ? `Sitio prohibido: ${host}` : "Ese sitio está prohibido."),
 		"",
 	);
+	if (blockedHost) blockedHost.textContent = host;
+	if (blockedRequest) blockedRequest.hidden = false;
+	if (blockedReason) blockedReason.value = "";
+	if (blockedRequestMsg) blockedRequestMsg.textContent = "";
+	blockedUrl = host;
 	landing.style.display = "flex";
 	frameWrapper.style.display = "none";
+}
+
+async function checkPolicy(url) {
+	try {
+		const res = await fetch(`/api/navigate-check?url=${encodeURIComponent(url)}`, {
+			cache: "no-store",
+		});
+		if (!res.ok) return null;
+		return await res.json();
+	} catch {
+		return null;
+	}
 }
 
 // Datos de la sesión (usuario y rol) para la barra superior.
@@ -242,11 +276,13 @@ function handleFrameUrl(url) {
 		try {
 			lastHost = new URL(info.url).host;
 		} catch {}
+		updateActiveTab(info.url);
 	}
 
-	if (info.depth >= 1 && isBlockedUrl(info.url)) {
-		showBlocked(info.url);
-		return;
+	if (info.depth >= 1) {
+		checkPolicy(info.url).then((policy) => {
+			if (policy?.blocked) showBlocked(info.url, policy.message);
+		});
 	}
 
 	// Si el proxy se ha anidado (varias capas de /~/sj/), volvemos a la URL real.
@@ -294,14 +330,122 @@ function showErrorScreen(message, details) {
 function hideError() {
 	error.textContent = "";
 	errorCode.textContent = "";
+	if (blockedRequest) blockedRequest.hidden = true;
+	blockedUrl = "";
 }
+
+function tabLabel(url) {
+	try {
+		return new URL(url).hostname.replace(/^www\./, "");
+	} catch {
+		return "Nueva pestaña";
+	}
+}
+
+function saveTabs() {
+	try {
+		localStorage.setItem(
+			"pw_tabs",
+			JSON.stringify(tabs.map((t) => ({ url: t.url, label: t.label }))),
+		);
+	} catch {}
+}
+
+function renderTabs() {
+	if (!tabList) return;
+	tabList.replaceChildren();
+	for (const tab of tabs) {
+		const item = document.createElement("div");
+		item.className = `tab${tab.id === activeTab ? " active" : ""}`;
+		const label = document.createElement("span");
+		label.textContent = tab.label;
+		item.append(label);
+		const close = document.createElement("button");
+		close.type = "button";
+		close.title = "Cerrar pestaña";
+		close.textContent = "×";
+		close.addEventListener("click", (event) => {
+			event.stopPropagation();
+			closeTab(tab.id);
+		});
+		item.append(close);
+		item.addEventListener("click", () => switchTab(tab.id));
+		tabList.append(item);
+	}
+	saveTabs();
+}
+
+function updateActiveTab(url) {
+	const tab = tabs.find((t) => t.id === activeTab);
+	if (!tab) return;
+	tab.url = url;
+	tab.label = tabLabel(url);
+	renderTabs();
+}
+
+async function switchTab(id) {
+	const tab = tabs.find((t) => t.id === id);
+	if (!tab) return;
+	activeTab = id;
+	renderTabs();
+	hideError();
+	if (tab.url) {
+		await navigate(tab.url, { silent: true, log: false });
+	} else {
+		goHome();
+	}
+}
+
+function createTab() {
+	if (tabs.length >= 5) return;
+	const tab = { id: nextTabId++, url: "", label: "Nueva pestaña" };
+	tabs.push(tab);
+	activeTab = tab.id;
+	renderTabs();
+	hideError();
+	address.value = "";
+	goHome();
+	address.focus();
+}
+
+function closeTab(id) {
+	const index = tabs.findIndex((t) => t.id === id);
+	if (index < 0) return;
+	tabs.splice(index, 1);
+	if (!tabs.length) {
+		tabs.push({ id: nextTabId++, url: "", label: "Nueva pestaña" });
+	}
+	if (activeTab === id) {
+		const next = tabs[Math.max(0, index - 1)];
+		switchTab(next.id);
+	} else {
+		renderTabs();
+	}
+}
+
+newTabButton?.addEventListener("click", createTab);
+
+try {
+	const saved = JSON.parse(localStorage.getItem("pw_tabs") || "[]");
+	if (Array.isArray(saved) && saved.length) {
+		tabs = saved.slice(0, 5).map((t, i) => ({
+			id: i + 1,
+			url: typeof t.url === "string" ? t.url : "",
+			label: t.label || tabLabel(t.url || ""),
+		}));
+		activeTab = tabs[0].id;
+		nextTabId = tabs.length + 1;
+	}
+} catch {}
+renderTabs();
 
 async function navigate(url, { silent = false, log = true } = {}) {
 	const rawInput = typeof url === "string" ? url.trim() : "";
 	url = normalize(url);
 	if (!url) return;
-	if (isBlockedUrl(url)) {
-		showBlocked(url);
+	const policy = await checkPolicy(url);
+	if (policy?.blocked) {
+		showBlocked(url, policy.message);
 		return;
 	}
 	const query = rawInput && !looksLikeUrl(rawInput) ? rawInput : "";
@@ -315,6 +459,7 @@ async function navigate(url, { silent = false, log = true } = {}) {
 		frameUrl.textContent = url;
 		// El título de la pestaña no debe revelar el sitio visitado.
 		document.title = "Proxy Web";
+		updateActiveTab(url);
 		landing.style.display = "none";
 		frameWrapper.style.display = "flex";
 	} catch (err) {
@@ -451,6 +596,24 @@ favoritesBox?.addEventListener("click", (event) => {
 });
 
 bookmarkButton?.addEventListener("click", openBookmarkDialog);
+async function openQr() {
+	if (!qrContent || !qrDialog) return;
+	qrContent.textContent = "Generando…";
+	try {
+		const res = await fetch("/api/qr", { cache: "no-store" });
+		if (res.ok) {
+			qrContent.innerHTML = await res.text();
+		} else {
+			qrContent.textContent = "No se pudo generar el QR.";
+		}
+	} catch {
+		qrContent.textContent = "No se pudo generar el QR.";
+	}
+	qrDialog.showModal();
+}
+qrButton?.addEventListener("click", openQr);
+qrToolbarButton?.addEventListener("click", openQr);
+qrClose?.addEventListener("click", () => qrDialog?.close());
 bookmarkCancel?.addEventListener("click", () => bookmarkDialog?.close());
 bookmarkForm?.addEventListener("submit", async (event) => {
 	event.preventDefault();
@@ -479,6 +642,40 @@ bookmarkForm?.addEventListener("submit", async (event) => {
 		await loadBookmarks();
 	} catch {
 		if (errorBox) errorBox.textContent = "No se pudo guardar.";
+	}
+});
+
+blockedRequestBtn?.addEventListener("click", async () => {
+	if (!blockedUrl) return;
+	blockedRequestBtn.disabled = true;
+	if (blockedRequestMsg) blockedRequestMsg.textContent = "Enviando…";
+	try {
+		const res = await fetch("/api/requests", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				host: blockedUrl,
+				reason: blockedReason?.value || "",
+			}),
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			const messages = {
+				exists: "Ya hay una solicitud pendiente para ese dominio.",
+				"not-blocked": "Ese dominio ya no está bloqueado.",
+			};
+			if (blockedRequestMsg) {
+				blockedRequestMsg.textContent = messages[data.error] || "No se pudo enviar.";
+			}
+		} else {
+			if (blockedRequestMsg) {
+				blockedRequestMsg.textContent = "Solicitud enviada al administrador.";
+			}
+		}
+	} catch {
+		if (blockedRequestMsg) blockedRequestMsg.textContent = "No se pudo enviar.";
+	} finally {
+		blockedRequestBtn.disabled = false;
 	}
 });
 

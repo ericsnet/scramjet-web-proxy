@@ -225,6 +225,7 @@ function shell(title, body, { topbar = "" } = {}) {
 <meta name="robots" content="noindex">
 <title>${esc(title)}</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="/page-i18n.js" defer></script>
 <style>${CSS}</style>
 </head>
 <body>
@@ -261,6 +262,8 @@ const ADMIN_TABS = [
 	["sessions", "/admin/sessions", "Sesiones"],
 	["activity", "/admin/activity", "Actividad"],
 	["audit", "/admin/audit", "Auditoría"],
+	["requests", "/admin/requests", "Solicitudes"],
+	["stats", "/admin/stats", "Estadísticas"],
 	["settings", "/admin/settings", "Ajustes"],
 	["system", "/admin/system", "Sistema"],
 ];
@@ -408,6 +411,20 @@ ${
 </div>
 
 <div class="card" style="max-width:620px;margin:18px auto 0">
+  <h2>Idioma</h2>
+  <form method="post" action="/api/account/language" class="actions">
+    <input type="hidden" name="next" value="/account">
+    <select name="lang" style="width:auto" aria-label="Idioma">
+      <option value=""${!user.lang ? " selected" : ""}>Por defecto</option>
+      <option value="es"${user.lang === "es" ? " selected" : ""}>Español</option>
+      <option value="en"${user.lang === "en" ? " selected" : ""}>English</option>
+      <option value="ca"${user.lang === "ca" ? " selected" : ""}>Català</option>
+    </select>
+    <button class="small" type="submit">Guardar idioma</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:620px;margin:18px auto 0">
   <h2>Sesiones activas</h2>
   <p class="muted">Estos son los navegadores con sesión iniciada en tu cuenta.</p>
   <ul class="session-list">${sessionItems || '<li class="empty">No hay sesiones activas.</li>'}</ul>
@@ -528,7 +545,118 @@ export function historyPage({
 	return shell("Historial · Proxy Web", body, { topbar: topbar(user) });
 }
 
-export function adminPage({ user, users, counts = {}, canManage = false, notice = "", error = "" } = {}) {
+export function statsPage({
+	user,
+	topHosts = [],
+	byUser = [],
+	failed = [],
+	categories = {},
+} = {}) {
+	const hostRows = topHosts
+		.map(([host, count]) => `<tr><td class="mono">${esc(host)}</td><td>${count}</td></tr>`)
+		.join("");
+	const userRows = byUser
+		.map(([name, count]) => `<tr><td>${esc(name)}</td><td>${count}</td></tr>`)
+		.join("");
+	const failRows = failed
+		.map(([name, count]) => `<tr><td>${esc(name)}</td><td>${count}</td></tr>`)
+		.join("");
+	const categoryRows = Object.entries(categories)
+		.map(
+			([name, info]) =>
+				`<tr><td>${esc(name)}</td><td>${info.count || 0}</td><td class="mono">${esc(info.updatedAt ? fmtDate(info.updatedAt) : "sin datos")}</td></tr>`,
+		)
+		.join("");
+	return shell(
+		"Estadísticas · Administración",
+		`${adminTabs("stats", user.role)}
+<div class="card">
+  <h1>Estadísticas</h1>
+  <p class="muted">Resumen simple basado en actividad y auditoría.</p>
+  <div class="grid">
+    <div>
+      <h2>Dominios más visitados</h2>
+      ${hostRows ? `<table><tbody>${hostRows}</tbody></table>` : '<p class="empty">Sin datos.</p>'}
+    </div>
+    <div>
+      <h2>Actividad por usuario</h2>
+      ${userRows ? `<table><tbody>${userRows}</tbody></table>` : '<p class="empty">Sin datos.</p>'}
+    </div>
+  </div>
+  <div class="grid" style="margin-top:20px">
+    <div>
+      <h2>Logins fallidos/bloqueados</h2>
+      ${failRows ? `<table><tbody>${failRows}</tbody></table>` : '<p class="empty">Sin datos.</p>'}
+    </div>
+    <div>
+      <h2>Categorías</h2>
+      <table><tbody>${categoryRows}</tbody></table>
+    </div>
+  </div>
+</div>`,
+		{ topbar: topbar(user) },
+	);
+}
+
+export function requestsPage({
+	user,
+	requests = [],
+	status = "pending",
+	canManage = false,
+} = {}) {
+	const rows = requests
+		.map(
+			(r) => `<tr>
+  <td><strong>${esc(r.username)}</strong></td>
+  <td class="mono">${esc(r.host)}</td>
+  <td>${esc(r.reason || "—")}</td>
+  <td class="mono">${esc(fmtDate(r.createdAt))}</td>
+  <td><span class="badge${r.status === "pending" ? " blocked" : ""}">${esc(r.status)}</span></td>
+  <td>${
+		r.status === "pending" && canManage
+			? `<div class="actions">
+      <form method="post" action="/api/admin/requests/${encodeURIComponent(r.id)}/approve"><button class="small" type="submit">Aprobar</button></form>
+      <form method="post" action="/api/admin/requests/${encodeURIComponent(r.id)}/deny"><button class="small danger" type="submit">Denegar</button></form>
+    </div>`
+			: ""
+	}</td>
+</tr>`,
+		)
+		.join("");
+	return shell(
+		"Solicitudes · Administración",
+		`${adminTabs("requests", user.role)}
+<div class="card">
+  <h1>Solicitudes de desbloqueo</h1>
+  <p class="muted">Peticiones de usuarios para acceder a dominios bloqueados. Al aprobar se crea una excepción solo para ese usuario.</p>
+  <div class="filter">
+    <a class="small${status === "pending" ? " active" : ""}" href="/admin/requests?status=pending">Pendientes</a>
+    <a class="small" href="/admin/requests?status=approved">Aprobadas</a>
+    <a class="small" href="/admin/requests?status=denied">Denegadas</a>
+  </div>
+  ${
+		rows
+			? `<div class="scroll"><table>
+    <thead><tr><th>Usuario</th><th>Dominio</th><th>Motivo</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`
+			: '<p class="empty">No hay solicitudes.</p>'
+	}
+</div>`,
+		{ topbar: topbar(user) },
+	);
+}
+
+export function adminPage({
+	user,
+	users,
+	counts = {},
+	canManage = false,
+	quarantine = false,
+	quarantineAttempts = [],
+	notice = "",
+	error = "",
+} = {}) {
 	const dayLabels = [
 		[0, "D"],
 		[1, "L"],
@@ -538,6 +666,18 @@ export function adminPage({ user, users, counts = {}, canManage = false, notice 
 		[5, "V"],
 		[6, "S"],
 	];
+	const quarantineRows = quarantineAttempts
+		.map(
+			(e) => `<tr>
+  <td class="mono">${esc(fmtDate(e.at))}</td>
+  <td><strong>${esc(e.actor)}</strong></td>
+  <td class="mono">${esc(e.target || "—")}</td>
+  <td>${esc(e.detail || "")}</td>
+  <td class="mono">${esc(e.ip || "—")}</td>
+  <td>${esc((e.userAgent || "").slice(0, 50))}</td>
+</tr>`,
+		)
+		.join("");
 	const cards = users
 		.map((u) => {
 			const self = u.username.toLowerCase() === user.username.toLowerCase();
@@ -613,7 +753,13 @@ export function adminPage({ user, users, counts = {}, canManage = false, notice 
     </form>
     <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/sites" style="margin-top:12px">
       <label for="sites-${esc(u.username)}">Sitios prohibidos de este usuario</label>
-      <textarea id="sites-${esc(u.username)}" name="sites" placeholder="ejemplo.com&#10;otro-sitio.org">${esc((u.blockedSites || []).join("\n"))}</textarea>
+      <textarea id="sites-${esc(u.username)}" name="sites" placeholder="ejemplo.com | No permitido&#10;otro-sitio.org">${esc(
+					(u.blockedSites || [])
+						.map((h) =>
+							u.siteMessages?.[h] ? `${h} | ${u.siteMessages[h]}` : h,
+						)
+						.join("\n"),
+				)}</textarea>
       <button class="small" type="submit" style="margin-top:8px">Guardar sitios</button>
     </form>
     <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/schedule" style="margin-top:12px">
@@ -668,6 +814,33 @@ export function adminPage({ user, users, counts = {}, canManage = false, notice 
 
 	const body = `
 ${adminTabs("users", user.role)}
+${
+	canManage
+		? `<div class="card" style="border-color:${quarantine ? "#7f1d1d" : "var(--border)"}">
+  <h2>Modo cuarentena</h2>
+  <p class="muted">
+    ${quarantine ? "ACTIVO: se rechazan nuevas peticiones de webs y se han cerrado las conexiones de usuarios." : "Desactivado. Al activarlo se rechazan nuevas webs y se cierran las conexiones abiertas de usuarios al instante."}
+  </p>
+  <form method="post" action="/api/admin/quarantine">
+    <input type="hidden" name="enabled" value="${quarantine ? "0" : "1"}">
+    <input type="hidden" name="next" value="/admin">
+    <button class="${quarantine ? "small" : "small danger"}" type="submit">${quarantine ? "Desactivar cuarentena" : "Activar cuarentena ahora"}</button>
+  </form>
+</div>`
+		: ""
+}
+<div class="card">
+  <h2>Intentos durante la cuarentena</h2>
+  <p class="muted">Peticiones rechazadas mientras la cuarentena estaba activa. Se muestran las últimas 20 (con límite anti-flood).</p>
+  ${
+		quarantineRows
+			? `<div class="scroll"><table>
+    <thead><tr><th>Fecha</th><th>Usuario</th><th>Destino</th><th>Detalle</th><th>IP</th><th>Navegador</th></tr></thead>
+    <tbody>${quarantineRows}</tbody>
+  </table></div>`
+			: '<p class="empty">No hay intentos registrados.</p>'
+	}
+</div>
 <div class="card">
   <h1>Usuarios</h1>
   <p class="muted">
@@ -924,6 +1097,14 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section">
+    <h3>Cuarentena</h3>
+    <label class="check"><input type="checkbox" name="quarantineMode"${settings.quarantineMode ? " checked" : ""}> Activar cuarentena (solo administradores)</label>
+    <label for="quarantineMessage">Mensaje para los usuarios</label>
+    <textarea id="quarantineMessage" name="quarantineMessage" maxlength="300" style="min-height:60px">${esc(settings.quarantineMessage || "")}</textarea>
+    <p class="hint">Al activarla se rechazan nuevas peticiones de webs y se cierran las conexiones abiertas de usuarios.</p>
+  </div>
+
+  <div class="section">
     <h3>Sitios y modo de acceso</h3>
     <label for="accessMode">Modo</label>
     <select id="accessMode" name="accessMode">
@@ -932,9 +1113,46 @@ ${adminTabs("settings")}
     </select>
     <label for="allowedSites">Dominios permitidos (uno por línea)</label>
     <textarea id="allowedSites" name="allowedSites" style="min-height:100px" placeholder="ejemplo.com&#10;otro-sitio.org">${esc((settings.allowedSites || []).join("\n"))}</textarea>
-    <label for="blockedSites">Dominios prohibidos (uno por línea)</label>
-    <textarea id="blockedSites" name="blockedSites" style="min-height:100px" placeholder="ejemplo.com&#10;otro-sitio.org">${esc((settings.blockedSites || []).join("\n"))}</textarea>
-    <p class="hint">Se bloquea el dominio completo y sus subdominios. En modo lista blanca, la lista de prohibidos se ignora. Los administradores pueden acceder.</p>
+    <label for="blockedSites">Dominios prohibidos (uno por línea, opcional: dominio | mensaje)</label>
+    <textarea id="blockedSites" name="blockedSites" style="min-height:120px" placeholder="ejemplo.com | No permitido&#10;otro-sitio.org">${esc(
+			(settings.blockedSites || [])
+				.map((h) =>
+					settings.siteMessages?.[h] ? `${h} | ${settings.siteMessages[h]}` : h,
+				)
+				.join("\n"),
+		)}</textarea>
+    <div class="field-grid">
+      <div>
+        <label for="defaultBlockMessage">Mensaje de bloqueo por defecto</label>
+        <input id="defaultBlockMessage" name="defaultBlockMessage" value="${esc(settings.defaultBlockMessage || "")}" maxlength="300">
+      </div>
+      <div>
+        <label for="allowlistMessage">Mensaje de lista blanca</label>
+        <input id="allowlistMessage" name="allowlistMessage" value="${esc(settings.allowlistMessage || "")}" maxlength="300">
+      </div>
+    </div>
+    <h3 style="margin-top:24px">Categorías</h3>
+    <label class="check"><input type="checkbox" name="categories" value="adult"${settings.categories?.includes("adult") ? " checked" : ""}> Adultos</label>
+    <label class="check"><input type="checkbox" name="categories" value="gambling"${settings.categories?.includes("gambling") ? " checked" : ""}> Apuestas</label>
+    <label class="check"><input type="checkbox" name="categories" value="social"${settings.categories?.includes("social") ? " checked" : ""}> Redes sociales</label>
+    <div class="field-grid">
+      <div><label for="categoryMessageAdult">Mensaje adultos</label><input id="categoryMessageAdult" name="categoryMessageAdult" value="${esc(settings.categoryMessages?.adult || "")}" maxlength="300"></div>
+      <div><label for="categoryMessageGambling">Mensaje apuestas</label><input id="categoryMessageGambling" name="categoryMessageGambling" value="${esc(settings.categoryMessages?.gambling || "")}" maxlength="300"></div>
+    </div>
+    <label for="categoryMessageSocial">Mensaje redes sociales</label>
+    <input id="categoryMessageSocial" name="categoryMessageSocial" value="${esc(settings.categoryMessages?.social || "")}" maxlength="300">
+    <button class="small" type="submit" formaction="/api/admin/categories/refresh" formmethod="post" style="margin-top:10px">Actualizar listas ahora</button>
+    <p class="hint">Se bloquea el dominio completo y sus subdominios. En modo lista blanca, la lista de prohibidos y las categorías se ignoran. Los administradores pueden acceder.</p>
+  </div>
+
+  <div class="section">
+    <h3>Idioma de la interfaz</h3>
+    <label for="language">Idioma por defecto</label>
+    <select id="language" name="language">
+      <option value="es"${settings.language === "es" ? " selected" : ""}>Español</option>
+      <option value="en"${settings.language === "en" ? " selected" : ""}>English</option>
+      <option value="ca"${settings.language === "ca" ? " selected" : ""}>Català</option>
+    </select>
   </div>
 
   <div class="section">
@@ -1105,6 +1323,7 @@ ${adminTabs("system")}
     <div class="stat"><div class="k">Carga</div><div class="v">${stats.load.map((n) => n.toFixed(2)).join(" · ")}</div></div>
     <div class="stat"><div class="k">Disco</div><div class="v">${diskPercent}% <small>${esc(fmtBytes(stats.disk.free))} libres</small></div></div>
     <div class="stat"><div class="k">Node</div><div class="v">${esc(stats.node)}</div></div>
+    <div class="stat"><div class="k">Proxy</div><div class="v">${esc(stats.version || "?")}</div></div>
   </div>
   <div class="grid">
     <div>
@@ -1177,6 +1396,20 @@ export function maintenancePage({ settings, user = null } = {}) {
 	}
 </div>`;
 	return shell("En mantenimiento · Proxy Web", body);
+}
+
+export function quarantinePage({ settings, user = null } = {}) {
+	const body = `<div class="card login-card">
+  <div class="login-logo">${LOGO}</div>
+  <h1>Cuarentena activa</h1>
+  <p class="muted">${esc(settings.quarantineMessage)}</p>
+  ${
+		user
+			? `<form method="post" action="/logout"><button class="primary" type="submit">Cerrar sesión</button></form>`
+			: '<a class="small" href="/login">Volver al login</a>'
+	}
+</div>`;
+	return shell("Cuarentena · Proxy Web", body);
 }
 
 export function blockedPage({ title = "Cuenta bloqueada", message = "", user = null } = {}) {

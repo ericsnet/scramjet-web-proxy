@@ -5,6 +5,7 @@ import { getSettings } from "./settings.js";
 import { exportActivity } from "./activity.js";
 import { exportAudit } from "./audit.js";
 import { exportBookmarks } from "./bookmarks.js";
+import { exportRequests } from "./requests.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
@@ -55,6 +56,7 @@ export function createBackup(reason = "manual") {
 		activity: exportActivity(),
 		audit: exportAudit(),
 		bookmarks: exportBookmarks(),
+		requests: exportRequests(),
 	};
 	let name = `backup-${fileStamp()}.json`;
 	let full = path.join(BACKUP_DIR, name);
@@ -127,6 +129,9 @@ export function restoreBackup(name) {
 	write("audit.json", { events: Array.isArray(data.audit) ? data.audit : [] });
 	write("bookmarks.json", {
 		bookmarks: data.bookmarks && typeof data.bookmarks === "object" ? data.bookmarks : {},
+	});
+	write("requests.json", {
+		requests: Array.isArray(data.requests) ? data.requests : [],
 	});
 	return { ok: true };
 }

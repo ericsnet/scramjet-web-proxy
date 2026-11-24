@@ -37,6 +37,8 @@ import {
 	setUserBlockedSites,
 	setUserSchedule,
 	isWithinSchedule,
+	setUserLanguage,
+	addUnblockOverride,
 	recordLoginSuccess,
 	listSessions,
 	sessionsForUser,
@@ -59,6 +61,9 @@ import {
 	systemPage,
 	maintenancePage,
 	blockedPage,
+	quarantinePage,
+	requestsPage,
+	statsPage,
 	bookmarksPage,
 	historyPage,
 } from "./pages.js";
@@ -100,8 +105,29 @@ import {
 	backupCount,
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
+import QRCode from "qrcode";
+import {
+	refreshCategories,
+	categoryBlocked,
+	categoryStats,
+	initCategories,
+} from "./categories.js";
+import {
+	createRequest,
+	listRequests,
+	countPendingRequests,
+	resolveRequest,
+	exportRequests,
+} from "./requests.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const VERSION = (() => {
+	try {
+		return JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8")).version;
+	} catch {
+		return "?";
+	}
+})();
 const nm = (pkg, sub) => path.join(__dirname, "node_modules/@mercuryworkshop", pkg, sub);
 const execFileAsync = promisify(execFile);
 
@@ -123,19 +149,18 @@ function escapeRegExp(value) {
 
 function applyWispBlocklist() {
 	if (!wisp.options) return;
-	const settings = getSettings();
-	const allowlist = settings.accessMode === "allowlist";
-	const hosts = allowlist ? settings.allowedSites || [] : settings.blockedSites || [];
-	const list = hosts.length
-		? hosts.map(
-				(host) => new RegExp(`^(.+\\.)?${escapeRegExp(host)}$`, "i"),
-			)
-		: null;
-	wisp.options.hostname_whitelist = allowlist ? list : null;
-	wisp.options.hostname_blacklist = allowlist ? null : list;
+	// El bloqueo se decide por conexión para respetar listas por usuario,
+	// categorías y excepciones aprobadas.
+	wisp.options.hostname_whitelist = null;
+	wisp.options.hostname_blacklist = null;
 }
 
 applyWispBlocklist();
+initCategories().then(() => {
+	if ((getSettings().categories || []).length) {
+		return refreshCategories(false);
+	}
+}).catch((err) => console.error("Categorías:", err.message));
 
 function clientIp(req) {	return String(
 		req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
@@ -153,6 +178,46 @@ function audit(req, action, target = "", detail = "") {
 		actor: req.user?.username || "sistema",
 		action,
 		target,
+		detail,
+		ip: clientIp(req),
+		userAgent: clientUa(req),
+	});
+}
+
+const quarantineAttempts = new Map(); // clave -> timestamp (anti-flood)
+let quarantineWindow = 0;
+let quarantineCount = 0;
+
+function requestTarget(req) {
+	try {
+		const match = String(req.path || "").match(/\/~\/sj\/[^/]+\/[^/]+\/(.+)$/);
+		if (match) {
+			return decodeURIComponent(match[1]).slice(0, 2048);
+		}
+	} catch {}
+	return String(req.originalUrl || req.path || "").slice(0, 2048);
+}
+
+function recordQuarantineAttempt(req, session, target, detail = "") {
+	const actor = session?.username || "desconocido";
+	const cleanTarget = String(target || "desconocido").slice(0, 2048);
+	const key = `${actor}|${cleanTarget}`;
+	const now = Date.now();
+	metric("quarantine_rejected_total");
+	if (now - quarantineWindow > 60_000) {
+		quarantineWindow = now;
+		quarantineCount = 0;
+	}
+	if (quarantineCount >= 200) return;
+	const last = quarantineAttempts.get(key) || 0;
+	if (now - last < 5000) return;
+	quarantineCount++;
+	quarantineAttempts.set(key, now);
+	if (quarantineAttempts.size > 5000) quarantineAttempts.clear();
+	addAudit({
+		actor,
+		action: "quarantine.attempt",
+		target: cleanTarget,
 		detail,
 		ip: clientIp(req),
 		userAgent: clientUa(req),
@@ -183,6 +248,22 @@ function requireAuth(req, res, next) {
 	}
 
 	const settings = getSettings();
+	if (settings.quarantineMode && session.role !== "admin") {
+		if (req.path === "/api/navigate-check") {
+			req.user = session;
+			return next();
+		}
+		recordQuarantineAttempt(
+			req,
+			session,
+			requestTarget(req),
+			`${req.method} ${req.originalUrl || req.path}`,
+		);
+		if (req.path.startsWith("/api/")) {
+			return res.status(503).json({ error: "quarantine" });
+		}
+		return res.redirect(303, "/quarantine");
+	}
 	if (settings.maintenanceMode && session.role !== "admin") {
 		if (req.path.startsWith("/api/")) {
 			return res.status(503).json({ error: "maintenance" });
@@ -357,6 +438,101 @@ function closeNonAdminConnections() {
 		wispConnections.delete(id);
 	}
 }
+function matchSite(host, list) {
+	const clean = String(host || "").toLowerCase().replace(/\.$/, "");
+	for (const item of list || []) {
+		const value = String(item || "").toLowerCase().replace(/\.$/, "");
+		if (!value) continue;
+		if (clean === value || clean.endsWith(`.${value}`)) return value;
+	}
+	return null;
+}
+
+function checkHostPolicy(user, hostname) {
+	if (!user || user.role === "admin") return { blocked: false };
+	const settings = getSettings();
+	const host = String(hostname || "").toLowerCase().replace(/\.$/, "");
+	if (!host) return { blocked: false };
+
+	if (matchSite(host, user.unblockOverrides)) return { blocked: false };
+
+	if (settings.accessMode === "allowlist") {
+		const allowed = settings.allowedSites || [];
+		if (!allowed.length || !matchSite(host, allowed)) {
+			return {
+				blocked: true,
+				reason: "allowlist",
+				message: settings.allowlistMessage || "Este sitio no está permitido.",
+			};
+		}
+		return { blocked: false };
+	}
+
+	const globalMatch = matchSite(host, settings.blockedSites);
+	if (globalMatch) {
+		return {
+			blocked: true,
+			reason: "blocked",
+			message:
+				(settings.siteMessages || {})[globalMatch] ||
+				settings.defaultBlockMessage ||
+				"Este sitio está bloqueado.",
+		};
+	}
+
+	const userMatch = matchSite(host, user.blockedSites);
+	if (userMatch) {
+		return {
+			blocked: true,
+			reason: "user",
+			message:
+				(user.siteMessages || {})[userMatch] ||
+				settings.defaultBlockMessage ||
+				"Este sitio está bloqueado.",
+		};
+	}
+
+	const category = categoryBlocked(host, settings.categories || []);
+	if (category) {
+		return {
+			blocked: true,
+			reason: "category",
+			category,
+			message:
+				(settings.categoryMessages || {})[category] ||
+				settings.defaultBlockMessage ||
+				"Este sitio está bloqueado.",
+		};
+	}
+
+	return { blocked: false };
+}
+
+function checkUrlPolicy(user, value) {
+	const settings = getSettings();
+	if (!user || user.role === "admin") return { blocked: false };
+	if (settings.quarantineMode) {
+		return {
+			blocked: true,
+			reason: "quarantine",
+			message: settings.quarantineMessage || "El proxy está en cuarentena.",
+		};
+	}
+	if (!isWithinSchedule(user, settings.timezone)) {
+		return {
+			blocked: true,
+			reason: "schedule",
+			message: "El acceso está fuera del horario permitido para tu cuenta.",
+		};
+	}
+	let host;
+	try {
+		host = new URL(value).hostname;
+	} catch {
+		return { blocked: false };
+	}
+	return checkHostPolicy(user, host);
+}
 const LOGIN_ERRORS = {
 	1: "Usuario o contraseña incorrectos.",
 	rate: "Demasiados intentos fallidos. Espera unos minutos.",
@@ -471,6 +647,20 @@ app.get("/metrics", (req, res) => {
 	res.type("text/plain; version=0.0.4; charset=utf-8").send(lines.join("\n") + "\n");
 });
 
+app.get("/api/lang", (req, res) => {
+	const settings = getSettings();
+	const session = getSession(req);
+	const user = session ? getUser(session.username) : null;
+	let cookieLang = "";
+	for (const part of String(req.headers.cookie || "").split(";")) {
+		const [key, value] = part.trim().split("=");
+		if (key === "pw_lang") cookieLang = decodeURIComponent(value || "");
+	}
+	const lang = user?.lang || cookieLang || settings.language || "es";
+	res.set("Cache-Control", "no-store");
+	res.json({ lang: ["es", "en", "ca"].includes(lang) ? lang : "es" });
+});
+
 app.get("/login", (req, res) => {
 	const settings = getSettings();
 	const session = getSession(req);
@@ -488,6 +678,15 @@ app.get("/login", (req, res) => {
 			error,
 			maintenance: settings.maintenanceMode ? settings.maintenanceMessage : "",
 		}),
+	);
+});
+
+app.get("/quarantine", (req, res) => {
+	const settings = getSettings();
+	const session = getSession(req);
+	if (session?.role === "admin") return res.redirect(303, "/");
+	res.status(503).set("Cache-Control", "no-store").type("html").send(
+		quarantinePage({ settings, user: session || null }),
 	);
 });
 
@@ -577,6 +776,15 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		const token = createBlockFlash(message);
 		return res.redirect(303, `/blocked?t=${token}`);
 	}
+	if (settings.quarantineMode && user.role !== "admin") {
+		addAudit({
+			actor: user.username,
+			action: "login.quarantine",
+			ip,
+			userAgent: clientUa(req),
+		});
+		return res.redirect(303, "/quarantine");
+	}
 	if (settings.maintenanceMode && user.role !== "admin") {
 		addAudit({
 			actor: user.username,
@@ -648,6 +856,28 @@ app.get("/api/me", (req, res) => {
 		blockedSites: user?.blockedSites || [],
 		schedule: user?.schedule || null,
 	});
+});
+
+app.get("/api/navigate-check", (req, res) => {
+	const url = String(req.query.url || "");
+	let parsed;
+	try {
+		parsed = new URL(url);
+		if (!/^https?:$/.test(parsed.protocol)) throw new Error("bad");
+	} catch {
+		return res.status(400).json({ error: "invalid-url" });
+	}
+	const result = checkUrlPolicy(getUser(req.user.username), parsed.href);
+	if (result.reason === "quarantine") {
+		recordQuarantineAttempt(
+			req,
+			req.user,
+			parsed.href,
+			`Intento de navegación a ${parsed.hostname}`,
+		);
+	}
+	res.set("Cache-Control", "no-store");
+	res.json({ ...result, host: parsed.hostname });
 });
 
 app.post("/api/activity", sameOrigin, (req, res) => {
@@ -780,6 +1010,17 @@ app.get("/history", (req, res) => {
 	);
 });
 
+app.post("/api/account/language", sameOrigin, (req, res) => {
+	const lang = String(req.body.lang || "");
+	setUserLanguage(req.user.username, lang);
+	const value = ["es", "en", "ca"].includes(lang) ? lang : "es";
+	res.setHeader(
+		"Set-Cookie",
+		`pw_lang=${value}; Path=/; SameSite=Lax; Max-Age=31536000${req.secure ? "; Secure" : ""}`,
+	);
+	res.redirect(303, safeNext(req.body.next || "/account"));
+});
+
 app.post("/api/account/password", sameOrigin, (req, res) => {
 	const settings = getSettings();
 	if (
@@ -822,6 +1063,48 @@ app.post("/api/account/sessions/:id/revoke", sameOrigin, (req, res) => {
 	res.redirect(303, "/account?ok=session");
 });
 
+app.get("/api/qr", async (req, res) => {
+	let value = String(req.query.url || "").trim();
+	if (!value) {
+		try {
+			value = fs.readFileSync(path.join(__dirname, "data/public-url.txt"), "utf8").trim();
+		} catch {}
+	}
+	if (!value) value = `${req.protocol}://${req.headers.host}/`;
+	try {
+		const parsed = new URL(value);
+		if (!/^https?:$/.test(parsed.protocol)) throw new Error("bad");
+		const svg = await QRCode.toString(parsed.href, {
+			type: "svg",
+			margin: 1,
+			width: 240,
+			color: { dark: "#0b0f14", light: "#ffffff" },
+		});
+		res.type("image/svg+xml").set("Cache-Control", "no-store").send(svg);
+	} catch {
+		res.status(400).type("text/plain").send("URL no válida");
+	}
+});
+
+app.get("/api/requests", (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.json({ requests: listRequests({ username: req.user.username }) });
+});
+
+app.post("/api/requests", sameOrigin, (req, res) => {
+	const host = String(req.body.host || "").trim().toLowerCase().replace(/^\*\./, "");
+	const reason = String(req.body.reason || "").trim().slice(0, 500);
+	if (!host) return res.status(400).json({ error: "invalid-host" });
+	const policy = checkHostPolicy(getUser(req.user.username), host);
+	if (!policy.blocked) return res.status(400).json({ error: "not-blocked" });
+	const result = createRequest(req.user.username, host, reason);
+	if (result.error) {
+		return res.status(result.error === "exists" ? 409 : 400).json({ error: result.error });
+	}
+	audit(req, "request.create", host);
+	res.status(201).json({ request: result.request });
+});
+
 /* ------------------------------ administración ------------------------------ */
 
 app.get("/admin", requireStaff, (req, res) => {
@@ -834,10 +1117,49 @@ app.get("/admin", requireStaff, (req, res) => {
 			users: listUsers(),
 			counts: activityCounts(),
 			canManage: req.user.role === "admin",
+			quarantine: getSettings().quarantineMode,
+			quarantineAttempts: listAudit({
+				action: "quarantine.attempt",
+				limit: 20,
+			}),
 			error,
 			notice,
 		}),
 	);
+});
+
+app.get("/admin/requests", requireStaff, (req, res) => {
+	const status = ["pending", "approved", "denied"].includes(String(req.query.status))
+		? String(req.query.status)
+		: "pending";
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		requestsPage({
+			user: req.user,
+			requests: listRequests({ status }),
+			status,
+			canManage: req.user.role === "admin" || req.user.role === "moderator",
+		}),
+	);
+});
+
+app.post("/api/admin/requests/:id/approve", requireStaff, sameOrigin, (req, res) => {
+	const request = listRequests().find((r) => r.id === req.params.id);
+	if (!request) return res.redirect(303, "/admin/requests?error=notfound");
+	const result = resolveRequest(request.id, "approved", req.user.username);
+	if (result.error) return res.redirect(303, "/admin/requests?error=notfound");
+	addUnblockOverride(request.username, request.host);
+	closeUserConnections(request.username);
+	audit(req, "request.approve", request.username, request.host);
+	res.redirect(303, "/admin/requests?status=pending");
+});
+
+app.post("/api/admin/requests/:id/deny", requireStaff, sameOrigin, (req, res) => {
+	const request = listRequests().find((r) => r.id === req.params.id);
+	if (!request) return res.redirect(303, "/admin/requests?error=notfound");
+	resolveRequest(request.id, "denied", req.user.username);
+	audit(req, "request.deny", request.username, request.host);
+	res.redirect(303, "/admin/requests?status=pending");
 });
 
 app.get("/admin/sessions", requireStaff, (req, res) => {
@@ -946,6 +1268,53 @@ app.get("/admin/activity.csv", requireAdmin, sameSiteRequest, (req, res) => {
 	res.send(lines.join("\n"));
 });
 
+app.post("/api/admin/quarantine", requireAdmin, sameOrigin, (req, res) => {
+	const enabled = String(req.body.enabled) === "1";
+	const result = saveSettings({
+		quarantineMode: enabled,
+		quarantineMessage: req.body.message,
+	});
+	if (result.error) return res.status(400).type("text/plain").send(result.error);
+	if (enabled) closeNonAdminConnections();
+	audit(req, enabled ? "quarantine.enable" : "quarantine.disable");
+	const next = safeNext(req.body.next || "/admin");
+	res.redirect(303, next);
+});
+
+app.get("/admin/stats", requireStaff, (req, res) => {
+	const activity = exportActivity();
+	const hostCounts = new Map();
+	const userCounts = new Map();
+	for (const entry of activity) {
+		if (entry.username) userCounts.set(entry.username, (userCounts.get(entry.username) || 0) + 1);
+		if (!entry.url) continue;
+		try {
+			const host = new URL(entry.url).hostname;
+			hostCounts.set(host, (hostCounts.get(host) || 0) + 1);
+		} catch {}
+	}
+	const topHosts = [...hostCounts.entries()]
+		.sort((a, b) => b[1] - a[1])
+		.slice(0, 10);
+	const byUser = [...userCounts.entries()].sort((a, b) => b[1] - a[1]);
+	const failCounts = new Map();
+	for (const event of exportAudit()) {
+		if (!["login.fail", "login.rate", "login.blocked", "login.quarantine"].includes(event.action)) continue;
+		failCounts.set(event.actor, (failCounts.get(event.actor) || 0) + 1);
+	}
+	const failed = [...failCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		statsPage({
+			user: req.user,
+			topHosts,
+			byUser,
+			failed,
+			categories: categoryStats(),
+		}),
+	);
+});
+
 app.get("/admin/settings", requireAdmin, (req, res) => {
 	const notice = ADMIN_OK[req.query.ok] || "";
 	const error = req.query.error ? String(req.query.error) : "";
@@ -955,7 +1324,7 @@ app.get("/admin/settings", requireAdmin, (req, res) => {
 	);
 });
 
-app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 	const arr = (value) => (Array.isArray(value) ? value : value ? [value] : []);
 	const labels = arr(req.body.linkLabel);
 	const urls = arr(req.body.linkUrl);
@@ -969,6 +1338,8 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		.filter((link) => String(link.label).trim() || String(link.url).trim());
 
 	const wasMaintenance = getSettings().maintenanceMode;
+	const wasQuarantine = getSettings().quarantineMode;
+	const oldCategories = JSON.stringify(getSettings().categories || []);
 	const oldBlocked = JSON.stringify({
 		mode: getSettings().accessMode,
 		blocked: getSettings().blockedSites || [],
@@ -984,6 +1355,8 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		activityTotal: req.body.activityTotal,
 		maintenanceMode: req.body.maintenanceMode === "on",
 		maintenanceMessage: req.body.maintenanceMessage,
+		quarantineMode: req.body.quarantineMode === "on",
+		quarantineMessage: req.body.quarantineMessage,
 		defaultSearchEngine: req.body.defaultSearchEngine,
 		landingTitle: req.body.landingTitle,
 		landingSubtitle: req.body.landingSubtitle,
@@ -992,6 +1365,19 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		blockedSites: req.body.blockedSites,
 		allowedSites: req.body.allowedSites,
 		accessMode: req.body.accessMode,
+		categories: req.body.categories
+			? Array.isArray(req.body.categories)
+				? req.body.categories
+				: [req.body.categories]
+			: [],
+		defaultBlockMessage: req.body.defaultBlockMessage,
+		allowlistMessage: req.body.allowlistMessage,
+		categoryMessages: {
+			adult: req.body.categoryMessageAdult,
+			gambling: req.body.categoryMessageGambling,
+			social: req.body.categoryMessageSocial,
+		},
+		language: req.body.language,
 		timezone: req.body.timezone,
 		backupEnabled: req.body.backupEnabled === "on",
 		backupRetentionDays: req.body.backupRetentionDays,
@@ -1014,6 +1400,9 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 	if (result.settings?.maintenanceMode && !wasMaintenance) {
 		closeNonAdminConnections();
 	}
+	if (result.settings?.quarantineMode && !wasQuarantine) {
+		closeNonAdminConnections();
+	}
 	applyWispBlocklist();
 	const newBlocked = JSON.stringify({
 		mode: result.settings?.accessMode,
@@ -1021,6 +1410,12 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, (req, res) => {
 		allowed: result.settings?.allowedSites || [],
 	});
 	if (newBlocked !== oldBlocked) {
+		closeNonAdminConnections();
+	}
+	if ((result.settings?.categories || []).length) {
+		await refreshCategories(false);
+	}
+	if (JSON.stringify(result.settings?.categories || []) !== oldCategories) {
 		closeNonAdminConnections();
 	}
 	trimActivity();
@@ -1047,6 +1442,13 @@ app.post("/api/admin/settings/reset", requireAdmin, sameOrigin, (req, res) => {
 	trimActivity();
 	audit(req, "settings.reset");
 	res.redirect(303, "/admin/settings?ok=reset_settings");
+});
+
+app.post("/api/admin/categories/refresh", requireAdmin, sameOrigin, async (req, res) => {
+	await refreshCategories(true);
+	closeNonAdminConnections();
+	audit(req, "categories.refresh");
+	res.redirect(303, "/admin/settings?ok=categories");
 });
 
 app.get("/admin/audit", requireStaff, (req, res) => {
@@ -1127,6 +1529,7 @@ app.get("/admin/system", requireAdmin, async (req, res) => {
 		procRss: process.memoryUsage().rss,
 		disk,
 		node: process.version,
+		version: VERSION,
 	};
 	const services = {
 		webproxy: await serviceState("webproxy"),
@@ -1166,6 +1569,7 @@ app.get("/admin/backup.json", requireAdmin, (req, res) => {
 		settings: getSettings(),
 		audit: exportAudit(),
 		bookmarks: exportBookmarks(),
+		requests: exportRequests(),
 	};
 	res.setHeader("Content-Type", "application/json; charset=utf-8");
 	res.setHeader(
@@ -1486,11 +1890,24 @@ server.on("upgrade", (req, socket, head) => {
 	const currentUser = session ? getUser(session.username) : null;
 	if (
 		!session ||
+		(settings.quarantineMode && session.role !== "admin") ||
 		(settings.maintenanceMode && session.role !== "admin") ||
 		session.mustChangePassword ||
 		(session.role !== "admin" &&
 			!isWithinSchedule(currentUser, settings.timezone))
 	) {
+		if (settings.quarantineMode) {
+			if (session) {
+				recordQuarantineAttempt(
+					req,
+					session,
+					"wisp",
+					"Conexión WebSocket Wisp rechazada",
+				);
+			} else {
+				metric("quarantine_rejected_total");
+			}
+		}
 		socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
 		socket.destroy();
 		return;
@@ -1502,12 +1919,7 @@ server.on("upgrade", (req, socket, head) => {
 		isAdmin: () => getUser(session.username)?.role === "admin",
 		isHostBlocked: (hostname) => {
 			const user = getUser(session.username);
-			if (!user || user.role === "admin") return false;
-			const hosts = user.blockedSites || [];
-			const host = String(hostname || "").toLowerCase();
-			return hosts.some(
-				(item) => host === item || host.endsWith(`.${item}`),
-			);
+			return checkHostPolicy(user, hostname).blocked;
 		},
 	});
 });

@@ -20,6 +20,9 @@ export const DEFAULTS = Object.freeze({
 	maintenanceMode: false,
 	maintenanceMessage:
 		"El proxy está en mantenimiento. Vuelve a intentarlo más tarde.",
+	quarantineMode: false,
+	quarantineMessage:
+		"El proxy está temporalmente en cuarentena por seguridad. Inténtalo más tarde.",
 	defaultSearchEngine: "duckduckgo",
 	landingTitle: "Proxy Web",
 	landingSubtitle:
@@ -33,6 +36,16 @@ export const DEFAULTS = Object.freeze({
 	],
 	allowUserPasswordChange: true,
 	blockedSites: [],
+	siteMessages: {},
+	defaultBlockMessage: "Este sitio está bloqueado.",
+	allowlistMessage: "Este sitio no está permitido.",
+	categories: [],
+	categoryMessages: {
+		adult: "Este sitio está bloqueado por contenido para adultos.",
+		gambling: "Este sitio está bloqueado por apuestas.",
+		social: "Este sitio está bloqueado por redes sociales.",
+	},
+	language: "es",
 	allowedSites: [],
 	accessMode: "blacklist",
 	timezone: "Europe/Madrid",
@@ -105,15 +118,19 @@ function parseSiteList(input, label) {
 		.filter((line) => line && !line.startsWith("#"));
 	const errors = [];
 	const hosts = [];
+	const messages = {};
 	if (lines.length > 100) {
-		return { hosts: [], errors: [`Máximo 100 sitios ${label}.`] };
+		return { hosts: [], messages: {}, errors: [`Máximo 100 sitios ${label}.`] };
 	}
 	for (const line of lines) {
-		if (line.length > 200) {
-			errors.push(`Sitio demasiado largo: ${line.slice(0, 40)}…`);
+		const [hostPart, ...messageParts] = line.split("|");
+		const message = messageParts.join("|").trim().slice(0, 300);
+		if (hostPart.length > 200) {
+			errors.push(`Sitio demasiado largo: ${hostPart.slice(0, 40)}…`);
 			continue;
 		}
-		const cleaned = line.replace(/^\*\./, "");
+		const cleaned = hostPart.trim().replace(/^\*\./, "");
+		if (!cleaned) continue;
 		const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned)
 			? cleaned
 			: `https://${cleaned}`;
@@ -121,16 +138,17 @@ function parseSiteList(input, label) {
 		try {
 			host = new URL(candidate).hostname.toLowerCase().replace(/\.$/, "");
 		} catch {
-			errors.push(`Sitio no válido: ${line}`);
+			errors.push(`Sitio no válido: ${hostPart.trim()}`);
 			continue;
 		}
 		if (!host || !/^[a-z0-9.-]+$/.test(host) || !host.includes(".")) {
-			errors.push(`Sitio no válido: ${line}`);
+			errors.push(`Sitio no válido: ${hostPart.trim()}`);
 			continue;
 		}
 		hosts.push(host);
+		if (message) messages[host] = message;
 	}
-	return { hosts: [...new Set(hosts)], errors };
+	return { hosts: [...new Set(hosts)], messages, errors };
 }
 
 function normalize(input, silent = false) {
@@ -153,6 +171,17 @@ function normalize(input, silent = false) {
 	if (input.maintenanceMode !== undefined) {
 		next.maintenanceMode = input.maintenanceMode === true || input.maintenanceMode === "1" || input.maintenanceMode === "on";
 	}
+	if (input.quarantineMode !== undefined) {
+		next.quarantineMode =
+			input.quarantineMode === true ||
+			input.quarantineMode === "1" ||
+			input.quarantineMode === "on";
+	}
+	if (input.quarantineMessage !== undefined) {
+		const value = String(input.quarantineMessage).trim();
+		if (value.length > 300) errors.push("El mensaje de cuarentena es demasiado largo (máx. 300).");
+		else next.quarantineMessage = value || DEFAULTS.quarantineMessage;
+	}
 	if (input.allowUserPasswordChange !== undefined) {
 		next.allowUserPasswordChange =
 			input.allowUserPasswordChange === true ||
@@ -163,12 +192,49 @@ function normalize(input, silent = false) {
 	if (input.blockedSites !== undefined) {
 		const result = parseSiteList(input.blockedSites, "prohibidos");
 		if (result.errors.length) errors.push(...result.errors);
-		else next.blockedSites = result.hosts;
+		else {
+			next.blockedSites = result.hosts;
+			next.siteMessages = result.messages;
+		}
 	}
 	if (input.allowedSites !== undefined) {
 		const result = parseSiteList(input.allowedSites, "permitidos");
 		if (result.errors.length) errors.push(...result.errors);
 		else next.allowedSites = result.hosts;
+	}
+	if (input.categories !== undefined) {
+		const allowed = ["adult", "gambling", "social"];
+		const value = Array.isArray(input.categories)
+			? input.categories
+			: input.categories
+				? [input.categories]
+				: [];
+		const selected = value.filter((c) => allowed.includes(c));
+		if (selected.length !== value.length) errors.push("Categoría no válida.");
+		else next.categories = [...new Set(selected)];
+	}
+	if (input.language !== undefined) {
+		const value = String(input.language);
+		if (!["es", "en", "ca"].includes(value)) errors.push("Idioma no válido.");
+		else next.language = value;
+	}
+	if (input.defaultBlockMessage !== undefined) {
+		const value = String(input.defaultBlockMessage).trim().slice(0, 300);
+		if (!value) errors.push("El mensaje de bloqueo no puede estar vacío.");
+		else next.defaultBlockMessage = value;
+	}
+	if (input.allowlistMessage !== undefined) {
+		const value = String(input.allowlistMessage).trim().slice(0, 300);
+		if (!value) errors.push("El mensaje de lista blanca no puede estar vacío.");
+		else next.allowlistMessage = value;
+	}
+	if (input.categoryMessages !== undefined && typeof input.categoryMessages === "object") {
+		for (const key of ["adult", "gambling", "social"]) {
+			if (input.categoryMessages[key] !== undefined) {
+				const value = String(input.categoryMessages[key]).trim().slice(0, 300);
+				if (value) next.categoryMessages[key] = value;
+			}
+		}
 	}
 	if (input.accessMode !== undefined) {
 		const value = String(input.accessMode);

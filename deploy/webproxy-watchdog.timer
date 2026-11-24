@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Scramjet Web Proxy watchdog every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=webproxy-watchdog.service
+
+[Install]
+WantedBy=timers.target

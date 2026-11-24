@@ -12,23 +12,26 @@ administración.
 ## Funciones
 
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
-- **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar y atajos de teclado.
+- **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas**, **QR** y atajos de teclado.
+- **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
 - Roles `admin`, `moderador` y `usuario`.
 - Los administradores pueden:
   - crear usuarios y resetear contraseñas,
   - bloquear cuentas (permanente o temporal) **con mensaje personalizado**,
   - forzar logout y revocar sesiones,
-  - ver actividad (URLs y búsquedas), auditoría y sesiones activas,
+  - ver actividad (URLs y búsquedas), auditoría, sesiones y **estadísticas**,
   - exigir cambio de contraseña y dejar notas internas,
-  - configurar sesiones, actividad, mantenimiento, buscador, portada,
-    **modo lista blanca/negra**, **sitios por usuario** y **horarios**,
+  - configurar sesiones, actividad, mantenimiento, **cuarentena**, buscador,
+    portada, **lista blanca/negra**, **mensajes por sitio**,
+    **categorías** adultas/apuestas/social, **sitios por usuario** y **horarios**,
+  - aprobar **peticiones de desbloqueo**,
   - crear/restaurar copias y consultar métricas.
-- Los **moderadores** pueden ver usuarios, sesiones, actividad y auditoría, y
-  bloquear o cerrar sesiones; no pueden cambiar ajustes ni gestionar admins.
-- Bloqueo real de dominios en la capa Wisp, con listas globales y por usuario.
-- Copias automáticas diarias locales, métricas Prometheus y despliegue con
-  Docker + Caddy.
+- Los **moderadores** pueden ver usuarios, sesiones, actividad, auditoría y
+  solicitudes, y bloquear o cerrar sesiones; no pueden cambiar ajustes ni gestionar admins.
+- Bloqueo real de dominios en la capa Wisp, con listas globales, categorías y por usuario.
+- **Modo cuarentena**: rechaza nuevas conexiones, cierra las abiertas y registra los intentos rechazados.
+- Copias automáticas diarias locales, métricas Prometheus, CI, watchdog y despliegue con Docker + Caddy.
 - Protección CSRF, límite de intentos por usuario e IP, cookies `HttpOnly` y
   `Secure`, y cierre de conexiones al bloquear o revocar sesiones.
 - Los administradores están exentos de las restricciones configurables.
@@ -176,6 +179,16 @@ Todo se gestiona desde `/admin`:
 - Cada usuario puede tener **días y franjas horarias** de acceso.
 - Los administradores están exentos de listas y horarios.
 
+### Cuarentena
+
+Botón rápido en `/admin` y ajuste en `Ajustes`:
+
+- rechaza nuevas peticiones de webs y APIs para usuarios no administradores;
+- cierra inmediatamente las conexiones Wisp abiertas (los admins se mantienen);
+- registra los intentos rechazados con usuario, IP, navegador, destino y detalle;
+- muestra los últimos intentos en el panel `/admin` con límite anti-flood;
+- solo un administrador puede activarla o desactivarla.
+
 ### Favoritos e historial
 
 Cada usuario tiene favoritos propios, historial con búsqueda y atajos
@@ -220,12 +233,17 @@ Archivos principales:
 | `activity.js` | Historial por usuario |
 | `audit.js` | Auditoría y CSV |
 | `bookmarks.js` | Favoritos por usuario |
+| `categories.js` | Descarga y bloqueo por categorías |
+| `requests.js` | Peticiones de desbloqueo |
 | `backup.js` | Copias automáticas, listado y restauración |
 | `metrics.js` | Contadores Prometheus |
+| `public/page-i18n.js` | Traducciones de interfaz |
+| `.github/workflows/ci.yml` | Comprobación de sintaxis en CI |
 | `pages.js` | Páginas de login, cuenta y administración |
 | `public/` | Interfaz del proxy |
 | `sw.js` | Service worker de Scramjet |
 | `Dockerfile`, `docker-compose.yml`, `Caddyfile` | Despliegue con Docker + Caddy |
+| `deploy/webproxy-watchdog.*` | Watchdog systemd cada minuto |
 | `setup.sh` | Asistente de configuración rápida (admin, túnel, systemd, URL) |
 | `scripts/patch-wisp.mjs` | Excepción de admins y listas por usuario en Wisp |
 

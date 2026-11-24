@@ -17,6 +17,7 @@
 			<a href="/bookmarks">Favoritos</a>
 			<a href="/history">Historial</a>
 			<a href="/account">Cuenta</a>
+			<button id="qr-btn" type="button">QR</button>
 			<a id="admin-link" href="/admin" hidden>Admin</a>
 			<form method="post" action="/logout" class="inline-form">
 				<button type="submit">Salir</button>
@@ -76,6 +77,15 @@
 				<p id="sj-error" class="error"></p>
 				<pre id="sj-error-code"></pre>
 
+				<div id="blocked-request" class="blocked-request" hidden>
+					<p>Solicitar desbloqueo de <strong id="blocked-host"></strong></p>
+					<textarea id="blocked-reason" maxlength="500" placeholder="Motivo (opcional)"></textarea>
+					<div class="dialog-actions" style="justify-content:flex-start">
+						<button id="blocked-request-btn" class="secondary" type="button">Enviar solicitud</button>
+						<span id="blocked-request-msg" class="muted"></span>
+					</div>
+				</div>
+
 				<p class="notice">
 					Algunas webs (login de Google, Cloudflare, DRM o bancos) no funcionan
 					a través de un proxy.
@@ -84,6 +94,10 @@
 		</main>
 
 		<section id="sj-frame-wrapper">
+			<div id="tab-bar" class="tab-bar">
+				<div id="tab-list"></div>
+				<button id="new-tab-btn" type="button" title="Nueva pestaña">+</button>
+			</div>
 			<div class="toolbar">
 				<button id="home-btn" class="home" type="button" title="Inicio">
 					⌂
@@ -92,6 +106,7 @@
 				<button id="forward-btn" class="home" type="button" title="Adelante">→</button>
 				<button id="reload-btn" class="home" type="button" title="Recargar">⟳</button>
 				<button id="bookmark-btn" class="home" type="button" title="Guardar en favoritos">☆</button>
+				<button id="qr-toolbar-btn" class="home" type="button" title="Código QR">▦</button>
 				<a class="home" href="/account" title="Mi cuenta">👤</a>
 				<form id="frame-form" class="search compact" autocomplete="off">
 					<span class="search-icon" aria-hidden="true">
@@ -130,6 +145,13 @@
 			</form>
 		</dialog>
 
+		<dialog id="qr-dialog">
+			<div id="qr-content" class="qr-content"></div>
+			<div class="dialog-actions">
+				<button type="button" id="qr-close" class="secondary">Cerrar</button>
+			</div>
+		</dialog>
+
 		<footer>
 			<div>
 				<a href="https://github.com/MercuryWorkshop/scramjet" target="_blank" rel="noreferrer">Scramjet</a>
@@ -142,6 +164,7 @@
 		<script src="/controller/controller.api.js"></script>
 		<script src="/scramjet-utils.js"></script>
 		<script src="/libcurl/index.js"></script>
+		<script src="/page-i18n.js"></script>
 		<script src="/index.js"></script>
 	</body>
 </html>

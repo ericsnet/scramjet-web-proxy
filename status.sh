@@ -69,10 +69,13 @@ node -e '
 const s = require("./data/settings.json");
 const days = s.sessionHours % 24 === 0 ? ` (${s.sessionHours / 24} días)` : "";
 console.log(` - mantenimiento: ${s.maintenanceMode ? "SÍ" : "no"}`);
+console.log(` - cuarentena: ${s.quarantineMode ? "SÍ" : "no"}`);
 console.log(` - sesión: ${s.sessionHours} h${days}, máximo ${s.maxSessionsPerUser} por usuario (admins exentos)`);
 console.log(` - actividad: ${s.activityEnabled ? "activada" : "desactivada"} (${s.activityPerUser}/usuario)`);
 console.log(` - buscador: ${s.defaultSearchEngine}`);
 console.log(` - sitios prohibidos: ${(s.blockedSites || []).length}`);
+console.log(` - categorías: ${(s.categories || []).join(", ") || "ninguna"}`);
+console.log(` - idioma: ${s.language || "es"}`);
 ' 2>/dev/null || echo "No se pudo leer data/settings.json"
 
 if command -v tailscale >/dev/null 2>&1; then

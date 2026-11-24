@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node scripts/patch-wisp.mjs
+      - name: Comprobar sintaxis
+        run: |
+          for f in server.js auth.js pages.js activity.js audit.js settings.js \
+                   bookmarks.js backup.js metrics.js categories.js requests.js \
+                   public/index.js public/page-i18n.js; do
+            node --check "$f"
+          done
+          bash -n setup.sh status.sh scripts/healthcheck.sh
