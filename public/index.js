@@ -21,11 +21,6 @@ const bookmarkCancel = document.getElementById("bookmark-cancel");
 const favoritesWrap = document.getElementById("favorites-wrap");
 const favoritesBox = document.getElementById("favorites");
 const suggestions = document.getElementById("url-suggestions");
-const qrButton = document.getElementById("qr-btn");
-const qrToolbarButton = document.getElementById("qr-toolbar-btn");
-const qrDialog = document.getElementById("qr-dialog");
-const qrContent = document.getElementById("qr-content");
-const qrClose = document.getElementById("qr-close");
 const tabList = document.getElementById("tab-list");
 const newTabButton = document.getElementById("new-tab-btn");
 
@@ -605,24 +600,6 @@ favoritesBox?.addEventListener("click", (event) => {
 });
 
 bookmarkButton?.addEventListener("click", openBookmarkDialog);
-async function openQr() {
-	if (!qrContent || !qrDialog) return;
-	qrContent.textContent = "Generando…";
-	try {
-		const res = await fetch("/api/qr", { cache: "no-store" });
-		if (res.ok) {
-			qrContent.innerHTML = await res.text();
-		} else {
-			qrContent.textContent = "No se pudo generar el QR.";
-		}
-	} catch {
-		qrContent.textContent = "No se pudo generar el QR.";
-	}
-	qrDialog.showModal();
-}
-qrButton?.addEventListener("click", openQr);
-qrToolbarButton?.addEventListener("click", openQr);
-qrClose?.addEventListener("click", () => qrDialog?.close());
 bookmarkCancel?.addEventListener("click", () => bookmarkDialog?.close());
 bookmarkForm?.addEventListener("submit", async (event) => {
 	event.preventDefault();

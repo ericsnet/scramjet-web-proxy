@@ -17,7 +17,6 @@
 			<a href="/bookmarks">Favoritos</a>
 			<a href="/history">Historial</a>
 			<a href="/account">Cuenta</a>
-			<button id="qr-btn" type="button">QR</button>
 			<a id="admin-link" href="/admin" hidden>Admin</a>
 			<form method="post" action="/logout" class="inline-form">
 				<button type="submit">Salir</button>
@@ -106,7 +105,6 @@
 				<button id="forward-btn" class="home" type="button" title="Adelante">→</button>
 				<button id="reload-btn" class="home" type="button" title="Recargar">⟳</button>
 				<button id="bookmark-btn" class="home" type="button" title="Guardar en favoritos">☆</button>
-				<button id="qr-toolbar-btn" class="home" type="button" title="Código QR">▦</button>
 				<a class="home" href="/account" title="Mi cuenta">👤</a>
 				<form id="frame-form" class="search compact" autocomplete="off">
 					<span class="search-icon" aria-hidden="true">
@@ -143,13 +141,6 @@
 					<button type="submit" class="primary">Guardar</button>
 				</div>
 			</form>
-		</dialog>
-
-		<dialog id="qr-dialog">
-			<div id="qr-content" class="qr-content"></div>
-			<div class="dialog-actions">
-				<button type="button" id="qr-close" class="secondary">Cerrar</button>
-			</div>
 		</dialog>
 
 		<footer>

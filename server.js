@@ -125,7 +125,6 @@ import {
 	recordSuccessfulLogin,
 	flushSecurity,
 } from "./security.js";
-import QRCode from "qrcode";
 import {
 	refreshCategories,
 	categoryBlocked,
@@ -1723,29 +1722,6 @@ app.post("/api/account/sessions/:id/revoke", sameOrigin, (req, res) => {
 		return res.redirect(303, "/login");
 	}
 	res.redirect(303, "/account?ok=session");
-});
-
-app.get("/api/qr", async (req, res) => {
-	let value = String(req.query.url || "").trim();
-	if (!value) {
-		try {
-			value = fs.readFileSync(path.join(__dirname, "data/public-url.txt"), "utf8").trim();
-		} catch {}
-	}
-	if (!value) value = `${req.protocol}://${req.headers.host}/`;
-	try {
-		const parsed = new URL(value);
-		if (!/^https?:$/.test(parsed.protocol)) throw new Error("bad");
-		const svg = await QRCode.toString(parsed.href, {
-			type: "svg",
-			margin: 1,
-			width: 240,
-			color: { dark: "#0b0f14", light: "#ffffff" },
-		});
-		res.type("image/svg+xml").set("Cache-Control", "no-store").send(svg);
-	} catch {
-		res.status(400).type("text/plain").send("URL no válida");
-	}
 });
 
 app.get("/api/requests", (req, res) => {

@@ -538,20 +538,6 @@ dialog input:focus {
 	color: var(--text);
 }
 
-.qr-content {
-	display: grid;
-	place-items: center;
-	background: #fff;
-	border-radius: 8px;
-	padding: 8px;
-	min-height: 240px;
-}
-
-.qr-content svg {
-	width: 240px;
-	height: 240px;
-}
-
 /* ------------------------------ pie ------------------------------ */
 
 footer {
