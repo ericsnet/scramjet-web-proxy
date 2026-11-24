@@ -216,6 +216,11 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .protected-user{border-color:#6b5312;background:linear-gradient(90deg,rgba(161,98,7,.12),rgba(21,30,41,.5) 60%)}
 .protected-user .user-summary{cursor:default}
 .protected-user .user-summary:hover{background:transparent}
+.readonly-user{border-color:var(--border);background:var(--soft)}
+.readonly-user .user-summary{cursor:default}
+.readonly-user .user-summary:hover{background:transparent}
+.self-user{border-color:#2f4a6b;background:linear-gradient(90deg,rgba(59,130,246,.07),var(--soft) 60%)}
+.readonly-user .user-summary-meta .small{margin-right:8px}
 .user-body{padding:0 14px 14px}
 .user-body .user-stats{margin-top:12px}
 .user-extra{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
@@ -897,14 +902,23 @@ export function adminPage({
 			const tempBlocked = !!u.blockedUntil;
 			const manageable = u.role !== "creator" && canManageRole(user.role, u.role);
 			if (u.role === "creator" || !manageable) {
-				return `<div class="user admin-user protected-user">
+				const isCreator = u.role === "creator";
+				const wrapper = `user admin-user${isCreator ? " protected-user" : " readonly-user"}${self ? " self-user" : ""}`;
+				const reason = isCreator
+					? "Cuenta protegida · solo el creador puede usar su cuenta"
+					: self
+						? "Tu cuenta se gestiona desde Mi cuenta"
+						: u.role === "admin"
+							? "Solo el creador puede gestionar administradores"
+							: "Sin permisos para gestionar esta cuenta";
+				return `<div class="${wrapper}">
   <div class="user-summary">
     <span class="user-summary-main">
       <strong class="user-name">${esc(u.username)}</strong>
       <span class="badge role-${esc(u.role)}">${esc(roleLabel(u.role))}</span>
       ${self ? '<span class="badge">tú</span>' : ""}
     </span>
-    <span class="user-summary-meta">${u.role === "creator" ? "Cuenta protegida · solo el creador puede usar su cuenta" : u.role === "admin" ? "Solo el creador puede gestionar administradores" : "Sin permisos para gestionar esta cuenta"}</span>
+    <span class="user-summary-meta">${self ? '<a class="small" href="/account">Mi cuenta</a>' : ""}${esc(reason)}</span>
   </div>
 </div>`;
 			}
