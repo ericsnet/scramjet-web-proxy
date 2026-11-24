@@ -585,10 +585,18 @@
 			showError(error.message);
 		}
 	});
+	document.getElementById("chat-group-search")?.addEventListener("input", (event) => {
+		const query = String(event.target.value || "").toLowerCase().trim();
+		for (const option of document.querySelectorAll("#chat-group-members .chat-member-option")) {
+			option.hidden = query && !option.dataset.memberName.includes(query);
+		}
+	});
 	document.getElementById("chat-group-create")?.addEventListener("click", async () => {
 		const name = document.getElementById("chat-group-name");
 		const members = document.getElementById("chat-group-members");
-		const selected = [...(members?.selectedOptions || [])].map((option) => option.value);
+		const selected = [...(members?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(
+			(input) => input.value,
+		);
 		if (!name?.value.trim() || !selected.length) {
 			showError("Pon un nombre y elige al menos un miembro.");
 			return;

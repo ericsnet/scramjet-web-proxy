@@ -416,7 +416,24 @@ dialog h2{margin-top:0}
 .chat-empty-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:#142235;font-size:22px;margin-bottom:4px}
 .chat-dialog{max-width:440px}
 .chat-dialog .muted{margin:0 0 4px}
+.chat-member-search{margin-bottom:8px;padding:8px 10px;font-size:13px}
+.chat-member-picker{max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:11px;
+  padding:5px;display:grid;grid-template-columns:1fr 1fr;gap:4px;background:rgba(0,0,0,.12)}
+.chat-member-option{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 8px;margin:0;border-radius:8px;
+  color:var(--text);font-size:12.5px;cursor:pointer;border:1px solid transparent}
+.chat-member-option:hover{background:#1a2839;border-color:#2b3f59}
+.chat-member-option:has(input:checked){background:rgba(59,130,246,.14);border-color:#2e5a91}
+.chat-member-option input{appearance:none;width:18px;height:18px;flex:0 0 18px;margin:0;border:1.5px solid #40536a;
+  border-radius:6px;background:#0c141e;cursor:pointer;position:relative;transition:background .15s,border-color .15s}
+.chat-member-option input:checked{background:var(--accent);border-color:var(--accent)}
+.chat-member-option input:checked::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;
+  color:#fff;font-size:12px;font-weight:800;line-height:1}
+.chat-member-avatar{display:grid;place-items:center;width:25px;height:25px;flex:0 0 25px;border-radius:8px;
+  color:#fff;font-size:10px;font-weight:700}
+.chat-member-option span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:640px){.chat-member-picker{grid-template-columns:1fr}}
 .dialog-x{position:absolute;right:12px;top:10px;background:none;border:0;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:2px 5px}
+.dialog-x:focus{outline:none;color:var(--text)}
 .dialog-x:hover{color:var(--text)}
 .primary-small{background:var(--accent);color:#fff;border-color:var(--accent)}
 .primary-small:hover{background:#2f6fdd}
@@ -849,6 +866,15 @@ export function chatPage({
 	const userOptions = users
 		.map((entry) => `<option value="${esc(entry.username)}">${esc(entry.username)}</option>`)
 		.join("");
+	const memberOptions = users
+		.map(
+			(entry) => `<label class="chat-member-option" data-member-name="${esc(entry.username.toLowerCase())}">
+      <input type="checkbox" name="members" value="${esc(entry.username)}">
+      <span class="chat-member-avatar" style="background:${avatarColor(entry.username)}">${esc(entry.username.slice(0, 1).toUpperCase())}</span>
+      <span>${esc(entry.username)}</span>
+    </label>`,
+		)
+		.join("");
 	const onlineChips = onlineUsers
 		.map((name) => `<span class="chat-user-chip"><i style="background:${avatarColor(name)}">${esc(name.slice(0, 1).toUpperCase())}</i>${esc(name)}</span>`)
 		.join("");
@@ -994,8 +1020,9 @@ export function chatPage({
     <p class="muted">Elige un nombre y los miembros del grupo.</p>
     <label for="chat-group-name">Nombre</label>
     <input id="chat-group-name" maxlength="40" placeholder="Equipo, amigos…">
-    <label for="chat-group-members">Miembros</label>
-    <select id="chat-group-members" multiple size="7">${userOptions}</select>
+    <label for="chat-group-search">Miembros</label>
+    <input id="chat-group-search" class="chat-member-search" type="search" placeholder="Buscar usuario…" autocomplete="off">
+    <div id="chat-group-members" class="chat-member-picker">${memberOptions || '<span class="muted">No hay otros usuarios disponibles.</span>'}</div>
     <div class="dialog-actions">
       <button class="small" type="button" data-close-dialog>Cancelar</button>
       <button class="small primary-small" type="button" id="chat-group-create">Crear grupo</button>
