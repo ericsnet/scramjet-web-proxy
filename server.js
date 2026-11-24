@@ -450,7 +450,7 @@ function sameOrigin(req, res, next) {
 		return res.status(403).type("text/plain").send("Origen no válido.");
 	}
 	const origin = req.headers.origin;
-	if (!origin) {
+	if (!origin || origin === "null") {
 		const referer = req.headers.referer;
 		if (referer) {
 			try {
