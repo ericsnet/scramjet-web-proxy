@@ -20,7 +20,7 @@ administración.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
 - **Botón de pánico**: abajo a la izquierda; activa durante 5 minutos la redirección automática de ese dispositivo a `classroom.google.com`.
 - **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.
-- **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
+- **Avisos del chat**: notificaciones grandes abajo a la derecha con avatar, sonido breve y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
 - Escala de roles: **usuario → moderador → administrador → creador**. El creador es la cuenta propietaria: nadie más puede modificarla, bloquearla, borrarla ni ver su historial, sesiones o auditoría. Solo el creador puede crear, ascender, degradar, resetear o eliminar administradores; los administradores solo gestionan usuarios y moderadores.

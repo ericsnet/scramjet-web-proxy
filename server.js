@@ -172,6 +172,7 @@ import {
 	isChannelMember,
 	getChatMessage,
 	getChatUnread,
+	listChatNotifications,
 	markChatRead,
 	deleteChatMessage,
 	deleteChatMessagesByUser,
@@ -1638,6 +1639,21 @@ app.post("/api/chat/read", sameOrigin, (req, res) => {
 	const result = markChatRead(req.user.username, chatChannelOf(req), req.body.seq);
 	if (result.error) return res.status(403).json({ error: result.error });
 	res.status(204).end();
+});
+
+app.get("/api/chat/notifications", (req, res) => {
+	const settings = getSettings();
+	if (!settings.chatEnabled) return res.json({ enabled: false, messages: [], latestSeq: 0, unread: 0 });
+	const after = Math.max(0, Number.parseInt(req.query.after, 10) || 0);
+	const result = listChatNotifications(req.user.username, { after, limit: 10 });
+	res.set("Cache-Control", "no-store");
+	res.json({
+		enabled: true,
+		messages: chatEnriched(result.messages, req.user, chatUserMeta()),
+		latestSeq: result.latestSeq,
+		unread: result.unread,
+		currentUser: req.user.username,
+	});
 });
 
 app.get("/api/chat/messages", (req, res) => {

@@ -515,6 +515,34 @@ export function clearChat() {
 	saveNow();
 }
 
+export function listChatNotifications(username, { after = 0, limit = 10 } = {}) {
+	const lower = String(username || "").toLowerCase();
+	const visible = new Set(
+		channels
+			.filter(
+				(channel) =>
+					channel.type === "public" ||
+					channel.members.some((member) => member.toLowerCase() === lower),
+			)
+			.map((channel) => channel.id),
+	);
+	const afterSeq = Math.max(0, Number.parseInt(after, 10) || 0);
+	const max = Math.min(20, Math.max(1, Number.parseInt(limit, 10) || 10));
+	const found = messages
+		.filter(
+			(message) =>
+				message.seq > afterSeq &&
+				visible.has(message.channelId) &&
+				String(message.username).toLowerCase() !== lower,
+		)
+		.slice(-max);
+	return {
+		messages: found.map((message) => ({ ...message })),
+		latestSeq: messages.length ? messages[messages.length - 1].seq : 0,
+		unread: getChatUnread(username).unread,
+	};
+}
+
 export function getChatUnread(username) {
 	const lower = String(username || "").toLowerCase();
 	let unread = 0;
