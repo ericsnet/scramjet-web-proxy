@@ -41,6 +41,13 @@ function rebuildHashes() {
 	}
 }
 
+export function rebuildAuditHashes() {
+	rebuildHashes();
+	dirty = true;
+	saveNow();
+	return verifyAudit();
+}
+
 export function verifyAudit() {
 	let previous = GENESIS;
 	for (let i = 0; i < events.length; i++) {

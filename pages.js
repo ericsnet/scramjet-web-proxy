@@ -3191,7 +3191,7 @@ ${adminTabs("audit", user.role)}
 <div class="card">
   <h1>Auditoría</h1>
   <p class="muted">Registro de accesos y acciones de administración. Últimos 300 eventos filtrados.</p>
-  ${integrity.ok ? `<p class="msg ok">Cadena de integridad verificada (${esc(integrity.count)} eventos).</p>` : `<p class="msg error">La cadena de auditoría está rota en el evento ${esc(integrity.index)}. Revisa si alguien ha modificado <code>data/audit.json</code>.</p>`}
+  ${integrity.ok ? `<p class="msg ok">Cadena de integridad verificada (${esc(integrity.count)} eventos).</p>` : `<p class="msg error">La cadena de auditoría está rota en el evento ${esc(integrity.index)}. Revisa si alguien ha modificado <code>data/audit.json</code>. Si hiciste una limpieza manual, ejecuta <code>npm run audit:rebuild</code>.</p>`}
   <form method="get" action="/admin/audit" class="filter">
     <select name="actor" aria-label="Filtrar por usuario">
       <option value="">Todos los usuarios</option>

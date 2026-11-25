@@ -259,8 +259,17 @@ usuario puede vaciar su propio historial.
 - Apache fuerza `X-Forwarded-Proto: https` y `mod_remoteip` restaura la IP real detrás de Funnel.
 - El servicio de `:443` usa bcrypt y tiene fail2ban para fallos de autenticación básica.
 
-### Verificación en dos pasos (MFA local)\n\n- Cada usuario puede activar **TOTP** desde `Mi cuenta` con cualquier app de autenticación (Google Authenticator, Aegis, 1Password, etc.). No usa email, SMS ni servicios externos.\n- Al activarla se generan **códigos de recuperación** de un solo uso, que se muestran una única vez y se guardan hasheados.\n- El login pide el código después de la contraseña. Si se pierde el dispositivo, se puede usar un código de recuperación.\n- Los administradores pueden resetear la MFA de un usuario desde su ficha.\n- Si te quedas fuera, desde el servidor: `npm run mfa:reset -- usuario`.\n- En Ajustes se puede exigir MFA a administradores y moderadores. Actívalo después de configurar tu propia MFA.
-- La **auditoría está encadenada con SHA-256**: cada evento incluye el hash del anterior. El panel avisa si alguien ha modificado `data/audit.json`.\n\n> Pendiente: aislar el contenido proxificado en un origen distinto (subdominio o puerto dedicado) para eliminar por completo el riesgo same-origin. Mientras tanto, usa una cuenta de alumno para navegar.
+### Verificación en dos pasos (MFA local)
+
+- Cada usuario puede activar **TOTP** desde `Mi cuenta` con cualquier app de autenticación (Google Authenticator, Aegis, 1Password, etc.). No usa email, SMS ni servicios externos.
+- Al activarla se generan **códigos de recuperación** de un solo uso, que se muestran una única vez y se guardan hasheados.
+- El login pide el código después de la contraseña. Si se pierde el dispositivo, se puede usar un código de recuperación.
+- Los administradores pueden resetear la MFA de un usuario desde su ficha.
+- Si te quedas fuera, desde el servidor: `npm run mfa:reset -- usuario`.
+- En Ajustes se puede exigir MFA a administradores y moderadores. Actívalo después de configurar tu propia MFA.
+- La **auditoría está encadenada con SHA-256**: cada evento incluye el hash del anterior. El panel avisa si alguien ha modificado `data/audit.json`. Si haces una limpieza manual, reconstruye la cadena con `npm run audit:rebuild`.
+
+> Pendiente: aislar el contenido proxificado en un origen distinto (subdominio o puerto dedicado) para eliminar por completo el riesgo same-origin. Mientras tanto, usa una cuenta de alumno para navegar.
 
 - `data/users.json`: usuarios, hashes y estado.
 - `data/sessions.json`: sesiones con tokens hasheados.
