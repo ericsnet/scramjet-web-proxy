@@ -62,6 +62,7 @@ import {
 	securityPage,
 	securityAlertPage,
 	trafficPage,
+	monitorPage,
 	settingsPage,
 	auditPage,
 	systemPage,
@@ -2157,6 +2158,111 @@ app.post("/api/admin/security/dismiss", requireAdmin, sameOrigin, (req, res) => 
 	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
 	audit(req, "security.dismiss", String(req.body.id || ""));
 	res.redirect(303, "/admin/security?ok=dismissed");
+});
+
+function monitorSnapshot(req) {
+	const now = Date.now();
+	const sessions = hideCreatorData(req, listSessions(), (session) => session.username);
+	const users = hideCreatorData(req, listUsers(), (entry) => entry.username);
+	const userMap = new Map(users.map((entry) => [entry.username.toLowerCase(), entry]));
+	const activity = hideCreatorData(req, getActivity({ limit: 1000 }), (entry) => entry.username);
+	const latest = new Map();
+	for (const entry of activity) {
+		const key = String(entry.username || "").toLowerCase();
+		if (!latest.has(key)) latest.set(key, entry);
+	}
+	const wisp = hideCreatorData(
+		req,
+		trafficSnapshot().wisp.streams,
+		(stream) => stream.username,
+	);
+	const entries = new Map();
+	for (const session of sessions) {
+		const key = String(session.username || "").toLowerCase();
+		let entry = entries.get(key);
+		if (!entry) {
+			const details = userMap.get(key) || {};
+			entry = {
+				username: details.username || session.username,
+				role: details.role || session.role || "user",
+				icon: details.icon || null,
+				ips: new Set(),
+				sessions: 0,
+				lastSeenAt: session.lastSeenAt,
+				createdAt: session.createdAt,
+				userAgent: session.userAgent,
+				streams: [],
+			};
+			entries.set(key, entry);
+		}
+		entry.sessions += 1;
+		if (session.ip) entry.ips.add(session.ip);
+		if (new Date(session.lastSeenAt) > new Date(entry.lastSeenAt)) {
+			entry.lastSeenAt = session.lastSeenAt;
+			entry.userAgent = session.userAgent;
+		}
+	}
+	for (const stream of wisp) {
+		const entry = entries.get(String(stream.username || "").toLowerCase());
+		if (!entry) continue;
+		entry.streams.push({
+			host: stream.host,
+			port: stream.port,
+			bytes: (stream.bytesIn || 0) + (stream.bytesOut || 0),
+		});
+	}
+	const resultUsers = [...entries.values()].map((entry) => {
+		const current = latest.get(String(entry.username).toLowerCase()) || null;
+		return {
+			username: entry.username,
+			role: entry.role,
+			icon: entry.icon,
+			online: now - new Date(entry.lastSeenAt).getTime() < 5 * 60 * 1000,
+			ips: [...entry.ips].filter(Boolean).slice(0, 4),
+			sessions: entry.sessions,
+			lastSeenAt: entry.lastSeenAt,
+			createdAt: entry.createdAt,
+			userAgent: entry.userAgent,
+			streams: entry.streams
+				.sort((a, b) => b.bytes - a.bytes)
+				.slice(0, 8),
+			current: current
+				? { url: current.url || "", query: current.query || "", at: current.at }
+				: null,
+		};
+	}).sort((a, b) => Number(b.online) - Number(a.online) || new Date(b.lastSeenAt) - new Date(a.lastSeenAt));
+	const recent = activity
+		.filter((entry) => now - new Date(entry.at).getTime() <= 24 * 60 * 60 * 1000)
+		.slice(0, 80)
+		.map((entry) => ({
+			username: entry.username,
+			url: entry.url || "",
+			query: entry.query || "",
+			at: entry.at,
+		}));
+	return {
+		generatedAt: new Date(now).toISOString(),
+		stats: {
+			online: resultUsers.filter((entry) => entry.online).length,
+			sessions: sessions.length,
+			streams: wisp.length,
+			recent: recent.length,
+		},
+		users: resultUsers,
+		recent,
+	};
+}
+
+app.get("/admin/monitor", requireAdmin, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		monitorPage({ user: req.user, snapshot: monitorSnapshot(req) }),
+	);
+});
+
+app.get("/api/admin/monitor", requireAdmin, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.json(monitorSnapshot(req));
 });
 
 app.get("/admin/traffic", requireAdmin, (req, res) => {

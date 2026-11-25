@@ -396,6 +396,25 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .badge.status-3xx{color:#bfdbfe;border-color:#1e40af;background:#101c33}
 .badge.status-4xx{color:#fde68a;border-color:#a16207;background:#271c06}
 .badge.status-5xx{color:#fecaca;border-color:#7f1d1d;background:#1f1113}
+.monitor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.monitor-user{border:1px solid var(--border);border-radius:13px;padding:13px;background:linear-gradient(180deg,rgba(21,30,41,.7),rgba(13,20,28,.45));min-width:0}
+.monitor-user-head{display:flex;align-items:center;gap:9px;min-width:0}
+.monitor-user-head .user-avatar{width:34px;height:34px;flex:0 0 34px}
+.monitor-user-title{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.monitor-user-title strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.monitor-user-head .monitor-time{margin-left:auto;color:var(--muted);font-size:10.5px;white-space:nowrap}
+.monitor-current{margin-top:10px;padding:8px 9px;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.14);min-width:0}
+.monitor-label{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:3px}
+.monitor-url{display:block;font-family:"JetBrains Mono",monospace;font-size:11px;color:#bfdbfe;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.monitor-query{display:block;font-size:11px;color:#fde68a;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.monitor-meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:10.5px;margin-top:8px}
+.monitor-streams{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.monitor-stream{font-family:"JetBrains Mono",monospace;font-size:10px;border:1px solid #2f4a6b;border-radius:999px;padding:3px 7px;color:#93c5fd;background:rgba(59,130,246,.08);max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.monitor-actions{margin-top:9px;display:flex;justify-content:flex-end}
+.monitor-online{color:#86efac;border-color:#166534;background:#0d2115}
+.monitor-offline{color:#94a7bd;border-color:var(--border);background:rgba(0,0,0,.12)}
+.monitor-recent td:first-child{white-space:nowrap}
+.monitor-recent .monitor-url{max-width:420px}
 .chat-disabled{text-align:center;padding:34px 10px}
 .chat-fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:80;
   width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -821,6 +840,7 @@ const ADMIN_TABS = [
 	["sessions", "/admin/sessions", "Sesiones"],
 	["security", "/admin/security", "Seguridad"],
 	["traffic", "/admin/traffic", "Tráfico"],
+	["monitor", "/admin/monitor", "Vigilancia"],
 	["activity", "/admin/activity", "Actividad"],
 	["audit", "/admin/audit", "Auditoría"],
 	["requests", "/admin/requests", "Solicitudes"],
@@ -832,7 +852,7 @@ const ADMIN_TABS = [
 function adminTabs(active, role = "admin") {
 	const visible = ["admin", "creator"].includes(role)
 		? ADMIN_TABS
-		: ADMIN_TABS.filter(([key]) => !["settings", "system", "security", "traffic"].includes(key));
+		: ADMIN_TABS.filter(([key]) => !["settings", "system", "security", "traffic", "monitor"].includes(key));
 	const links = visible
 		.map(
 			([key, href, label]) =>
@@ -2325,6 +2345,67 @@ ${adminTabs("traffic", user.role)}
 </div>
 <script src="/traffic.js" defer></script>`;
 	return shell("Tráfico · Administración", body, { topbar: topbar(user) });
+}
+
+export function monitorPage({ user, snapshot = {} } = {}) {
+	const users = Array.isArray(snapshot.users) ? snapshot.users : [];
+	const recent = Array.isArray(snapshot.recent) ? snapshot.recent : [];
+	const stats = snapshot.stats || {};
+	const userCard = (entry) => {
+		const current = entry.current;
+		const streams = (entry.streams || [])
+			.map((stream) => `<span class="monitor-stream" title="${esc(stream.host)}:${esc(stream.port)}">${esc(stream.host)}:${esc(stream.port)}</span>`)
+			.join("");
+		return `<div class="monitor-user">
+  <div class="monitor-user-head">
+    ${userAvatar(entry.username, entry.icon, "user-avatar")}
+    <div class="monitor-user-title">
+      <strong>${esc(entry.username)}</strong>
+      <span class="badge role-${esc(entry.role)}">${esc(roleLabel(entry.role))}</span>
+      <span class="badge ${entry.online ? "monitor-online" : "monitor-offline"}">${entry.online ? "en línea" : "inactivo"}</span>
+    </div>
+    <span class="monitor-time">${esc(fmtDate(entry.lastSeenAt))}</span>
+  </div>
+  <div class="monitor-current">
+    <span class="monitor-label">Última web</span>
+    ${current
+		? `<span class="monitor-url" title="${esc(current.url || current.query)}">${esc(current.url || "Solo búsqueda")}</span>${current.query ? `<span class="monitor-query">Búsqueda: ${esc(current.query)}</span>` : ""}`
+		: '<span class="monitor-url">Sin navegación registrada</span>'}
+  </div>
+  <div class="monitor-meta"><span>${esc((entry.ips || []).join(" · ") || "IP desconocida")}</span><span>${esc(entry.sessions)} sesión${entry.sessions === 1 ? "" : "es"}</span><span title="${esc(entry.userAgent || "")}">${esc((entry.userAgent || "").slice(0, 60))}</span></div>
+  ${streams ? `<div class="monitor-streams">${streams}</div>` : ""}
+  <div class="monitor-actions"><a class="small" href="/admin/activity?user=${encodeURIComponent(entry.username)}">Ver historial</a></div>
+</div>`;
+	};
+	const recentRow = (entry) => `<tr>
+  <td class="mono">${esc(fmtDate(entry.at))}</td>
+  <td><strong>${esc(entry.username)}</strong></td>
+  <td class="mono">${esc(entry.url || "—")}${entry.query ? `<br><span class="muted">Búsqueda: ${esc(entry.query)}</span>` : ""}</td>
+</tr>`;
+	const body = `
+${adminTabs("monitor", user.role)}
+<div class="card">
+  <div class="traffic-head">
+    <div><h1>Vigilancia</h1><p class="muted">Quién está usando el proxy ahora y qué está haciendo. Se actualiza automáticamente.</p></div>
+    <span class="traffic-live"><i></i> En directo</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Usuarios en línea</div><div class="v" id="monitor-online">${esc(stats.online || 0)}</div></div>
+    <div class="stat"><div class="k">Sesiones activas</div><div class="v" id="monitor-sessions">${esc(stats.sessions || 0)}</div></div>
+    <div class="stat"><div class="k">Streams Wisp</div><div class="v" id="monitor-streams">${esc(stats.streams || 0)}</div></div>
+    <div class="stat"><div class="k">Actividad 24 h</div><div class="v" id="monitor-recent">${esc(stats.recent || 0)}</div></div>
+  </div>
+  <h2>Usuarios con sesión <small id="monitor-user-count">${users.length}</small></h2>
+  <div class="monitor-grid" id="monitor-users">${users.map(userCard).join("") || '<p class="empty">No hay sesiones activas.</p>'}</div>
+</div>
+<div class="card">
+  <h2>Actividad reciente</h2>
+  <p class="muted">Últimas URLs y búsquedas registradas. El historial completo está en <a href="/admin/activity">Actividad</a>.</p>
+  <div class="scroll"><table class="monitor-recent"><thead><tr><th>Hora</th><th>Usuario</th><th>Web / búsqueda</th></tr></thead><tbody id="monitor-recent-body">${recent.map(recentRow).join("") || '<tr><td colspan="3" class="empty">Sin actividad reciente.</td></tr>'}</tbody></table></div>
+  <p class="hint" id="monitor-updated">Actualizado: ${esc(fmtDate(snapshot.generatedAt || new Date().toISOString()))}</p>
+</div>
+<script src="/monitor.js" defer></script>`;
+	return shell("Vigilancia · Administración", body, { topbar: topbar(user), wide: true });
 }
 
 export function settingsPage({ user, settings, notice = "", error = "" } = {}) {

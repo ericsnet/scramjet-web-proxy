@@ -14,6 +14,7 @@ administración.
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas** y atajos de teclado.
+- **Vigilancia en vivo**: usuarios conectados, última web visitada, destinos Wisp y actividad reciente, con actualización automática.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
@@ -329,6 +330,7 @@ Archivos principales:
 | `security.js` | Detección pasiva, alertas y bloqueos |
 | `traffic.js` | Búfer de tráfico HTTP y conexiones Wisp para el panel en vivo |
 | `public/traffic.js` | Actualización del panel de tráfico |
+| `public/monitor.js` | Actualización del panel de vigilancia |
 | `roles.js` | Jerarquía y permisos de usuario/moderador/administrador/creador |
 | `public/chat.js` | Actualización y envío de mensajes en el navegador |
 | `public/account-icon.js` | Subida del icono desde Mi cuenta |

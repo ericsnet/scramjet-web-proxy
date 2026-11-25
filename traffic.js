@@ -2,7 +2,7 @@ import { normalizeIp } from "./ip.js";
 
 const MAX_EVENTS = 300;
 const SKIP_PATH =
-	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|avatar)/;
+	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|monitor\.js|avatar)/;
 
 const events = [];
 const streams = new Map();
@@ -51,7 +51,7 @@ export function recordHttp(req, res, startedAt) {
 	const pathname = String(req.path || req.originalUrl || "").split("?")[0];
 	if (!pathname || SKIP_PATH.test(pathname)) return;
 	// No registrar el propio polling del panel ni su JavaScript.
-	if (pathname === "/api/admin/traffic" || pathname === "/traffic.js") return;
+	if (pathname === "/api/admin/traffic" || pathname === "/api/admin/monitor" || pathname === "/traffic.js" || pathname === "/monitor.js") return;
 	const now = Date.now();
 	const entry = {
 		at: new Date(now).toISOString(),
