@@ -72,6 +72,7 @@ import {
 	systemPage,
 	adminLogsPage,
 	templatesPage,
+	schedulesPage,
 	maintenancePage,
 	blockedPage,
 	quarantinePage,
@@ -106,6 +107,7 @@ import {
 } from "./audit.js";
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
 import { listTemplates, addTemplate, deleteTemplate } from "./templates.js";
+import { listSchedules, addSchedule, deleteSchedule, activeJob } from "./schedules.js";
 import {
 	listBookmarks,
 	addBookmark,
@@ -856,6 +858,54 @@ function closeUserConnections(username, exceptSessionId = "") {
 			} catch {}
 		}
 		wispConnections.delete(id);
+	}
+}
+
+const scheduledActive = { maintenance: null, quarantine: null };
+
+function applySchedules() {
+	for (const type of ["maintenance", "quarantine"]) {
+		const job = activeJob(type);
+		if (job && scheduledActive[type] !== job.id) {
+			const patch =
+				type === "maintenance"
+					? {
+							maintenanceMode: true,
+							maintenanceMessage:
+								job.message || getSettings().maintenanceMessage,
+						}
+					: {
+							quarantineMode: true,
+							quarantineMessage:
+								job.message || getSettings().quarantineMessage,
+						};
+			const result = saveSettings(patch);
+			if (!result.error) {
+				closeNonAdminConnections();
+				scheduledActive[type] = job.id;
+				addAudit({
+					actor: "sistema",
+					action: `${type}.schedule.start`,
+					target: job.id,
+					detail: `${job.start} → ${job.end}`,
+				});
+			}
+		} else if (!job && scheduledActive[type]) {
+			const result = saveSettings(
+				type === "maintenance"
+					? { maintenanceMode: false }
+					: { quarantineMode: false },
+			);
+			if (!result.error) {
+				scheduledActive[type] = null;
+				addAudit({
+					actor: "sistema",
+					action: `${type}.schedule.end`,
+					target: "",
+					detail: "",
+				});
+			}
+		}
 	}
 }
 
@@ -2862,6 +2912,53 @@ app.get("/admin/stats", requireStaff, (req, res) => {
 	);
 });
 
+app.get("/admin/schedules", requireAdmin, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		schedulesPage({
+			user: req.user,
+			jobs: listSchedules(),
+			notice:
+				req.query.ok === "created"
+					? "Programación creada."
+					: req.query.ok === "deleted"
+						? "Programación eliminada."
+						: "",
+			error:
+				req.query.error === "invalid-range"
+					? "La fecha de fin debe ser posterior a la de inicio."
+					: req.query.error === "limit"
+						? "Hay demasiadas programaciones."
+						: "",
+		}),
+	);
+});
+
+app.post("/api/admin/schedules", requireAdmin, sameOrigin, (req, res) => {
+	const result = addSchedule({
+		type: req.body.type,
+		start: req.body.start,
+		end: req.body.end,
+		message: req.body.message,
+		by: req.user.username,
+	});
+	if (result.error) return res.redirect(303, `/admin/schedules?error=${result.error}`);
+	audit(
+		req,
+		`${result.job.type}.schedule.create`,
+		result.job.id,
+		`${result.job.start} → ${result.job.end}`,
+	);
+	res.redirect(303, "/admin/schedules?ok=created");
+});
+
+app.post("/api/admin/schedules/:id/delete", requireAdmin, sameOrigin, (req, res) => {
+	const result = deleteSchedule(req.params.id);
+	if (result.error) return res.redirect(303, `/admin/schedules?error=${result.error}`);
+	audit(req, "schedule.delete", req.params.id);
+	res.redirect(303, "/admin/schedules?ok=deleted");
+});
+
 app.get("/admin/templates", requireAdmin, (req, res) => {
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -3518,6 +3615,8 @@ function scheduledBackup() {
 	}
 }
 pruneBackups();
+applySchedules();
+setInterval(applySchedules, 30_000).unref();
 setInterval(scheduledBackup, 60 * 60 * 1000).unref();
 
 setInterval(() => {

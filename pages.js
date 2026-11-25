@@ -2821,6 +2821,7 @@ ${adminTabs("settings")}
     <label for="quarantineMessage">Mensaje para los usuarios</label>
     <textarea id="quarantineMessage" name="quarantineMessage" maxlength="300" style="min-height:60px">${esc(settings.quarantineMessage || "")}</textarea>
     <p class="hint">Al activarla se rechazan nuevas peticiones de webs y se cierran las conexiones abiertas de usuarios.</p>
+    <p class="hint"><a class="small" href="/admin/schedules">Programar mantenimiento y cuarentena</a></p>
   </div>
 
   <div class="section settings-block" id="settings-sites" data-settings-search="sitios dominios permitidos prohibidos lista negra blanca categorías adultos apuestas social">
@@ -3189,6 +3190,61 @@ ${adminTabs("system", user.role)}
   <pre class="panel" style="white-space:pre-wrap;max-height:70vh;overflow:auto">${esc(output || "Sin entradas.")}</pre>
 </div>`;
 	return shell("Logs · Administración", body, { topbar: topbar(user) });
+}
+
+export function schedulesPage({ user, jobs = [], notice = "", error = "" } = {}) {
+	const now = Date.now();
+	const rows = jobs
+		.map((job) => {
+			const start = new Date(job.start).getTime();
+			const end = new Date(job.end).getTime();
+			const status =
+				now >= start && now < end ? "activo" : now < start ? "próximo" : "pasado";
+			return `<tr>
+      <td><strong>${esc(job.type === "quarantine" ? "Cuarentena" : "Mantenimiento")}</strong></td>
+      <td class="mono">${esc(fmtDate(job.start))}</td>
+      <td class="mono">${esc(fmtDate(job.end))}</td>
+      <td><span class="badge${status === "activo" ? " current" : status === "pasado" ? " blocked" : ""}">${status}</span></td>
+      <td>${esc(job.createdBy || "—")}</td>
+      <td><form method="post" action="/api/admin/schedules/${esc(job.id)}/delete" onsubmit="return confirm('¿Eliminar esta programación?')">
+        <button class="small danger" type="submit">Eliminar</button>
+      </form></td>
+    </tr>`;
+		})
+		.join("");
+	const body = `
+${adminTabs("settings", user.role)}
+<div class="card">
+  <h1>Programación</h1>
+  <p class="muted">Activa mantenimiento o cuarentena automáticamente en una ventana de tiempo. La programación tiene prioridad sobre el botón manual.</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  ${rows ? `<div class="scroll"><table><thead><tr><th>Tipo</th><th>Inicio</th><th>Fin</th><th>Estado</th><th>Creada por</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">No hay programaciones.</p>'}
+  <h2 style="margin-top:24px">Nueva programación</h2>
+  <form method="post" action="/api/admin/schedules">
+    <div class="field-grid">
+      <div>
+        <label for="schedule-type">Tipo</label>
+        <select id="schedule-type" name="type">
+          <option value="maintenance">Mantenimiento</option>
+          <option value="quarantine">Cuarentena</option>
+        </select>
+      </div>
+      <div>
+        <label for="schedule-start">Inicio</label>
+        <input id="schedule-start" name="start" type="datetime-local" required>
+      </div>
+      <div>
+        <label for="schedule-end">Fin</label>
+        <input id="schedule-end" name="end" type="datetime-local" required>
+      </div>
+    </div>
+    <label for="schedule-message">Mensaje (opcional)</label>
+    <textarea id="schedule-message" name="message" maxlength="300" style="min-height:60px"></textarea>
+    <button class="primary" type="submit">Crear programación</button>
+  </form>
+</div>`;
+	return shell("Programación · Administración", body, { topbar: topbar(user) });
 }
 
 export function templatesPage({
