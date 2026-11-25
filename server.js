@@ -70,6 +70,7 @@ import {
 	settingsPage,
 	auditPage,
 	systemPage,
+	adminLogsPage,
 	maintenancePage,
 	blockedPage,
 	quarantinePage,
@@ -86,6 +87,7 @@ import {
 	activityCounts,
 	clearActivity,
 	clearActivityExcept,
+	deleteActivityRange,
 	trimActivity,
 	exportActivity,
 	flushActivity,
@@ -1105,6 +1107,11 @@ app.get("/page-i18n.js", (req, res) => {
 	res.type("application/javascript").sendFile(path.join(__dirname, "public/page-i18n.js"));
 });
 
+app.get("/global-search.js", (req, res) => {
+	res.set("Cache-Control", "public, max-age=3600");
+	res.type("application/javascript").sendFile(path.join(__dirname, "public/global-search.js"));
+});
+
 app.get("/api/config", requireAuth, (req, res) => {
 	const settings = getSettings();
 	const session = getSession(req);
@@ -1447,6 +1454,66 @@ app.get("/avatar/:user", (req, res) => {
 	res.set("X-Content-Type-Options", "nosniff");
 	res.set("Content-Disposition", 'inline; filename="avatar"');
 	res.type(file.type).sendFile(file.path);
+});
+
+app.get("/api/search", (req, res) => {
+	const q = String(req.query.q || "").trim().slice(0, 100);
+	if (q.length < 2) {
+		return res.json({ bookmarks: [], history: [], sections: [] });
+	}
+	const lower = q.toLowerCase();
+	const bookmarks = listBookmarks(req.user.username)
+		.filter(
+			(entry) =>
+				String(entry.label || "").toLowerCase().includes(lower) ||
+				String(entry.url || "").toLowerCase().includes(lower),
+		)
+		.slice(0, 6)
+		.map((entry) => ({ label: entry.label, url: entry.url }));
+	const history = getActivity({ username: req.user.username, limit: 6, search: q }).map(
+		(entry) => ({
+			label: entry.query ? `Búsqueda: ${entry.query}` : entry.url,
+			url: entry.url || "",
+			query: entry.query || "",
+			at: entry.at,
+		}),
+	);
+	const sections = [
+		["Inicio", "/"],
+		["Favoritos", "/bookmarks"],
+		["Historial", "/history"],
+		["Chat", "/chat"],
+		["Mi cuenta", "/account"],
+	];
+	if (isStaffRole(req.user.role)) {
+		sections.push(
+			["Resumen de administración", "/admin/overview"],
+			["Usuarios", "/admin"],
+			["Sesiones", "/admin/sessions"],
+			["Actividad", "/admin/activity"],
+			["Auditoría", "/admin/audit"],
+			["Solicitudes", "/admin/requests"],
+			["Estadísticas", "/admin/stats"],
+		);
+	}
+	if (isAdminRole(req.user.role)) {
+		sections.push(
+			["Seguridad", "/admin/security"],
+			["Tráfico", "/admin/traffic"],
+			["Vigilancia", "/admin/monitor"],
+			["Ajustes", "/admin/settings"],
+			["Sistema", "/admin/system"],
+		);
+	}
+	res.set("Cache-Control", "no-store");
+	res.json({
+		bookmarks,
+		history,
+		sections: sections
+			.filter(([label]) => label.toLowerCase().includes(lower))
+			.slice(0, 8)
+			.map(([label, href]) => ({ label, href })),
+	});
 });
 
 app.get("/api/navigate-check", async (req, res) => {
@@ -1993,17 +2060,31 @@ app.get("/bookmarks", (req, res) => {
 	);
 });
 
+function historyFilters(req) {
+	const search = String(req.query.q || "").slice(0, 100);
+	const type = ["url", "search"].includes(String(req.query.type)) ? String(req.query.type) : "";
+	const fromDate = String(req.query.from || "").slice(0, 10);
+	const toDate = String(req.query.to || "").slice(0, 10);
+	const from = /^\d{4}-\d{2}-\d{2}$/.test(fromDate)
+		? new Date(`${fromDate}T00:00:00`).getTime()
+		: 0;
+	const to = /^\d{4}-\d{2}-\d{2}$/.test(toDate)
+		? new Date(`${toDate}T23:59:59.999`).getTime()
+		: 0;
+	return { search, type, from: Number.isFinite(from) ? from : 0, to: Number.isFinite(to) ? to : 0, fromDate, toDate };
+}
+
 app.get("/history", (req, res) => {
 	const settings = getSettings();
 	const page = Math.max(1, Number(req.query.page) || 1);
 	const limit = 25;
-	const search = String(req.query.q || "").slice(0, 100);
-	const total = countActivity({ username: req.user.username, search });
+	const filters = historyFilters(req);
+	const total = countActivity({ username: req.user.username, ...filters });
 	const activity = getActivity({
 		username: req.user.username,
 		limit,
 		offset: (page - 1) * limit,
-		search,
+		...filters,
 	});
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -2013,11 +2094,53 @@ app.get("/history", (req, res) => {
 			total,
 			page,
 			pages: Math.max(1, Math.ceil(total / limit)),
-			search,
+			...filters,
 			canClear: settings.allowUserHistoryClear,
-			notice: req.query.ok === "cleared" ? "Historial vaciado." : "",
+			notice:
+				req.query.ok === "cleared"
+					? "Historial vaciado."
+					: req.query.ok === "range"
+						? "Rango del historial eliminado."
+						: "",
+			error: req.query.error === "range" ? "El rango de fechas no es válido." : "",
 		}),
 	);
+});
+
+app.get("/history.csv", (req, res) => {
+	const filters = historyFilters(req);
+	const rows = getActivity({
+		username: req.user.username,
+		limit: 10000,
+		...filters,
+	});
+	const csvEscape = (value) => {
+		let text = String(value ?? "");
+		if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+		return `"${text.replaceAll('"', '""')}"`;
+	};
+	const lines = ["fecha,usuario,busqueda,url"];
+	for (const entry of rows) {
+		lines.push([entry.at, entry.username, entry.query, entry.url].map(csvEscape).join(","));
+	}
+	res.setHeader("Content-Type", "text/csv; charset=utf-8");
+	res.setHeader(
+		"Content-Disposition",
+		`attachment; filename="historial-${new Date().toISOString().slice(0, 10)}.csv"`,
+	);
+	res.send(lines.join("\n"));
+});
+
+app.post("/api/account/history/delete-range", sameOrigin, (req, res) => {
+	if (!getSettings().allowUserHistoryClear) {
+		return res.status(403).type("text/plain").send("No autorizado.");
+	}
+	const from = new Date(`${String(req.body.from || "").slice(0, 10)}T00:00:00`).getTime();
+	const to = new Date(`${String(req.body.to || "").slice(0, 10)}T23:59:59.999`).getTime();
+	const result = deleteActivityRange(req.user.username, from, to);
+	if (result.error) return res.redirect(303, "/history?error=range");
+	audit(req, "activity.delete-range", "", `${req.body.from} → ${req.body.to}`);
+	res.redirect(303, "/history?ok=range");
 });
 
 app.post("/api/account/language", sameOrigin, (req, res) => {
@@ -2609,6 +2732,41 @@ app.post("/api/admin/activity/clear", requireAdmin, sameOrigin, (req, res) => {
 	res.redirect(303, `/admin/activity?ok=cleared${suffix}`);
 });
 
+app.get("/admin/users.csv", requireAdmin, (req, res) => {
+	const csvEscape = (value) => {
+		let text = String(value ?? "");
+		if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+		return `"${text.replaceAll('"', '""')}"`;
+	};
+	const users = hideCreatorData(req, listUsers(), (entry) => entry.username);
+	const lines = [
+		"usuario,rol,bloqueado,bloqueado_hasta,cambio_obligatorio,creado,ultimo_login,idioma",
+	];
+	for (const entry of users) {
+		lines.push(
+			[
+				entry.username,
+				entry.role,
+				entry.blocked ? "si" : "no",
+				entry.blockedUntil || "",
+				entry.mustChangePassword ? "si" : "no",
+				entry.createdAt || "",
+				entry.lastLoginAt || "",
+				entry.lang || "",
+			]
+				.map(csvEscape)
+				.join(","),
+		);
+	}
+	audit(req, "users.export", "", "CSV");
+	res.setHeader("Content-Type", "text/csv; charset=utf-8");
+	res.setHeader(
+		"Content-Disposition",
+		`attachment; filename="usuarios-${new Date().toISOString().slice(0, 10)}.csv"`,
+	);
+	res.send(lines.join("\n"));
+});
+
 app.get("/admin/activity.csv", requireAdmin, sameSiteRequest, (req, res) => {
 	const wanted = String(req.query.user || "").trim();
 	const target = wanted ? getUser(wanted) : null;
@@ -2917,6 +3075,27 @@ async function serviceState(name) {
 		return String(err.stdout || "").trim() || "desconocido";
 	}
 }
+
+app.get("/admin/logs", requireAdmin, async (req, res) => {
+	const unit = ["webproxy", "apache2"].includes(String(req.query.unit))
+		? String(req.query.unit)
+		: "webproxy";
+	const lines = Math.min(1000, Math.max(20, Number(req.query.lines) || 200));
+	let output = "";
+	let error = "";
+	try {
+		const result = await execFileAsync(
+			"journalctl",
+			["-u", unit, "-n", String(lines), "--no-pager", "-o", "short-iso"],
+			{ timeout: 15000, maxBuffer: 2 * 1024 * 1024 },
+		);
+		output = result.stdout || "";
+	} catch (err) {
+		error = "No se pudieron leer los logs: " + (err.message || "error desconocido");
+	}
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(adminLogsPage({ user: req.user, unit, lines, output, error }));
+});
 
 app.get("/admin/system", requireAdmin, async (req, res) => {
 	let disk = { total: 0, used: 0, free: 0 };

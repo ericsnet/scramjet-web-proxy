@@ -17,6 +17,9 @@ const backButton = document.getElementById("back-btn");
 const forwardButton = document.getElementById("forward-btn");
 const reloadButton = document.getElementById("reload-btn");
 const bookmarkButton = document.getElementById("bookmark-btn");
+const readerButton = document.getElementById("reader-btn");
+const zoomOutButton = document.getElementById("zoom-out-btn");
+const zoomInButton = document.getElementById("zoom-in-btn");
 const bookmarkDialog = document.getElementById("bookmark-dialog");
 const bookmarkForm = document.getElementById("bookmark-form");
 const bookmarkLabel = document.getElementById("bookmark-label");
@@ -36,6 +39,81 @@ const landingNewTabButton = document.getElementById("landing-new-tab-btn");
 let tabs = [{ id: 1, url: "", label: "Nueva pestaña" }];
 let activeTab = 1;
 let nextTabId = 2;
+let readerMode = false;
+let viewZoom = 1;
+
+const READER_CSS = `
+html.pw-reader body {
+  max-width: 780px !important;
+  margin: 0 auto !important;
+  padding: 24px 18px 80px !important;
+  font-size: 18px !important;
+  line-height: 1.75 !important;
+  background: #0f172a !important;
+  color: #e5edf7 !important;
+}
+html.pw-reader body * {
+  max-width: 100% !important;
+}
+html.pw-reader img, html.pw-reader video {
+  height: auto !important;
+}
+html.pw-reader nav, html.pw-reader aside, html.pw-reader header, html.pw-reader footer {
+  position: static !important;
+}
+`;
+
+function loadViewPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("pw_view") || "{}");
+    readerMode = !!saved.reader;
+    const zoom = Number(saved.zoom);
+    viewZoom = Number.isFinite(zoom) ? Math.min(2, Math.max(0.5, zoom)) : 1;
+  } catch {}
+}
+
+function saveViewPrefs() {
+  try {
+    localStorage.setItem("pw_view", JSON.stringify({ reader: readerMode, zoom: viewZoom }));
+  } catch {}
+}
+
+function applyReader() {
+  if (!frameElement) return;
+  try {
+    const doc = frameElement.contentDocument;
+    if (!doc) return;
+    let style = doc.getElementById("pw-reader-style");
+    if (!style) {
+      style = doc.createElement("style");
+      style.id = "pw-reader-style";
+      doc.head?.appendChild(style);
+    }
+    style.textContent = READER_CSS;
+    doc.documentElement.classList.toggle("pw-reader", readerMode);
+  } catch {}
+}
+
+function applyView() {
+  if (frameElement) frameElement.style.zoom = String(viewZoom);
+  readerButton?.setAttribute("aria-pressed", readerMode ? "true" : "false");
+  applyReader();
+  saveViewPrefs();
+}
+
+readerButton?.addEventListener("click", () => {
+  readerMode = !readerMode;
+  applyView();
+});
+zoomOutButton?.addEventListener("click", () => {
+  viewZoom = Math.max(0.5, Math.round((viewZoom - 0.1) * 10) / 10);
+  applyView();
+});
+zoomInButton?.addEventListener("click", () => {
+  viewZoom = Math.min(2, Math.round((viewZoom + 0.1) * 10) / 10);
+  applyView();
+});
+loadViewPrefs();
 const blockedRequest = document.getElementById("blocked-request");
 const blockedHost = document.getElementById("blocked-host");
 const blockedReason = document.getElementById("blocked-reason");
@@ -256,7 +334,10 @@ async function init() {
 	frame = controller.createFrame(frameElement, {
 		plugins: [urlWatcher, catchEscapedLinks],
 	});
-	frameElement.addEventListener("load", stopLoading);
+	frameElement.addEventListener("load", () => {
+		stopLoading();
+		applyView();
+	});
 }
 
 setInterval(() => {
@@ -480,6 +561,7 @@ function saveTabs() {
 			"pw_tabs",
 			JSON.stringify(tabs.map((t) => ({ url: t.url, label: t.label }))),
 		);
+		localStorage.setItem("pw_active_tab", String(tabs.findIndex((t) => t.id === activeTab)));
 	} catch {}
 }
 
@@ -573,7 +655,8 @@ try {
 			url: typeof t.url === "string" ? t.url : "",
 			label: t.label || tabLabel(t.url || ""),
 		}));
-		activeTab = tabs[0].id;
+		const savedActive = Number(localStorage.getItem("pw_active_tab"));
+		activeTab = tabs[Number.isInteger(savedActive) && savedActive >= 0 && savedActive < tabs.length ? savedActive : 0].id;
 		nextTabId = tabs.length + 1;
 	}
 } catch {}

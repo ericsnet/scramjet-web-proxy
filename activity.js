@@ -115,21 +115,36 @@ export function trimActivity() {
 	saveNow();
 }
 
-export function getActivity({ username = "", limit = 200, offset = 0, search = "" } = {}) {
-	const wanted = String(username || "").toLowerCase();
-	const query = String(search || "").toLowerCase();
+function activityMatches(e, { wanted = "", query = "", from = 0, to = 0, type = "" } = {}) {
+	if (wanted && String(e.username).toLowerCase() !== wanted) return false;
+	if (
+		query &&
+		!String(e.url || "").toLowerCase().includes(query) &&
+		!String(e.query || "").toLowerCase().includes(query)
+	) {
+		return false;
+	}
+	const at = new Date(e.at).getTime();
+	if (from && (!Number.isFinite(at) || at < from)) return false;
+	if (to && (!Number.isFinite(at) || at > to)) return false;
+	if (type === "url" && !e.url) return false;
+	if (type === "search" && !e.query) return false;
+	return true;
+}
+
+export function getActivity({ username = "", limit = 200, offset = 0, search = "", from = 0, to = 0, type = "" } = {}) {
+	const filters = {
+		wanted: String(username || "").toLowerCase(),
+		query: String(search || "").toLowerCase(),
+		from: Number(from) || 0,
+		to: Number(to) || 0,
+		type: String(type || ""),
+	};
 	const out = [];
 	let skipped = 0;
 	for (let i = entries.length - 1; i >= 0 && out.length < limit; i--) {
 		const e = entries[i];
-		if (wanted && String(e.username).toLowerCase() !== wanted) continue;
-		if (
-			query &&
-			!String(e.url || "").toLowerCase().includes(query) &&
-			!String(e.query || "").toLowerCase().includes(query)
-		) {
-			continue;
-		}
+		if (!activityMatches(e, filters)) continue;
 		if (skipped < offset) {
 			skipped++;
 			continue;
@@ -139,22 +154,33 @@ export function getActivity({ username = "", limit = 200, offset = 0, search = "
 	return out;
 }
 
-export function countActivity({ username = "", search = "" } = {}) {
-	const wanted = String(username || "").toLowerCase();
-	const query = String(search || "").toLowerCase();
+export function countActivity({ username = "", search = "", from = 0, to = 0, type = "" } = {}) {
+	const filters = {
+		wanted: String(username || "").toLowerCase(),
+		query: String(search || "").toLowerCase(),
+		from: Number(from) || 0,
+		to: Number(to) || 0,
+		type: String(type || ""),
+	};
 	let count = 0;
-	for (const e of entries) {
-		if (wanted && String(e.username).toLowerCase() !== wanted) continue;
-		if (
-			query &&
-			!String(e.url || "").toLowerCase().includes(query) &&
-			!String(e.query || "").toLowerCase().includes(query)
-		) {
-			continue;
-		}
-		count++;
-	}
+	for (const e of entries) if (activityMatches(e, filters)) count++;
 	return count;
+}
+
+export function deleteActivityRange(username, from, to) {
+	const wanted = String(username || "").toLowerCase();
+	const start = Number(from) || 0;
+	const end = Number(to) || 0;
+	if (!start || !end || end < start) return { error: "invalid-range" };
+	const before = entries.length;
+	entries = entries.filter((e) => {
+		if (wanted && String(e.username).toLowerCase() !== wanted) return true;
+		const at = new Date(e.at).getTime();
+		return !Number.isFinite(at) || at < start || at > end;
+	});
+	dirty = true;
+	saveNow();
+	return { ok: true, removed: before - entries.length };
 }
 
 export function activityCounts() {

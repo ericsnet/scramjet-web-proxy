@@ -1305,3 +1305,8 @@ footer {
 }
 
 html { overflow-x: hidden; }
+
+#reader-btn[aria-pressed="true"] {
+	background: rgba(59, 130, 246, .25);
+	color: #dbeafe;
+}

@@ -925,6 +925,7 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) 
 <title>Inici - Classroom</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <script src="/page-i18n.js" defer></script>
+<script src="/global-search.js" defer></script>
 <style>${CSS}</style>
 </head>
 <body>
@@ -1339,8 +1340,12 @@ export function historyPage({
 	page = 1,
 	pages = 1,
 	search = "",
+	type = "",
+	fromDate = "",
+	toDate = "",
 	canClear = false,
 	notice = "",
+	error = "",
 } = {}) {
 	const items = activity
 		.map(
@@ -1353,31 +1358,62 @@ export function historyPage({
 </li>`,
 		)
 		.join("");
-	const query = search ? `&q=${encodeURIComponent(search)}` : "";
+	const params = new URLSearchParams();
+	if (search) params.set("q", search);
+	if (type) params.set("type", type);
+	if (fromDate) params.set("from", fromDate);
+	if (toDate) params.set("to", toDate);
+	const filterQuery = params.toString();
+	const pageQuery = filterQuery ? `&${filterQuery}` : "";
+	const csvQuery = filterQuery ? `?${filterQuery}` : "";
+	const hasFilters = Boolean(search || type || fromDate || toDate);
 	const body = `
 <div class="card">
   <h1>Mi historial</h1>
   <p class="muted">Direcciones y búsquedas que has introducido. Total: ${esc(total)}.</p>
-  <form method="get" action="/history" class="filter">
+  <form method="get" action="/history" class="filter" style="flex-wrap:wrap">
     <input name="q" value="${esc(search)}" placeholder="Buscar en el historial" aria-label="Buscar">
-    <button class="small" type="submit">Buscar</button>
-    ${search ? '<a href="/history">Quitar búsqueda</a>' : ""}
+    <label class="muted" for="history-from" style="font-size:12px">Desde</label>
+    <input id="history-from" name="from" type="date" value="${esc(fromDate)}" aria-label="Desde">
+    <label class="muted" for="history-to" style="font-size:12px">Hasta</label>
+    <input id="history-to" name="to" type="date" value="${esc(toDate)}" aria-label="Hasta">
+    <select name="type" aria-label="Tipo">
+      <option value=""${type ? "" : " selected"}>Todo</option>
+      <option value="url"${type === "url" ? " selected" : ""}>Solo webs</option>
+      <option value="search"${type === "search" ? " selected" : ""}>Solo búsquedas</option>
+    </select>
+    <button class="small" type="submit">Filtrar</button>
+    ${hasFilters ? '<a href="/history">Quitar filtros</a>' : ""}
   </form>
+  <div class="filter" style="margin-bottom:16px">
+    <a class="small" href="/history.csv${csvQuery}">Exportar CSV</a>
+    ${canClear ? `<form method="post" action="/api/account/history/clear" onsubmit="return confirm('¿Vaciar todo tu historial?')" style="display:inline">
+      <button class="small danger" type="submit">Vaciar historial</button>
+    </form>` : ""}
+  </div>
   ${
 		canClear
-			? `<form method="post" action="/api/account/history/clear" onsubmit="return confirm('¿Vaciar tu historial?')" style="margin-bottom:16px">
-      <button class="small danger" type="submit">Vaciar historial</button>
-    </form>`
+			? `<details class="card" style="margin-bottom:16px;background:rgba(255,255,255,.015)">
+    <summary class="muted" style="cursor:pointer">Borrar solo un rango de fechas</summary>
+    <form method="post" action="/api/account/history/delete-range" class="filter" style="margin-top:12px;flex-wrap:wrap" onsubmit="return confirm('¿Borrar el historial de ese rango?')">
+      <label class="muted" for="delete-from" style="font-size:12px">Desde</label>
+      <input id="delete-from" name="from" type="date" value="${esc(fromDate)}" required>
+      <label class="muted" for="delete-to" style="font-size:12px">Hasta</label>
+      <input id="delete-to" name="to" type="date" value="${esc(toDate)}" required>
+      <button class="small danger" type="submit">Borrar rango</button>
+    </form>
+  </details>`
 			: ""
 	}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
   ${items ? `<ul class="activity">${items}</ul>` : '<p class="empty">No hay resultados.</p>'}
   ${
 		pages > 1
 			? `<div class="filter" style="margin-top:16px">
-    ${page > 1 ? `<a class="small" href="/history?page=${page - 1}${query}">Anterior</a>` : ""}
+    ${page > 1 ? `<a class="small" href="/history?page=${page - 1}${pageQuery}">Anterior</a>` : ""}
     <span class="muted">Página ${page} de ${pages}</span>
-    ${page < pages ? `<a class="small" href="/history?page=${page + 1}${query}">Siguiente</a>` : ""}
+    ${page < pages ? `<a class="small" href="/history?page=${page + 1}${pageQuery}">Siguiente</a>` : ""}
   </div>`
 			: ""
 	}
@@ -2006,6 +2042,7 @@ ${adminTabs("users", user.role)}
   <p class="muted">
     ${canManage ? "Gestiona usuarios, contraseñas, roles, bloqueos, sitios y horarios." : "Puedes consultar usuarios, actividad y sesiones, y bloquear cuentas."}
     <a href="/admin/activity">Ver toda la actividad</a>.
+    ${canManage ? '<a href="/admin/users.csv">Exportar usuarios CSV</a>.' : ""}
   </p>
   ${
 		canManage
@@ -3062,6 +3099,9 @@ ${adminTabs("system")}
       </div>
     </div>
   </div>
+  <div class="actions" style="margin:18px 0">
+    <a class="small" href="/admin/logs">Ver logs del sistema</a>
+  </div>
   <h2>Tailscale Funnel</h2>
   <p class="muted">URL pública: <a href="${esc(url)}">${esc(url)}</a></p>
   <pre class="panel">${esc(funnel.output || "Sin información")}</pre>
@@ -3111,6 +3151,28 @@ ${adminTabs("system")}
 	}
 </div>`;
 	return shell("Sistema · Administración", body, { topbar: topbar(user) });
+}
+
+export function adminLogsPage({ user, unit = "webproxy", lines = 200, output = "", error = "" } = {}) {
+	const body = `
+${adminTabs("system", user.role)}
+<div class="card">
+  <h1>Logs del sistema</h1>
+  <p class="muted">Últimas líneas del servicio seleccionado. Solo lectura.</p>
+  <form method="get" action="/admin/logs" class="filter">
+    <select name="unit" aria-label="Servicio">
+      <option value="webproxy"${unit === "webproxy" ? " selected" : ""}>webproxy</option>
+      <option value="apache2"${unit === "apache2" ? " selected" : ""}>apache2</option>
+    </select>
+    <select name="lines" aria-label="Líneas">
+      ${[100, 200, 500, 1000].map((n) => `<option value="${n}"${Number(lines) === n ? " selected" : ""}>${n} líneas</option>`).join("")}
+    </select>
+    <button class="small" type="submit">Actualizar</button>
+  </form>
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <pre class="panel" style="white-space:pre-wrap;max-height:70vh;overflow:auto">${esc(output || "Sin entradas.")}</pre>
+</div>`;
+	return shell("Logs · Administración", body, { topbar: topbar(user) });
 }
 
 export function maintenancePage({ settings, user = null } = {}) {
