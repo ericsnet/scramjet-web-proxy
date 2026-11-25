@@ -23,6 +23,9 @@ const favoritesBox = document.getElementById("favorites");
 const suggestions = document.getElementById("url-suggestions");
 const tabList = document.getElementById("tab-list");
 const newTabButton = document.getElementById("new-tab-btn");
+const landingTabList = document.getElementById("landing-tab-list");
+const landingTabBar = document.getElementById("landing-tab-bar");
+const landingNewTabButton = document.getElementById("landing-new-tab-btn");
 
 let tabs = [{ id: 1, url: "", label: "Nueva pestaña" }];
 let activeTab = 1;
@@ -404,9 +407,9 @@ function saveTabs() {
 	} catch {}
 }
 
-function renderTabs() {
-	if (!tabList) return;
-	tabList.replaceChildren();
+function renderTabsInto(container) {
+	if (!container) return;
+	container.replaceChildren();
 	for (const tab of tabs) {
 		const item = document.createElement("div");
 		item.className = `tab${tab.id === activeTab ? " active" : ""}`;
@@ -424,8 +427,14 @@ function renderTabs() {
 		});
 		item.append(close);
 		item.addEventListener("click", () => switchTab(tab.id));
-		tabList.append(item);
+		container.append(item);
 	}
+}
+
+function renderTabs() {
+	renderTabsInto(tabList);
+	renderTabsInto(landingTabList);
+	if (landingTabBar) landingTabBar.hidden = tabs.length <= 1;
 	saveTabs();
 }
 
@@ -478,6 +487,7 @@ function closeTab(id) {
 }
 
 newTabButton?.addEventListener("click", createTab);
+landingNewTabButton?.addEventListener("click", createTab);
 
 try {
 	const saved = JSON.parse(localStorage.getItem("pw_tabs") || "[]");

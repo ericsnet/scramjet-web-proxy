@@ -344,6 +344,40 @@ h1 span {
 	overflow-x: auto;
 }
 
+#tab-list,
+#landing-tab-list {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+#tab-list::-webkit-scrollbar,
+#landing-tab-list::-webkit-scrollbar {
+	display: none;
+}
+
+.landing-tab-bar {
+	width: min(720px, calc(100% - 40px));
+	margin: 64px auto -30px;
+	padding: 6px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--panel-2);
+	position: relative;
+	z-index: 1;
+}
+
+.landing-tab-bar[hidden] {
+	display: none;
+}
+
+.landing-tab-bar + .hero {
+	margin-top: 28px;
+}
+
 .tab {
 	display: flex;
 	align-items: center;
@@ -770,5 +804,15 @@ footer a:hover {
 		left: 10px;
 		bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 		width: calc(100vw - 20px);
+	}
+}
+
+@media (max-width: 640px) {
+	.landing-tab-bar {
+		width: calc(100% - 24px);
+		margin: 58px auto -20px;
+	}
+	.landing-tab-bar + .hero {
+		margin-top: 20px;
 	}
 }
