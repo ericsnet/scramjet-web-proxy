@@ -521,6 +521,46 @@ h1 span {
 	border-color: var(--border-strong);
 }
 
+#sj-frame-wrapper.immersive {
+	padding: 0;
+	gap: 0;
+}
+
+#sj-frame-wrapper.immersive .tab-bar,
+#sj-frame-wrapper.immersive .toolbar {
+	display: none;
+}
+
+#sj-frame-wrapper.immersive #sj-frame {
+	border: 0;
+	border-radius: 0;
+}
+
+.exit-fullscreen {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	z-index: 6;
+	border: 1px solid rgba(148, 163, 184, 0.45);
+	border-radius: 999px;
+	background: rgba(15, 23, 34, 0.82);
+	color: #e2e8f0;
+	font: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 8px 12px;
+	cursor: pointer;
+	backdrop-filter: blur(6px);
+}
+
+.exit-fullscreen:hover {
+	background: rgba(30, 41, 59, 0.95);
+}
+
+.exit-fullscreen[hidden] {
+	display: none;
+}
+
 .search.compact {
 	flex: 1;
 	min-width: 220px;

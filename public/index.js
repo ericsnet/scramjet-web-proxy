@@ -8,6 +8,8 @@ const frameElement = document.getElementById("sj-frame");
 const frameUrl = document.getElementById("sj-frame-url");
 const pageProgress = document.getElementById("page-progress");
 const frameLoading = document.getElementById("frame-loading");
+const fullscreenButton = document.getElementById("fullscreen-btn");
+const exitFullscreenButton = document.getElementById("exit-fullscreen-btn");
 const homeButton = document.getElementById("home-btn");
 const error = document.getElementById("sj-error");
 const errorCode = document.getElementById("sj-error-code");
@@ -171,6 +173,43 @@ function pulseProgress() {
 		loadingTimer = null;
 	}, 650);
 }
+
+function setImmersive(value) {
+	frameWrapper.classList.toggle("immersive", value);
+	if (exitFullscreenButton) exitFullscreenButton.hidden = !value;
+	if (fullscreenButton) {
+		fullscreenButton.title = value ? "Salir de pantalla completa" : "Pantalla completa";
+		fullscreenButton.setAttribute("aria-pressed", value ? "true" : "false");
+	}
+}
+
+async function enterFullscreen() {
+	setImmersive(true);
+	try {
+		if (!document.fullscreenElement) await frameWrapper.requestFullscreen?.();
+	} catch {}
+}
+
+async function exitFullscreen() {
+	setImmersive(false);
+	try {
+		if (document.fullscreenElement) await document.exitFullscreen();
+	} catch {}
+}
+
+fullscreenButton?.addEventListener("click", () => {
+	if (frameWrapper.classList.contains("immersive")) exitFullscreen();
+	else enterFullscreen();
+});
+exitFullscreenButton?.addEventListener("click", exitFullscreen);
+document.addEventListener("fullscreenchange", () => {
+	if (!document.fullscreenElement) setImmersive(false);
+});
+window.addEventListener("keydown", (event) => {
+	if (event.key === "Escape" && frameWrapper.classList.contains("immersive")) {
+		exitFullscreen();
+	}
+});
 
 async function init() {
 	if (controller) return;
@@ -402,6 +441,7 @@ function handleFrameUrl(url) {
 }
 
 function showErrorScreen(message, details) {
+	if (frameWrapper.classList.contains("immersive")) exitFullscreen();
 	frameWrapper.style.display = "none";
 	error.textContent = message;
 	errorCode.textContent = details || "";
@@ -569,6 +609,7 @@ async function navigate(url, { silent = false, log = true } = {}) {
 
 function goHome() {
 	stopLoading();
+	if (frameWrapper.classList.contains("immersive")) exitFullscreen();
 	frameWrapper.style.display = "none";
 	landing.style.display = "flex";
 	document.title = "Inici - Classroom";
