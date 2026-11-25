@@ -116,6 +116,7 @@ import {
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
 import { normalizeIp } from "./ip.js";
+import { activatePanic, panicUntil, flushPanic, CLASSROOM_URL } from "./panic.js";
 import {
 	areFriends,
 	acceptFriendRequest,
@@ -237,6 +238,19 @@ app.use((req, res, next) => {
 	next();
 });
 app.use(securityMiddleware);
+app.use((req, res, next) => {
+	const until = panicUntil(req._deviceId);
+	if (!until) return next();
+	res.set("Cache-Control", "no-store");
+	if (req.path === "/api/panic" || req.path === "/healthz") return next();
+	if (req.path.startsWith("/api/")) {
+		return res.status(403).json({
+			error: "panic",
+			message: "Modo pánico activo. Vuelve en unos minutos.",
+		});
+	}
+	return res.redirect(302, CLASSROOM_URL);
+});
 app.use((req, res, next) => {
 	const startedAt = Date.now();
 	res.once("finish", () => recordHttp(req, res, startedAt));
@@ -1317,6 +1331,12 @@ app.param("username", (req, res, next, value) => {
 		return res.redirect(303, "/admin?error=forbidden");
 	}
 	next();
+});
+
+app.post("/api/panic", requireAuth, sameOrigin, (req, res) => {
+	const until = activatePanic(req._deviceId);
+	audit(req, "panic.activate", "", `hasta ${new Date(until).toISOString()}`);
+	res.redirect(303, CLASSROOM_URL);
 });
 
 app.get("/api/me", (req, res) => {
@@ -2965,6 +2985,7 @@ function shutdown() {
 	flushAttempts();
 	flushChat();
 	flushFriends();
+	flushPanic();
 	flushSecurity();
 	process.exit(0);
 }

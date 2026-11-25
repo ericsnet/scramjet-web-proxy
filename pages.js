@@ -485,6 +485,13 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .dialog-x:hover{color:var(--text)}
 button.primary-small,a.primary-small{background:var(--accent);color:#fff;border-color:var(--accent)}
 button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color:#2f6fdd}
+.panic-button-form{position:fixed;left:16px;bottom:16px;z-index:45;margin:0}
+.panic-button{display:inline-flex;align-items:center;gap:6px;border:1px solid #7f1d1d;border-radius:999px;
+  background:#3a1115;color:#fecaca;font:inherit;font-size:12px;font-weight:700;padding:9px 14px;cursor:pointer;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);transition:background .15s,border-color .15s}
+.panic-button:hover{background:#5b171d;border-color:#b91c1c;color:#fff}
+.panic-button:active{transform:translateY(1px)}
+@media(max-width:820px){.panic-button-form{left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}}
 .chat-action{position:relative}
 .friend-badge{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
   background:#dc2626;color:#fff;font-size:10px;font-weight:700;line-height:18px;text-align:center}
@@ -708,6 +715,7 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) 
 ${topbar}
 <main class="wrap${wide ? " wide" : ""}">${body}</main>
 <footer>Proxy Web</footer>
+${topbar ? `<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">⚠ Pánico</button></form>` : ""}
 ${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js" defer></script>' : ""}
 </body>
 </html>`;

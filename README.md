@@ -17,6 +17,7 @@ administración.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
+- **Botón de pánico**: abajo a la izquierda; activa durante 5 minutos la redirección automática de ese dispositivo a `classroom.google.com`.
 - **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
@@ -256,6 +257,7 @@ usuario puede vaciar su propio historial.
 - `data/chat.json`: mensajes, canales y lecturas del chat interno.
 - `data/chat-uploads/`: adjuntos privados del chat.
 - `data/friends.json`: amistades y solicitudes pendientes; no se incluye en las copias.
+- `data/panic.json`: dispositivos con modo pánico activo y su caducidad.
 - `data/avatars/`: iconos de usuario validados por contenido y servidos solo con sesión iniciada.
 - `data/security.json`: alertas, bloqueos e historial reciente de logins.
 - `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
@@ -323,6 +325,7 @@ Archivos principales:
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `chat.js` | Almacén, límites y retención del chat interno |
 | `friends.js` | Amistades, solicitudes y permisos de chat privado |
+| `panic.js` | Estado temporal del botón de pánico por dispositivo |
 | `security.js` | Detección pasiva, alertas y bloqueos |
 | `traffic.js` | Búfer de tráfico HTTP y conexiones Wisp para el panel en vivo |
 | `public/traffic.js` | Actualización del panel de tráfico |
