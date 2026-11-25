@@ -613,28 +613,53 @@
 		button.addEventListener("click", () => button.closest("dialog")?.close());
 	});
 
-	document.getElementById("chat-dm-create")?.addEventListener("click", async () => {
-		const select = document.getElementById("chat-dm-user");
-		if (!select?.value) return;
+	async function createDm(username) {
+		if (!username) return;
 		try {
 			await request("/api/chat/channels/dm", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ username: select.value }),
+				body: JSON.stringify({ username }),
 			});
 			document.getElementById("chat-dm-dialog")?.close();
-			await refreshChannels();
 			await refreshChannels();
 			const dm = channelsCache.find(
 				(channel) =>
 					channel.type === "dm" &&
-					channel.name.toLowerCase() === select.value.toLowerCase(),
+					channel.name.toLowerCase() === String(username).toLowerCase(),
 			);
 			if (dm) switchChannel(dm.id);
 		} catch (error) {
 			showError(error.message);
 		}
-	});
+	}
+	const dmSearch = document.getElementById("chat-dm-search");
+	const dmResults = document.getElementById("chat-dm-results");
+	const dmHint = document.getElementById("chat-dm-hint");
+	const dmEmpty = document.getElementById("chat-dm-empty");
+	if (dmSearch && dmResults) {
+		const applyDmSearch = () => {
+			const query = dmSearch.value.trim().toLowerCase();
+			let visible = 0;
+			for (const row of dmResults.querySelectorAll(".dm-result")) {
+				const matches = !!query && row.dataset.dmName.includes(query);
+				row.hidden = !matches;
+				if (matches) visible += 1;
+			}
+			dmResults.hidden = !query;
+			if (dmHint) dmHint.hidden = !!query;
+			if (dmEmpty) dmEmpty.hidden = !query || visible > 0;
+		};
+		dmSearch.addEventListener("input", applyDmSearch);
+		applyDmSearch();
+		dmResults.addEventListener("click", (event) => {
+			const row = event.target.closest("[data-dm-user]");
+			if (row) createDm(row.dataset.dmUser);
+		});
+		document.getElementById("chat-new-dm")?.addEventListener("click", () => {
+			setTimeout(() => dmSearch.focus(), 30);
+		});
+	}
 	document.getElementById("chat-group-search")?.addEventListener("input", (event) => {
 		const query = String(event.target.value || "").toLowerCase().trim();
 		for (const option of document.querySelectorAll("#chat-group-members .chat-member-option")) {

@@ -505,6 +505,11 @@ button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color
 .friend-result .friend-name{min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .friend-result button{margin-left:auto}
 .friend-result[hidden]{display:none}
+.dm-result{width:100%;background:none;border:0;border-bottom:1px solid var(--border);border-radius:0;
+  color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.dm-result:last-child{border-bottom:0}
+.dm-result:hover{background:rgba(59,130,246,.08)}
+.dm-result .badge{margin-left:auto}
 @media(max-width:820px){
   .wrap.wide{width:calc(100% - 16px);margin-top:12px}
   .chat-app{grid-template-columns:1fr;height:auto;min-height:calc(100vh - 150px)}
@@ -1076,8 +1081,12 @@ export function chatPage({
 				`<option value="${esc(channel.id)}"${channel.id === currentChannel ? " selected" : ""}>${esc(channel.name)}${channel.unread ? ` (${channel.unread})` : ""}</option>`,
 		)
 		.join("");
-	const userOptions = dmCandidates
-		.map((entry) => `<option value="${esc(entry.username)}">${esc(entry.username)}</option>`)
+	const dmResults = dmCandidates
+		.map((entry) => `<button type="button" class="friend-result dm-result" data-dm-user="${esc(entry.username)}" data-dm-name="${esc(entry.username.toLowerCase())}">
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      <span class="friend-name">${esc(entry.username)}</span>
+      <span class="badge">Privado</span>
+    </button>`)
 		.join("");
 	const memberOptions = dmCandidates
 		.map(
@@ -1258,11 +1267,14 @@ export function chatPage({
     <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
     <h2>Nuevo chat privado</h2>
     <p class="muted">Solo vosotros podréis leer este canal. Solo aparecen tus amigos.</p>
-    <label for="chat-dm-user">Amigo</label>
-    <select id="chat-dm-user">${userOptions || '<option value="">No tienes amigos todavía</option>'}</select>
+    ${dmResults ? `<div class="friend-search-box">
+      <input id="chat-dm-search" type="search" placeholder="Escribe el nombre de la persona…" autocomplete="off" aria-label="Buscar amigo">
+      <p class="muted" id="chat-dm-hint">Escribe un nombre para buscar.</p>
+      <div id="chat-dm-results" class="friend-results" hidden>${dmResults}</div>
+      <p class="muted" id="chat-dm-empty" hidden>No hay amigos que coincidan.</p>
+    </div>` : '<p class="muted">No tienes amigos todavía. Añádelos desde el botón Amigos.</p>'}
     <div class="dialog-actions">
       <button class="small" type="button" data-close-dialog>Cancelar</button>
-      <button class="small primary-small" type="button" id="chat-dm-create">Crear privado</button>
     </div>
   </form>
 </dialog>
