@@ -57,6 +57,7 @@ import {
 	accountPage,
 	errorPage,
 	adminPage,
+	overviewPage,
 	activityPage,
 	sessionsPage,
 	securityPage,
@@ -2040,10 +2041,60 @@ app.post("/api/requests", sameOrigin, (req, res) => {
 
 /* ------------------------------ administración ------------------------------ */
 
+function adminOverviewData(req) {
+	const settings = getSettings();
+	const sessions = hideCreatorData(req, listSessions(), (session) => session.username);
+	const users = hideCreatorData(req, listUsers(), (entry) => entry.username);
+	const traffic = trafficSnapshot();
+	const security = securitySummary();
+	const online = new Set(
+		sessions
+			.filter((session) => Date.now() - new Date(session.lastSeenAt).getTime() < 5 * 60 * 1000)
+			.map((session) => String(session.username).toLowerCase()),
+	).size;
+	const recent = hideCreatorData(
+		req,
+		listAudit({ limit: 10 }),
+		(event) => event.actor,
+	);
+	return {
+		online,
+		stats: {
+			users: users.length,
+			online,
+			sessions: sessions.length,
+			alerts: security.open || 0,
+			requests: countPendingRequests(),
+			backups: backupCount(),
+			requestsPerMinute: traffic.http.lastMinute || 0,
+			streams: traffic.wisp.activeStreams || 0,
+		},
+		actions: [
+			{ label: "Vigilancia en vivo", detail: "Ver qué están haciendo ahora", href: "/admin/monitor", icon: "👁" },
+			{ label: "Gestionar usuarios", detail: "Roles, bloqueos y permisos", href: "/admin", icon: "👥" },
+			{ label: "Revisar seguridad", detail: `${security.open || 0} alertas abiertas`, href: "/admin/security", icon: "🛡" },
+			{ label: "Ajustes del proxy", detail: "Chat, acceso, portada y copias", href: "/admin/settings", icon: "⚙" },
+		],
+		recent,
+		status: {
+			maintenance: !!settings.maintenanceMode,
+			quarantine: !!settings.quarantineMode,
+			chat: !!settings.chatEnabled,
+			accessMode: settings.accessMode,
+		},
+	};
+}
+
+app.get("/admin/overview", requireAdmin, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		overviewPage({ user: req.user, data: adminOverviewData(req) }),
+	);
+});
+
 app.get("/admin", requireStaff, (req, res) => {
 	const error = ADMIN_ERRORS[req.query.error] || "";
 	const notice = ADMIN_OK[req.query.ok] || "";
-	touchQuarantineView();
 	const users = listUsers();
 	const counts = activityCounts();
 	if (req.user.role !== "creator") {
@@ -2059,13 +2110,6 @@ app.get("/admin", requireStaff, (req, res) => {
 			users,
 			counts,
 			canManage: isAdminRole(req.user.role),
-			quarantine: getSettings().quarantineMode,
-			quarantineAttempts: hideCreatorData(
-				req,
-				listAudit({ action: "quarantine.attempt", limit: 20 }),
-				(e) => e.actor,
-			),
-			security: securitySummary(),
 			error,
 			notice,
 		}),
@@ -2104,6 +2148,7 @@ app.get("/admin/security", requireAdmin, (req, res) => {
 		notfound: "Esa IP o alerta ya no existe.",
 		"self-ban": "No puedes banear tu propio dispositivo, usuario o IP actual.",
 	};
+	touchQuarantineView();
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		securityPage({
@@ -2113,6 +2158,11 @@ app.get("/admin/security", requireAdmin, (req, res) => {
 			summary: securitySummary(),
 			currentIp: clientIp(req),
 			currentDevice: req._deviceId || "",
+			quarantineAttempts: hideCreatorData(
+				req,
+				listAudit({ action: "quarantine.attempt", limit: 20 }),
+				(e) => e.actor,
+			),
 			includeDismissed,
 			notice: notices[req.query.ok] || "",
 			error: errors[req.query.error] || "",
@@ -2481,6 +2531,15 @@ app.get("/admin/activity.csv", requireAdmin, sameSiteRequest, (req, res) => {
 		`attachment; filename="actividad-${new Date().toISOString().slice(0, 10)}.csv"`,
 	);
 	res.send(lines.join("\n"));
+});
+
+app.post("/api/admin/maintenance", requireAdmin, sameOrigin, (req, res) => {
+	const enabled = String(req.body.enabled) === "1";
+	const result = saveSettings({ maintenanceMode: enabled });
+	if (result.error) return res.status(400).type("text/plain").send(result.error);
+	if (enabled) closeNonAdminConnections();
+	audit(req, enabled ? "maintenance.enable" : "maintenance.disable");
+	res.redirect(303, safeNext(req.body.next || "/admin/overview"));
 });
 
 app.post("/api/admin/quarantine", requireAdmin, sameOrigin, (req, res) => {

@@ -27,6 +27,7 @@ const CSS = `
 }
 *,*::before,*::after{box-sizing:border-box}
 html,body{min-height:100%;margin:0}
+html{overflow-x:hidden}
 body{
   font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;
   background:radial-gradient(900px 500px at 50% -10%,#16324f 0,transparent 60%),var(--bg);
@@ -765,6 +766,139 @@ button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color
   .chat-toast strong{font-size:15px}
 }
 
+/* ============================================================
+   Rediseño visual general · 2026-11
+   ============================================================ */
+:root{
+  --bg:#080b11;--soft:#0e1621;--input:#121d2a;--border:#223247;--border-strong:#334a66;
+  --text:#edf4fc;--muted:#93a6bc;--dim:#6f8399;--accent:#3b82f6;--accent-2:#60a5fa;
+  --ok:#4ade80;--error:#f87171;
+}
+body{
+  background:
+    radial-gradient(900px 520px at 50% -12%, rgba(37,99,235,.17), transparent 62%),
+    radial-gradient(700px 420px at 100% 105%, rgba(30,64,175,.1), transparent 60%),
+    var(--bg);
+}
+.topbar{
+  position:sticky;top:0;z-index:60;min-height:54px;
+  background:rgba(8,12,18,.9);backdrop-filter:blur(16px);
+  border-bottom:1px solid rgba(52,75,102,.55);
+}
+.topbar a{padding:5px 1px}
+.topbar .who{font-size:12px}
+.wrap{width:min(1200px,calc(100% - 40px));margin:32px auto 64px}
+.wrap.wide{width:min(1380px,calc(100% - 32px))}
+.card{
+  background:linear-gradient(180deg,rgba(17,27,40,.94),rgba(11,18,27,.96));
+  border:1px solid #223247;border-radius:18px;padding:22px;
+  box-shadow:0 18px 48px rgba(0,0,0,.22);
+}
+.card h1{font-size:clamp(24px,3vw,32px);margin-top:0;margin-bottom:8px}
+.card h2{font-size:18px;letter-spacing:-.02em;margin-top:0}
+.card p.muted{margin-top:6px}
+h1{letter-spacing:-.04em}
+input,select,textarea{
+  background:#0d1723;border:1px solid #26394f;border-radius:10px;color:var(--text);
+}
+input:focus,select:focus,textarea:focus{
+  border-color:#4d7db8;box-shadow:0 0 0 4px rgba(59,130,246,.14);
+}
+button.primary{
+  background:linear-gradient(180deg,#4b8ff8,#2563eb);border:1px solid #4b8ff8;
+  box-shadow:0 10px 24px -10px rgba(37,99,235,.8);border-radius:11px;
+}
+button.primary:hover{background:linear-gradient(180deg,#5a9aff,#2f6fdd)}
+button.small,a.small{
+  background:#101b28;border-color:#26394f;border-radius:9px;color:#d9e6f5;
+}
+button.small:hover,a.small:hover{border-color:#41617f;background:#142335}
+.badge{
+  background:rgba(15,28,43,.75);border-color:#2b4058;color:#bcd0e6;
+  border-radius:999px;padding:4px 8px;font-size:10.5px;font-weight:650;
+}
+.stats{gap:14px}
+.stat,.overview-stat{
+  border:1px solid #223247;border-radius:14px;padding:16px;
+  background:linear-gradient(180deg,rgba(20,33,48,.9),rgba(12,21,31,.9));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+}
+.stat .k{color:#8fa5bd;font-size:10.5px;letter-spacing:.09em}
+.stat .v{font-size:26px;margin-top:7px}
+.tabs{
+  position:sticky;top:54px;z-index:55;
+  margin:0 0 24px;padding:8px max(14px,calc((100vw - 1380px)/2));
+  border:0;border-bottom:1px solid #1e3043;border-radius:0;
+  background:rgba(8,12,18,.93);backdrop-filter:blur(16px);
+}
+.tabs a{
+  border:1px solid transparent;border-radius:9px;padding:8px 12px;
+  color:#91a7bf;font-size:12px;font-weight:600;transition:background .15s,color .15s,border-color .15s;
+}
+.tabs a:hover{background:#112031;color:#e8f2fd;text-decoration:none}
+.tabs a.active{
+  background:linear-gradient(180deg,#4389f5,#2764d6);color:#fff;border-color:#6ba4f7;
+  box-shadow:0 7px 18px -8px rgba(37,99,235,.9);
+}
+.tab-sep{flex:0 0 auto;width:1px;height:18px;background:#24384e;margin:0 3px}
+table{border-collapse:separate;border-spacing:0}
+th{color:#879db5;padding:0 12px 11px;font-size:10.5px}
+td{padding:13px 12px;border-top:1px solid rgba(34,50,71,.7)}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:rgba(59,130,246,.045)}
+.overview-hero{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;
+  margin-bottom:18px;padding:24px;border:1px solid #263f5b;border-radius:18px;
+  background:
+    radial-gradient(700px 220px at 10% -40%, rgba(59,130,246,.28), transparent 65%),
+    linear-gradient(135deg,rgba(16,31,48,.98),rgba(10,18,28,.96));
+  box-shadow:0 24px 60px rgba(0,0,0,.28);
+}
+.overview-kicker{
+  display:inline-block;margin-bottom:8px;color:#93c5fd;font-size:10.5px;font-weight:750;
+  text-transform:uppercase;letter-spacing:.14em;
+}
+.overview-hero h1{margin:0;font-size:clamp(30px,4vw,42px)}
+.overview-hero p{margin:7px 0 12px}
+.overview-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:18px}
+.overview-stat{display:flex;flex-direction:column;gap:8px;text-decoration:none;transition:transform .15s,border-color .15s}
+.overview-stat:hover{transform:translateY(-2px);border-color:#355778;text-decoration:none}
+.overview-stat span{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#8fa5bd}
+.overview-stat strong{font-size:28px;line-height:1;color:#f4f8fd;letter-spacing:-.04em}
+.overview-lower{margin-top:0;gap:18px}
+.overview-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.overview-action{
+  display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #26394f;border-radius:12px;
+  background:#101b28;color:#dce9f7;transition:background .15s,border-color .15s,transform .15s;
+}
+.overview-action:hover{background:#142438;border-color:#3b5b7d;text-decoration:none;transform:translateY(-1px)}
+.overview-action-icon{display:grid;place-items:center;width:30px;height:30px;flex:0 0 30px;border-radius:9px;
+  background:rgba(59,130,246,.14);font-size:15px}
+.overview-action strong{display:block;font-size:13px}
+.overview-action small{display:block;color:#8298af;font-size:11px;margin-top:2px}
+.overview-action-form{margin:0;min-width:0}
+.overview-action-form .overview-action{width:100%;text-align:left;font:inherit;cursor:pointer}
+.overview-action.danger{border-color:#7f1d1d;background:rgba(58,17,21,.55)}
+.overview-action.danger .overview-action-icon{background:rgba(248,113,113,.14);color:#fecaca}
+.section-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.section-title-row h2{margin:0}
+.monitor-user,.user,.settings-block{background:linear-gradient(180deg,rgba(18,30,44,.72),rgba(12,21,31,.62))}
+@media(max-width:820px){
+  .wrap,.wrap.wide{width:calc(100% - 18px);margin:18px auto 40px}
+  .card{padding:16px;border-radius:15px}
+  .topbar{position:relative;min-height:0}
+  .tabs{position:relative;top:0;padding-left:10px;padding-right:10px;margin-bottom:16px}
+  .overview-hero{padding:18px}
+  .overview-actions{grid-template-columns:1fr}
+  .overview-stats{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:460px){
+  .overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .overview-stat{padding:13px}
+  .overview-stat strong{font-size:23px}
+  .card{padding:14px}
+}
+
 `;
 
 function avatarColor(name) {
@@ -869,6 +1003,7 @@ function roleLabel(role) {
 }
 
 const ADMIN_TABS = [
+	["overview", "/admin/overview", "Resumen"],
 	["users", "/admin", "Usuarios"],
 	["sessions", "/admin/sessions", "Sesiones"],
 	["security", "/admin/security", "Seguridad"],
@@ -885,11 +1020,12 @@ const ADMIN_TABS = [
 function adminTabs(active, role = "admin") {
 	const visible = ["admin", "creator"].includes(role)
 		? ADMIN_TABS
-		: ADMIN_TABS.filter(([key]) => !["settings", "system", "security", "traffic", "monitor"].includes(key));
+		: ADMIN_TABS.filter(([key]) => !["overview", "settings", "system", "security", "traffic", "monitor"].includes(key));
+	const separators = new Set(["security", "activity", "settings"]);
 	const links = visible
 		.map(
 			([key, href, label]) =>
-				`<a href="${href}"${key === active ? ' class="active"' : ""}>${label}</a>`,
+				`${separators.has(key) ? '<span class="tab-sep" aria-hidden="true"></span>' : ""}<a href="${href}"${key === active ? ' class="active"' : ""}>${label}</a>`,
 		)
 		.join("");
 	return `<nav class="tabs">${links}</nav>`;
@@ -1675,9 +1811,6 @@ export function adminPage({
 	users,
 	counts = {},
 	canManage = false,
-	quarantine = false,
-	quarantineAttempts = [],
-	security = {},
 	notice = "",
 	error = "",
 } = {}) {
@@ -1693,18 +1826,6 @@ export function adminPage({
 		[5, "V"],
 		[6, "S"],
 	];
-	const quarantineRows = quarantineAttempts
-		.map(
-			(e) => `<tr>
-  <td class="mono">${esc(fmtDate(e.at))}</td>
-  <td><strong>${esc(e.actor)}</strong></td>
-  <td class="mono">${esc(e.target || "—")}</td>
-  <td>${esc(e.detail || "")}</td>
-  <td class="mono">${esc(e.ip || "—")}</td>
-  <td>${esc((e.userAgent || "").slice(0, 50))}</td>
-</tr>`,
-		)
-		.join("");
 	const cards = users
 		.map((u) => {
 			const self = u.username.toLowerCase() === user.username.toLowerCase();
@@ -1870,17 +1991,6 @@ export function adminPage({
 
 	const body = `
 ${adminTabs("users", user.role)}
-${
-	user.role === "admin" || user.role === "creator"
-		? `<div class="card" style="margin-bottom:22px">
-  <h2>Escáner de seguridad</h2>
-  <p class="muted" style="margin-bottom:10px">
-    ${security.open ? `${security.open} alerta${security.open === 1 ? "" : "s"} abierta${security.open === 1 ? "" : "s"} · ${security.bots} con comportamiento de bot · ${security.banned} bloqueo${security.banned === 1 ? "" : "s"} activo${security.banned === 1 ? "" : "s"}.` : "Sin alertas abiertas. El escáner sigue observando patrones sospechosos y comportamiento automatizado."}
-  </p>
-  <a class="small" href="/admin/security">Abrir escáner</a>
-</div>`
-		: ""
-}
 <div class="card" style="margin-bottom:22px">
   <h2>Escala de privilegios</h2>
   <ol class="role-scale">
@@ -1890,32 +2000,6 @@ ${
     <li class="role-creator"><strong>Creador</strong><span>Acceso total y cuenta protegida. <b>Único</b> que puede crear, ascender, degradar, resetear o eliminar administradores.</span></li>
   </ol>
   <p class="hint">Tu rol actual: <strong>${esc(roleLabel(user.role))}</strong>.</p>
-</div>
-${canManage
-	? `<div class="card" style="border-color:${quarantine ? "#7f1d1d" : "var(--border)"}">
-  <h2>Modo cuarentena</h2>
-  <p class="muted">
-    ${quarantine ? "ACTIVO: se rechazan nuevas peticiones de webs y se han cerrado las conexiones de usuarios." : "Desactivado. Al activarlo se rechazan nuevas webs y se cierran las conexiones abiertas de usuarios al instante."}
-  </p>
-  <form method="post" action="/api/admin/quarantine">
-    <input type="hidden" name="enabled" value="${quarantine ? "0" : "1"}">
-    <input type="hidden" name="next" value="/admin">
-    <button class="${quarantine ? "small" : "small danger"}" type="submit">${quarantine ? "Desactivar cuarentena" : "Activar cuarentena ahora"}</button>
-  </form>
-</div>`
-		: ""
-}
-<div class="card">
-  <h2>Intentos durante la cuarentena</h2>
-  <p class="muted">Peticiones rechazadas mientras la cuarentena estaba activa. Se muestran las últimas 20 (con límite anti-flood) y se eliminan automáticamente 10 minutos después de la primera vista.</p>
-  ${
-		quarantineRows
-			? `<div class="scroll"><table>
-    <thead><tr><th>Fecha</th><th>Usuario</th><th>Destino</th><th>Detalle</th><th>IP</th><th>Navegador</th></tr></thead>
-    <tbody>${quarantineRows}</tbody>
-  </table></div>`
-			: '<p class="empty">No hay intentos registrados.</p>'
-	}
 </div>
 <div class="card">
   <h1>Usuarios</h1>
@@ -2108,6 +2192,7 @@ export function securityPage({
 	summary = {},
 	currentIp = "",
 	currentDevice = "",
+	quarantineAttempts = [],
 	includeDismissed = false,
 	notice = "",
 	error = "",
@@ -2210,6 +2295,11 @@ export function securityPage({
 </tr>`,
 		)
 		.join("");
+	const quarantineRows = quarantineAttempts
+		.map(
+			(e) => `<tr><td class="mono">${esc(fmtDate(e.at))}</td><td><strong>${esc(e.actor)}</strong></td><td class="mono">${esc(e.target || "—")}</td><td>${esc(e.detail || "")}</td><td class="mono">${esc(e.ip || "—")}</td><td>${esc((e.userAgent || "").slice(0, 50))}</td></tr>`,
+		)
+		.join("");
 	const body = `
 ${adminTabs("security", user.role)}
 <div class="stats">
@@ -2244,6 +2334,11 @@ ${adminTabs("security", user.role)}
 <div class="card">
   <h2>Bloqueos activos (${bans.length})</h2>
   ${banRows ? `<div class="scroll"><table><thead><tr><th>Objetivo</th><th>Tipo</th><th>Categoría</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay bloqueos activos.</p>'}
+</div>
+<div class="card">
+  <h2>Intentos durante la cuarentena</h2>
+  <p class="muted">Peticiones rechazadas mientras la cuarentena estaba activa. Se muestran las últimas 20 y se limpian automáticamente tras 10 minutos desde la primera vista.</p>
+  ${quarantineRows ? `<div class="scroll"><table><thead><tr><th>Fecha</th><th>Usuario</th><th>Destino</th><th>Detalle</th><th>IP</th><th>Navegador</th></tr></thead><tbody>${quarantineRows}</tbody></table></div>` : '<p class="empty">No hay intentos registrados.</p>'}
 </div>`;
 	return shell("Seguridad · Administración", body, { topbar: topbar(user) });
 }
@@ -2378,6 +2473,79 @@ ${adminTabs("traffic", user.role)}
 </div>
 <script src="/traffic.js" defer></script>`;
 	return shell("Tráfico · Administración", body, { topbar: topbar(user) });
+}
+
+export function overviewPage({ user, data = {} } = {}) {
+	const stats = data.stats || {};
+	const actions = data.actions || [];
+	const recent = data.recent || [];
+	const status = data.status || {};
+	const statCards = [
+		["Usuarios", stats.users, "/admin"],
+		["En línea", stats.online, "/admin/monitor"],
+		["Sesiones", stats.sessions, "/admin/sessions"],
+		["Alertas abiertas", stats.alerts, "/admin/security"],
+		["Solicitudes", stats.requests, "/admin/requests?status=pending"],
+		["Copias", stats.backups, "/admin/system"],
+		["Peticiones/min", stats.requestsPerMinute, "/admin/traffic"],
+		["Streams Wisp", stats.streams, "/admin/traffic"],
+	]
+		.map(
+			([label, value, href]) => `<a class="overview-stat" href="${href}"><span>${esc(label)}</span><strong>${esc(value ?? 0)}</strong></a>`,
+		)
+		.join("");
+	const actionCards = actions
+		.map(
+			(action) => `<a class="overview-action${action.danger ? " danger" : ""}" href="${esc(action.href)}"><span class="overview-action-icon">${esc(action.icon || "→")}</span><span><strong>${esc(action.label)}</strong><small>${esc(action.detail || "")}</small></span></a>`,
+		)
+		.join("");
+	const controlCards = `
+<form method="post" action="/api/admin/maintenance" class="overview-action-form">
+  <input type="hidden" name="enabled" value="${status.maintenance ? "0" : "1"}">
+  <input type="hidden" name="next" value="/admin/overview">
+  <button class="overview-action${status.maintenance ? " danger" : ""}" type="submit"><span class="overview-action-icon">🛠</span><span><strong>${status.maintenance ? "Desactivar mantenimiento" : "Activar mantenimiento"}</strong><small>${status.maintenance ? "Los usuarios ya pueden entrar" : "Solo administradores podrán entrar"}</small></span></button>
+</form>
+<form method="post" action="/api/admin/quarantine" class="overview-action-form">
+  <input type="hidden" name="enabled" value="${status.quarantine ? "0" : "1"}">
+  <input type="hidden" name="next" value="/admin/overview">
+  <button class="overview-action${status.quarantine ? " danger" : ""}" type="submit"><span class="overview-action-icon">🧪</span><span><strong>${status.quarantine ? "Desactivar cuarentena" : "Activar cuarentena"}</strong><small>${status.quarantine ? "Volver a permitir conexiones" : "Cortar conexiones y bloquear webs"}</small></span></button>
+</form>`;
+	const recentRows = recent
+		.map(
+			(event) => `<tr><td class="mono">${esc(fmtDate(event.at))}</td><td><strong>${esc(event.actor || "sistema")}</strong></td><td>${esc(event.action || "")}</td><td>${esc(event.target || "—")}</td></tr>`,
+		)
+		.join("");
+	const statusBadges = [
+		[status.maintenance ? "Mantenimiento activo" : "Sin mantenimiento", status.maintenance ? "blocked" : ""],
+		[status.quarantine ? "Cuarentena activa" : "Sin cuarentena", status.quarantine ? "blocked" : ""],
+		[status.chat ? "Chat activo" : "Chat desactivado", status.chat ? "" : "blocked"],
+		[status.accessMode === "allowlist" ? "Lista blanca" : "Lista negra", ""],
+	]
+		.map(([label, tone]) => `<span class="badge ${tone}">${esc(label)}</span>`)
+		.join(" ");
+	const body = `
+${adminTabs("overview", user.role)}
+<div class="overview-hero">
+  <div>
+    <span class="overview-kicker">Panel de control</span>
+    <h1>Resumen</h1>
+    <p class="muted">Estado rápido del proxy, usuarios y seguridad.</p>
+    <div class="settings-status">${statusBadges}</div>
+  </div>
+  <span class="traffic-live"><i></i> ${data.online ? "En directo" : "Sistema activo"}</span>
+</div>
+<div class="overview-stats">${statCards}</div>
+<div class="grid overview-lower">
+  <div class="card">
+    <div class="section-title-row"><h2>Acciones rápidas</h2></div>
+    <div class="overview-actions">${actionCards}${controlCards}</div>
+  </div>
+  <div class="card">
+    <div class="section-title-row"><h2>Últimos movimientos</h2><a class="small" href="/admin/audit">Ver auditoría</a></div>
+    ${recentRows ? `<div class="scroll"><table><thead><tr><th>Hora</th><th>Actor</th><th>Acción</th><th>Objetivo</th></tr></thead><tbody>${recentRows}</tbody></table></div>` : '<p class="empty">Sin movimientos recientes.</p>'}
+  </div>
+</div>`;
+	return shell("Resumen · Administración", body, { topbar: topbar(user), wide: true });
 }
 
 export function monitorPage({ user, snapshot = {} } = {}) {

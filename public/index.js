@@ -24,6 +24,8 @@ const bookmarkUrlInput = document.getElementById("bookmark-url");
 const bookmarkCancel = document.getElementById("bookmark-cancel");
 const favoritesWrap = document.getElementById("favorites-wrap");
 const favoritesBox = document.getElementById("favorites");
+const recentWrap = document.getElementById("recent-wrap");
+const recentLinks = document.getElementById("recent-links");
 const suggestions = document.getElementById("url-suggestions");
 const tabList = document.getElementById("tab-list");
 const newTabButton = document.getElementById("new-tab-btn");
@@ -693,16 +695,40 @@ async function loadBookmarks() {
 	} catch {}
 }
 
+function renderRecent(items) {
+	if (!recentWrap || !recentLinks) return;
+	recentLinks.replaceChildren();
+	const recent = (Array.isArray(items) ? items : [])
+		.filter((item) => item?.url)
+		.slice(0, 6);
+	recentWrap.hidden = !recent.length;
+	for (const item of recent) {
+		const a = document.createElement("a");
+		a.href = "#";
+		a.dataset.url = item.url;
+		try {
+			a.textContent = new URL(item.url).hostname.replace(/^www\./, "");
+		} catch {
+			a.textContent = item.url;
+		}
+		a.title = item.url;
+		recentLinks.append(a);
+	}
+}
+
 async function loadSuggestions() {
 	if (!suggestions) return;
 	const urls = new Set(currentBookmarks.map((b) => b.url));
+	let recent = [];
 	try {
 		const res = await fetch("/api/history?limit=50", { cache: "no-store" });
 		if (res.ok) {
 			const data = await res.json();
-			for (const item of data.history || []) if (item.url) urls.add(item.url);
+			recent = Array.isArray(data.history) ? data.history : [];
+			for (const item of recent) if (item.url) urls.add(item.url);
 		}
 	} catch {}
+	renderRecent(recent);
 	suggestions.replaceChildren();
 	for (const url of urls) {
 		const option = document.createElement("option");
@@ -732,6 +758,13 @@ function openBookmarkDialog() {
 }
 
 favoritesBox?.addEventListener("click", (event) => {
+	const link = event.target.closest("a[data-url]");
+	if (!link) return;
+	event.preventDefault();
+	navigate(link.dataset.url);
+});
+
+recentLinks?.addEventListener("click", (event) => {
 	const link = event.target.closest("a[data-url]");
 	if (!link) return;
 	event.preventDefault();

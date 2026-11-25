@@ -14,6 +14,7 @@ administración.
 - Navegación web a través del servidor con Scramjet y transporte libcurl/Wisp.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas** y atajos de teclado.
+- **Resumen de administración**: estado rápido de usuarios, sesiones, alertas, tráfico, copias y acciones rápidas.
 - **Vigilancia en vivo**: usuarios conectados, última web visitada, destinos Wisp y actividad reciente, con actualización automática.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
