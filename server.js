@@ -104,6 +104,7 @@ import {
 	clearAudit,
 	auditToCsv,
 	auditActions,
+	verifyAudit,
 	auditCount,
 	exportAudit,
 	clearQuarantineAttempts,
@@ -3461,6 +3462,7 @@ app.get("/admin/audit", requireStaff, (req, res) => {
 			actions: auditActions(),
 			filters,
 			canManage: isAdminRole(req.user.role),
+			integrity: verifyAudit(),
 			notice: req.query.ok === "cleared" ? "Auditoría vaciada." : "",
 		}),
 	);
