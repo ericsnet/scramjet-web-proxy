@@ -496,8 +496,15 @@ button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color
 .friend-row .friend-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .friend-row .actions,.friend-row form{margin-left:auto}
 .friend-row .actions{display:flex;gap:6px;flex-wrap:wrap}
-.friend-add{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
-.friend-add select{flex:1 1 180px;width:auto;margin:0}
+.friend-search-box{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.friend-search-box input[type="search"]{width:100%;margin:0}
+.friend-results{max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:3px 9px;background:rgba(0,0,0,.12)}
+.friend-results[hidden]{display:none}
+.friend-result{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)}
+.friend-result:last-child{border-bottom:0}
+.friend-result .friend-name{min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.friend-result button{margin-left:auto}
+.friend-result[hidden]{display:none}
 @media(max-width:820px){
   .wrap.wide{width:calc(100% - 16px);margin-top:12px}
   .chat-app{grid-template-columns:1fr;height:auto;min-height:calc(100vh - 150px)}
@@ -1081,8 +1088,14 @@ export function chatPage({
     </label>`,
 		)
 		.join("");
-	const friendOptions = requestableUsers
-		.map((entry) => `<option value="${esc(entry.username)}">${esc(entry.username)}</option>`)
+	const friendResults = requestableUsers
+		.map((entry) => `<form method="post" action="/api/friends/request" class="friend-result" data-friend-name="${esc(entry.username.toLowerCase())}">
+      <input type="hidden" name="username" value="${esc(entry.username)}">
+      <input type="hidden" name="next" value="${esc(returnTo)}">
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      <span class="friend-name">${esc(entry.username)}</span>
+      <button class="small primary-small" type="submit">Enviar solicitud</button>
+    </form>`)
 		.join("");
 	const friendRows = friends
 		.map((entry) => `<div class="friend-row">
@@ -1294,7 +1307,12 @@ export function chatPage({
     <h3>Amigos (${friends.length})</h3>
     <div class="friend-list">${friendRows || '<p class="muted">Todavía no tienes amigos.</p>'}</div>
     <h3>Añadir amigo</h3>
-    ${friendOptions ? `<form method="post" action="/api/friends/request" class="friend-add"><input type="hidden" name="next" value="${esc(returnTo)}"><select name="username" required>${friendOptions}</select><button class="small primary-small" type="submit">Enviar solicitud</button></form>` : '<p class="muted">No hay usuarios disponibles para enviar solicitud.</p>'}
+    ${friendResults ? `<div class="friend-search-box">
+      <input id="friend-search" type="search" placeholder="Escribe el nombre de la persona…" autocomplete="off" aria-label="Buscar persona">
+      <p class="muted" id="friend-search-hint">Escribe un nombre para buscar.</p>
+      <div id="friend-results" class="friend-results" hidden>${friendResults}</div>
+      <p class="muted" id="friend-search-empty" hidden>No hay usuarios que coincidan.</p>
+    </div>` : '<p class="muted">No hay usuarios disponibles para enviar solicitud.</p>'}
     <h3>Solicitudes enviadas (${outgoingEntries.length})</h3>
     <div class="friend-list">${outgoingRows || '<p class="muted">No tienes solicitudes enviadas.</p>'}</div>
 </dialog>

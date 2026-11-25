@@ -586,6 +586,29 @@
 	bindDialog("chat-new-group", "chat-group-dialog");
 	bindDialog("chat-new-poll", "chat-poll-dialog");
 	bindDialog("chat-friends", "chat-friends-dialog");
+	const friendSearch = document.getElementById("friend-search");
+	const friendResults = document.getElementById("friend-results");
+	const friendSearchHint = document.getElementById("friend-search-hint");
+	const friendSearchEmpty = document.getElementById("friend-search-empty");
+	if (friendSearch && friendResults) {
+		const applyFriendSearch = () => {
+			const query = friendSearch.value.trim().toLowerCase();
+			let visible = 0;
+			for (const row of friendResults.querySelectorAll(".friend-result")) {
+				const matches = !!query && row.dataset.friendName.includes(query);
+				row.hidden = !matches;
+				if (matches) visible += 1;
+			}
+			friendResults.hidden = !query;
+			if (friendSearchHint) friendSearchHint.hidden = !!query;
+			if (friendSearchEmpty) friendSearchEmpty.hidden = !query || visible > 0;
+		};
+		friendSearch.addEventListener("input", applyFriendSearch);
+		applyFriendSearch();
+		document.getElementById("chat-friends")?.addEventListener("click", () => {
+			setTimeout(() => friendSearch.focus(), 30);
+		});
+	}
 	document.querySelectorAll("[data-close-dialog]").forEach((button) => {
 		button.addEventListener("click", () => button.closest("dialog")?.close());
 	});
