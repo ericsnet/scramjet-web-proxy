@@ -995,12 +995,12 @@ app.get("/.well-known/security.txt", (req, res) => {
 	);
 });
 
-app.get("/favicon.svg", (req, res) => {
+app.get("/favicon.png", (req, res) => {
 	res.set("Cache-Control", "public, max-age=86400");
-	res.type("image/svg+xml").sendFile(path.join(__dirname, "public/favicon.svg"));
+	res.type("image/png").sendFile(path.join(__dirname, "public/favicon.png"));
 });
 
-app.get("/favicon.ico", (req, res) => res.redirect(302, "/favicon.svg"));
+app.get(["/favicon.svg", "/favicon.ico"], (req, res) => res.redirect(302, "/favicon.png"));
 
 app.get("/page-i18n.js", (req, res) => {
 	res.set("Cache-Control", "public, max-age=3600");

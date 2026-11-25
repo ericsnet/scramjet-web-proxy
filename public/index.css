@@ -807,7 +807,38 @@ footer a:hover {
 	}
 }
 
+/* ============================================================
+   Responsive v2 — móvil, tablet y landscape
+   ============================================================ */
+@supports (height: 100dvh) {
+	body { min-height: 100dvh; }
+}
+
 @media (max-width: 640px) {
+	#landing { padding: 0 12px; }
+	.hero { width: 100%; margin: 24px auto 36px; }
+	.brand-mark { width: 52px; height: 52px; }
+	h1 { font-size: clamp(32px, 11vw, 46px); }
+	.subtitle { font-size: 14px; }
+	.search { width: 100%; border-radius: 14px; }
+	.search input { min-width: 0; font-size: 16px; padding: 13px 4px; }
+	.search button { min-width: 52px; min-height: 46px; padding: 0 16px; }
+	.quick { gap: 7px; }
+	.quick a { padding: 7px 10px; min-height: 36px; }
+	.session-bar {
+		width: 100%;
+		max-width: 100%;
+		justify-content: flex-start;
+		overflow-x: auto;
+		scrollbar-width: none;
+		padding: 8px 10px;
+	}
+	.session-bar::-webkit-scrollbar { display: none; }
+	.session-bar .who { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; }
+	#sj-frame-wrapper {
+		padding: calc(4px + env(safe-area-inset-top, 0px)) 4px calc(4px + env(safe-area-inset-bottom, 0px));
+		gap: 4px;
+	}
 	.landing-tab-bar {
 		width: calc(100% - 24px);
 		margin: 58px auto -20px;
@@ -815,4 +846,22 @@ footer a:hover {
 	.landing-tab-bar + .hero {
 		margin-top: 20px;
 	}
+	.toolbar { padding: 4px; gap: 4px; }
+	.toolbar .home { width: 36px; height: 36px; }
+	.search.compact { flex: 1 1 100%; min-width: 0; padding: 2px; }
+	.search.compact input { font-size: 16px; }
+	#sj-frame-url { display: none; }
+	#sj-frame { min-height: 0; border-radius: 8px; }
+	.tab { max-width: 46vw; }
+	.tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	dialog { width: calc(100vw - 20px); padding: 16px; }
+	dialog input { font-size: 16px; }
+	footer { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+}
+
+@media (max-width: 380px) {
+	.hero { margin-top: 18px; }
+	h1 { font-size: 30px; }
+	.search button { padding: 0 12px; }
+	.quick a { font-size: 12px; }
 }

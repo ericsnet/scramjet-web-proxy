@@ -573,6 +573,109 @@ button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color
 .topbar{flex-wrap:nowrap!important;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-left:20px;padding-right:20px}
 .topbar::-webkit-scrollbar{display:none}
 
+/* ============================================================
+   Responsive v2 — móvil, tablet, landscape y teclado
+   ============================================================ */
+@media(max-width:820px){
+  .wrap{width:calc(100% - 24px);margin:20px auto 40px;padding-left:0;padding-right:0}
+  .card{padding:18px;border-radius:12px}
+  h1{font-size:22px}
+  h2{font-size:16px}
+  .topbar{padding:9px 12px;padding-top:calc(9px + env(safe-area-inset-top,0px));gap:10px;font-size:13px}
+  .topbar .brand{font-size:14px}
+  .topbar .who{max-width:120px}
+  .grid,.field-grid,.link-row{grid-template-columns:1fr}
+  .actions{width:100%}
+  .actions form{width:100%;flex-wrap:wrap}
+  .actions input,.actions select{width:100%;min-width:0;flex:1 1 140px}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  table{display:block;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
+  .stats{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+  .activity li{flex-wrap:wrap;gap:4px}
+  .activity .when{white-space:normal}
+  .session-list li{align-items:flex-start}
+  .session-list .info{flex:1 1 100%}
+  dialog{width:calc(100vw - 24px);padding:18px;max-height:calc(100dvh - 24px);overflow-y:auto}
+  input,select,textarea{font-size:16px}
+  footer{padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+
+  /* chat interno */
+  .chat-app{display:flex;flex-direction:column;grid-template-columns:none;height:auto;min-height:0}
+  .chat-sidebar{
+    flex-direction:row;align-items:center;gap:6px;padding:7px 9px;
+    max-height:none;overflow-x:auto;overflow-y:hidden;
+    border-right:0;border-bottom:1px solid var(--border);
+    -webkit-overflow-scrolling:touch;
+  }
+  .chat-sidebar-head,.chat-sidebar-label,.chat-online-users{display:none}
+  .chat-channel-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;gap:5px;padding:0;min-height:0}
+  .chat-channel-item{width:auto;white-space:nowrap;padding:7px 10px;min-height:38px}
+  .chat-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .chat-header{flex-wrap:wrap;gap:8px;padding:10px 12px}
+  .chat-header h1{font-size:17px}
+  .chat-header-actions{flex-wrap:wrap;gap:5px}
+  .chat-header-actions .chat-action span{display:none}
+  .chat-header-actions .chat-action{width:40px;height:40px;padding:0;justify-content:center}
+  .chat-app .chat-messages{height:calc(100dvh - 330px);min-height:200px;padding:10px 10px 6px}
+  .chat-app .chat-bubble{max-width:90%}
+  .chat-attachment{max-width:100%}
+  .chat-form,.chat-composer{
+    flex-direction:row;align-items:flex-end;gap:6px;
+    position:sticky;bottom:0;z-index:2;
+    background:var(--bg);padding-bottom:calc(6px + env(safe-area-inset-bottom,0px));
+  }
+  .chat-form textarea,.chat-compose-input textarea{font-size:16px;min-height:44px;max-height:120px}
+  .chat-form button.primary,.chat-send{width:44px;min-width:44px;height:44px;padding:0;flex:0 0 44px}
+  .chat-attach{min-width:40px;min-height:40px;display:grid;place-items:center}
+  .chat-compose-meta{display:none}
+  pre.panel{max-width:100%}
+}
+
+@media(max-width:520px){
+  .wrap{width:calc(100% - 18px)}
+  .card{padding:14px}
+  .topbar .who{display:none}
+  .topbar .brand{font-size:13.5px}
+  .chat-app .chat-messages{height:calc(100dvh - 310px)}
+  .chat-app .chat-bubble{max-width:92%}
+  .chat-header-actions .chat-action{width:38px;height:38px}
+  .user-summary-meta{gap:8px}
+}
+
+@media(max-width:380px){
+  h1{font-size:20px}
+  .stat .v{font-size:18px}
+  .chat-app .chat-messages{height:calc(100dvh - 300px)}
+  .card{padding:12px}
+}
+
+@media(hover:none){
+  button.small,a.small,.chat-action,.chat-send,.chat-channel-item,.chat-tab{min-height:44px}
+  .chat-send{min-width:44px}
+}
+
+@media(max-height:520px) and (orientation:landscape){
+  .chat-app .chat-messages{height:calc(100dvh - 230px);min-height:140px}
+  .chat-sidebar{max-height:none;padding-top:5px;padding-bottom:5px}
+  .chat-header{padding:6px 10px}
+}
+
+/* El chat ocupa toda la altura disponible (móvil y escritorio). */
+@supports selector(:has(*)) {
+  body:has(.chat-app){height:100dvh;min-height:100dvh;overflow:hidden}
+  body:has(.chat-app) .wrap{
+    flex:1;display:flex;flex-direction:column;width:100%;max-width:100%;
+    margin:0 auto;padding:0;min-height:0;overflow:hidden;
+  }
+  body:has(.chat-app) .chat-app{flex:1;height:auto;min-height:0;overflow:hidden}
+  body:has(.chat-app) .chat-sidebar{flex:0 0 auto}
+  body:has(.chat-app) .chat-main{flex:1;min-height:0;display:flex;flex-direction:column}
+  body:has(.chat-app) .chat-app .chat-messages{flex:1;height:auto;min-height:0}
+  @media(max-width:820px){
+    body:has(.chat-app) footer{display:none}
+    body:has(.chat-app) .chat-app .chat-messages{height:auto}
+  }
+}
 `;
 
 function avatarColor(name) {
@@ -594,10 +697,10 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) 
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>${esc(title)}</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Inici - Classroom</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <script src="/page-i18n.js" defer></script>
 <style>${CSS}</style>
 </head>
@@ -719,7 +822,7 @@ export function loginPage({ next = "/", error = "", maintenance = "", csrf = "" 
   </form>
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
 </div>`;
-	return shell("Entrar · Proxy Web", body);
+	return shell("Inici - Classroom", body);
 }
 
 const HTTP_ERRORS = {

@@ -522,7 +522,7 @@ async function navigate(url, { silent = false, log = true } = {}) {
 		frameAddress.value = url;
 		frameUrl.textContent = url;
 		// El título de la pestaña no debe revelar el sitio visitado.
-		document.title = "Proxy Web";
+		document.title = "Inici - Classroom";
 		updateActiveTab(url);
 		landing.style.display = "none";
 		frameWrapper.style.display = "flex";
@@ -534,7 +534,7 @@ async function navigate(url, { silent = false, log = true } = {}) {
 function goHome() {
 	frameWrapper.style.display = "none";
 	landing.style.display = "flex";
-	document.title = "Proxy Web";
+	document.title = "Inici - Classroom";
 	if (address) address.value = "";
 	address.focus();
 }
