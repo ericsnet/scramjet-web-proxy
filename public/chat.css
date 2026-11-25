@@ -303,3 +303,22 @@
   .chat-tool { width: 28px; height: 26px; font-size: 13px; }
   .chat-tool.danger { color: #fca5a5; }
 }
+
+/* El chat ocupa todo el ancho disponible */
+.wrap.full {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 0 18px !important;
+  padding: 0 !important;
+}
+.wrap.full .chat-app {
+  width: 100% !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  height: calc(100vh - 118px);
+}
+@media (max-width: 860px) {
+  .wrap.full .chat-app { height: calc(100vh - 110px); border-radius: 0 !important; }
+}

@@ -915,7 +915,7 @@ function userAvatar(name, icon, className = "user-avatar") {
 	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${image}</span>`;
 }
 
-function shell(title, body, { topbar = "", chatFab = true, wide = false, head = "" } = {}) {
+function shell(title, body, { topbar = "", chatFab = true, wide = false, full = false, head = "" } = {}) {
 	return `<!doctype html>
 <html lang="es">
 <head>
@@ -932,7 +932,7 @@ ${head}
 <body>
 <div id="page-progress" class="page-progress" hidden><i></i></div>
 ${topbar}
-<main class="wrap${wide ? " wide" : ""}">${body}</main>
+<main class="wrap${wide ? " wide" : ""}${full ? " full" : ""}">${body}</main>
 <footer>Proxy Web</footer>
 ${topbar ? `<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">⚠ Pánico</button></form>` : ""}
 ${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js" defer></script>' : ""}
@@ -1878,6 +1878,7 @@ export function chatPage({
 		topbar: topbar(user),
 		chatFab: false,
 		wide: true,
+		full: true,
 		head: '<link rel="stylesheet" href="/chat.css">',
 	});
 }
