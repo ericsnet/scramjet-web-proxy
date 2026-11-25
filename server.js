@@ -191,6 +191,10 @@ import {
 	toggleReaction,
 	listChat,
 	listChatChannels,
+	listChatPinned,
+	searchChat,
+	editChatMessage,
+	pinChatMessage,
 	createGroupChannel,
 	getOrCreateDmChannel,
 	saveChatUpload,
@@ -681,6 +685,8 @@ const CHAT_ERRORS = {
 	channel: "No tienes acceso a ese canal.",
 	channel_required: "Indica el canal del mensaje.",
 	notfound: "Ese mensaje ya no existe.",
+	edit_window: "Ya no puedes editar este mensaje. Pídelo a un moderador.",
+	empty: "El mensaje no puede estar vacío.",
 };
 
 const FRIEND_ERRORS = {
@@ -725,12 +731,16 @@ function enrichChatMessage(message, user, meta) {
 		String(message.username).toLowerCase() ===
 		String(user?.username || "").toLowerCase();
 	const entry = meta.get(String(message.username).toLowerCase()) || {};
+	const ownAndRecent =
+		own && Date.now() - new Date(message.at).getTime() <= 15 * 60 * 1000;
+	const moderator = isChatModerator(user);
 	return {
 		...message,
 		role: entry.role || "user",
 		icon: entry.icon || null,
-		canDelete:
-			isChatModerator(user) || (!!getSettings().chatAllowUserDelete && own),
+		canDelete: moderator || (!!getSettings().chatAllowUserDelete && own),
+		canEdit: moderator || ownAndRecent,
+		canPin: moderator,
 	};
 }
 
@@ -882,6 +892,41 @@ setInterval(() => {
 
 const wispConnections = new Map(); // sessionId -> Set<{ username, socket }>
 const chatUploadBuckets = new Map(); // username:ip -> [timestamps]
+const chatTyping = new Map(); // channelId -> Map(lowerUsername -> { name, at })
+
+function noteChatTyping(channelId, username) {
+	const key = String(channelId || "general");
+	let map = chatTyping.get(key);
+	if (!map) {
+		map = new Map();
+		chatTyping.set(key, map);
+	}
+	map.set(String(username || "").toLowerCase(), {
+		name: String(username || ""),
+		at: Date.now(),
+	});
+	if (map.size > 500) {
+		for (const [name, entry] of map) {
+			if (Date.now() - entry.at > 6000) map.delete(name);
+		}
+	}
+}
+
+function typingUsers(channelId, exclude) {
+	const map = chatTyping.get(String(channelId || "general"));
+	if (!map) return [];
+	const lower = String(exclude || "").toLowerCase();
+	const now = Date.now();
+	const names = [];
+	for (const [key, entry] of map) {
+		if (now - entry.at > 6000) {
+			map.delete(key);
+			continue;
+		}
+		if (key !== lower) names.push(entry.name);
+	}
+	return names.slice(0, 5);
+}
 
 function allowChatUpload(username, ip) {
 	const key = `${String(username || "").toLowerCase()}:${ip || ""}`;
@@ -1931,6 +1976,9 @@ app.get("/chat", (req, res) => {
 	let messages = [];
 	let latestSeq = 0;
 	let revision = 0;
+	let pinned = [];
+	let readSeq = 0;
+	let hasMore = false;
 	if (settings.chatEnabled) {
 		const result = listChat({
 			username: req.user.username,
@@ -1942,6 +1990,9 @@ app.get("/chat", (req, res) => {
 			messages = chatEnriched(result.messages, req.user, roles);
 			latestSeq = result.latestSeq;
 			revision = result.revision;
+			pinned = chatEnriched(result.pinned || [], req.user, roles);
+			readSeq = result.readSeq || 0;
+			hasMore = !!result.hasMore;
 		}
 	}
 	res.set("Cache-Control", "no-store");
@@ -1950,6 +2001,9 @@ app.get("/chat", (req, res) => {
 			user: req.user,
 			settings,
 			messages,
+			pinned,
+			readSeq,
+			hasMore,
 			latestSeq,
 			revision,
 			online: onlineUsers.length,
@@ -2105,7 +2159,14 @@ app.get("/api/chat/messages", (req, res) => {
 	if (!settings.chatEnabled) return res.status(403).json({ error: "disabled" });
 	const channelId = chatChannelOf(req);
 	const after = Math.max(0, Number.parseInt(req.query.after, 10) || 0);
-	const result = listChat({ username: req.user.username, channelId, after, limit: 200 });
+	const before = Math.max(0, Number.parseInt(req.query.before, 10) || 0);
+	const result = listChat({
+		username: req.user.username,
+		channelId,
+		after,
+		before,
+		limit: 200,
+	});
 	if (result.error) return res.status(403).json({ error: result.error });
 	const roles = chatUserMeta();
 	const online = settings.chatShowOnline
@@ -2115,6 +2176,8 @@ app.get("/api/chat/messages", (req, res) => {
 	res.json({
 		...result,
 		messages: chatEnriched(result.messages, req.user, roles),
+		pinned: chatEnriched(result.pinned || [], req.user, roles),
+		typing: typingUsers(channelId, req.user.username),
 		online,
 		onlineIcons: chatOnlineIcons(online || []),
 		canModerate: isChatModerator(req.user),
@@ -2138,6 +2201,7 @@ app.post("/api/chat/messages", sameOrigin, (req, res) => {
 	const result = postChatMessage(req.user.username, req.body.text, {
 		channelId: requestedChannel,
 		attachmentId: String(req.body.attachment || ""),
+		replyTo: String(req.body.reply || ""),
 	});
 	if (result.error) {
 		if (!json) return res.redirect(303, `/chat?error=${encodeURIComponent(result.error)}`);
@@ -2150,6 +2214,94 @@ app.post("/api/chat/messages", sameOrigin, (req, res) => {
 	}
 	if (!json) return res.redirect(303, "/chat?ok=sent");
 	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
+});
+
+app.post("/api/chat/messages/:id/edit", sameOrigin, (req, res) => {
+	const channelId = chatChannelOf(req);
+	const message = getChatMessage(req.params.id);
+	if (!message || !isChannelMember(req.user.username, message.channelId)) {
+		return res.status(404).json({ error: "notfound", message: CHAT_ERRORS.notfound });
+	}
+	const result = editChatMessage(req.user.username, req.params.id, req.body.text, {
+		channelId: message.channelId,
+		moderator: isChatModerator(req.user),
+	});
+	if (result.error) {
+		const status = result.error === "forbidden" ? 403 : result.error === "notfound" ? 404 : 400;
+		return res.status(status).json({
+			error: result.error,
+			message: CHAT_ERRORS[result.error] || "No se pudo editar el mensaje.",
+		});
+	}
+	audit(req, "chat.edit", result.message.id);
+	res.json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
+});
+
+app.post("/api/chat/messages/:id/pin", sameOrigin, (req, res) => {
+	if (!isChatModerator(req.user)) {
+		return res.status(403).json({ error: "forbidden", message: CHAT_ERRORS.forbidden });
+	}
+	const channelId = chatChannelOf(req);
+	const message = getChatMessage(req.params.id);
+	if (!message || !isChannelMember(req.user.username, message.channelId)) {
+		return res.status(404).json({ error: "notfound", message: CHAT_ERRORS.notfound });
+	}
+	const pinned = req.path.endsWith("/pin") ? true : false;
+	const result = pinChatMessage(req.user.username, req.params.id, channelId, pinned);
+	if (result.error) return res.status(400).json({ error: result.error });
+	audit(req, pinned ? "chat.pin" : "chat.unpin", result.message.id);
+	res.json({
+		message: enrichChatMessage(result.message, req.user, chatUserMeta()),
+		pinned: chatEnriched(
+			listChatPinned(req.user.username, message.channelId).messages || [],
+			req.user,
+			chatUserMeta(),
+		),
+	});
+});
+
+app.post("/api/chat/messages/:id/unpin", sameOrigin, (req, res) => {
+	if (!isChatModerator(req.user)) {
+		return res.status(403).json({ error: "forbidden", message: CHAT_ERRORS.forbidden });
+	}
+	const channelId = chatChannelOf(req);
+	const message = getChatMessage(req.params.id);
+	if (!message || !isChannelMember(req.user.username, message.channelId)) {
+		return res.status(404).json({ error: "notfound", message: CHAT_ERRORS.notfound });
+	}
+	const result = pinChatMessage(req.user.username, req.params.id, message.channelId, false);
+	if (result.error) return res.status(400).json({ error: result.error });
+	audit(req, "chat.unpin", result.message.id);
+	res.json({
+		message: enrichChatMessage(result.message, req.user, chatUserMeta()),
+		pinned: chatEnriched(
+			listChatPinned(req.user.username, message.channelId).messages || [],
+			req.user,
+			chatUserMeta(),
+		),
+	});
+});
+
+app.get("/api/chat/search", (req, res) => {
+	const query = String(req.query.q || "").slice(0, 100);
+	const channelId = String(req.query.channel || "").slice(0, 80);
+	const result = searchChat(req.user.username, { query, channelId });
+	if (result.error) return res.status(403).json({ error: result.error });
+	res.set("Cache-Control", "no-store");
+	res.json({
+		messages: chatEnriched(result.messages, req.user, chatUserMeta()),
+		channels: listChatChannels(req.user.username),
+	});
+});
+
+app.post("/api/chat/typing", sameOrigin, (req, res) => {
+	if (!getSettings().chatEnabled) return res.status(403).json({ error: "disabled" });
+	const channelId = chatChannelOf(req);
+	if (!isChannelMember(req.user.username, channelId)) {
+		return res.status(403).json({ error: "channel" });
+	}
+	noteChatTyping(channelId, req.user.username);
+	res.status(204).end();
 });
 
 app.post("/api/chat/polls", sameOrigin, (req, res) => {

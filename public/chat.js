@@ -13,6 +13,21 @@
 	const errorEl = document.getElementById("chat-error");
 	const fileInput = document.getElementById("chat-file");
 	const fileName = document.getElementById("chat-file-name");
+	const typingEl = document.getElementById("chat-typing");
+	const pinnedBar = document.getElementById("chat-pinned-bar");
+	const pinnedList = document.getElementById("chat-pinned-list");
+	const contextBar = document.getElementById("chat-context");
+	const contextLabel = document.getElementById("chat-context-label");
+	const contextText = document.getElementById("chat-context-text");
+	const contextCancel = document.getElementById("chat-context-cancel");
+	const uploadProgress = document.getElementById("chat-upload-progress");
+	const uploadBar = document.getElementById("chat-upload-bar");
+	const searchOpen = document.getElementById("chat-search-open");
+	const searchDialog = document.getElementById("chat-search-dialog");
+	const searchInput = document.getElementById("chat-search-input");
+	const searchCurrent = document.getElementById("chat-search-current");
+	const searchResults = document.getElementById("chat-search-results");
+	const loadOlderButton = document.getElementById("chat-load-older");
 
 	let channelId = String(box.dataset.channel || "general");
 	let lastSeq = Number(box.dataset.lastSeq) || 0;
@@ -28,6 +43,15 @@
 	let cooldownUntil = 0;
 	let channelsCache = [];
 	let forceScroll = false;
+	let replyTarget = null;
+	let editTarget = null;
+	let readSeq = Number(box.dataset.readSeq) || 0;
+	let hasMore = box.dataset.hasMore === "1";
+	let lastTypingAt = 0;
+	let lastRenderedAt = "";
+	let lastRenderedUser = "";
+	let loadingOlder = false;
+	const messageStore = new Map();
 	const channelName = document.getElementById("chat-channel-name");
 	const channelMeta = document.getElementById("chat-channel-meta");
 
@@ -84,6 +108,141 @@
 		badge.className = `badge role-${role}`;
 		badge.textContent = role === "creator" ? "creador" : role === "admin" ? "admin" : "moderador";
 		return badge;
+	}
+	function dayLabel(value) {
+		const date = new Date(value);
+		const today = new Date();
+		const yesterday = new Date();
+		yesterday.setDate(today.getDate() - 1);
+		if (date.toDateString() === today.toDateString()) return "Hoy";
+		if (date.toDateString() === yesterday.toDateString()) return "Ayer";
+		try {
+			return date.toLocaleDateString("es-ES", {
+				weekday: "long",
+				day: "numeric",
+				month: "long",
+			});
+		} catch {
+			return date.toDateString();
+		}
+	}
+	function makeDaySeparator(value) {
+		const separator = document.createElement("div");
+		separator.className = "chat-day";
+		separator.dataset.chatDay = dayLabel(value);
+		separator.textContent = dayLabel(value);
+		return separator;
+	}
+	function makeReplyQuote(message) {
+		if (!message.replyTo) return null;
+		const quote = document.createElement("div");
+		quote.className = "chat-reply-quote";
+		const author = document.createElement("strong");
+		author.textContent = `@${message.replyTo.username}`;
+		const text = document.createElement("span");
+		text.textContent = String(message.replyTo.text || "").slice(0, 140) || "Adjunto";
+		quote.append(author, text);
+		quote.addEventListener("click", () => jumpToMessage(message.replyTo.id));
+		return quote;
+	}
+	function makeTools(message) {
+		const tools = document.createElement("div");
+		tools.className = "chat-msg-tools";
+		const add = (label, title, action, dataset) => {
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = `chat-tool${action === "delete" ? " danger" : ""}`;
+			button.title = title;
+			button.textContent = label;
+			button.dataset[dataset] = String(message.id);
+			tools.appendChild(button);
+		};
+		add("↩", "Responder", "reply", "chatReply");
+		if (message.canEdit) add("✎", "Editar", "edit", "chatEdit");
+		if (message.canPin) {
+			const pin = document.createElement("button");
+			pin.type = "button";
+			pin.className = "chat-tool";
+			pin.title = message.pinned ? "Desfijar" : "Fijar";
+			pin.textContent = "📌";
+			pin.dataset.chatPin = String(message.id);
+			pin.dataset.pinned = message.pinned ? "1" : "0";
+			tools.appendChild(pin);
+		}
+		if (message.canDelete) add("🗑", "Eliminar", "delete", "chatDelete");
+		return tools;
+	}
+	function renderPinned(list) {
+		if (!pinnedBar || !pinnedList) return;
+		pinnedList.textContent = "";
+		const items = Array.isArray(list) ? list : [];
+		pinnedBar.hidden = !items.length;
+		for (const message of items.slice(0, 3)) {
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = "chat-pin-chip";
+			button.dataset.chatJump = String(message.id);
+			const icon = document.createElement("span");
+			icon.textContent = "📌";
+			const author = document.createElement("strong");
+			author.textContent = message.username;
+			const text = document.createElement("small");
+			text.textContent = String(message.text || "Adjunto").slice(0, 80);
+			button.append(icon, author, text);
+			pinnedList.appendChild(button);
+		}
+	}
+	function renderTyping(names) {
+		if (!typingEl) return;
+		const list = Array.isArray(names) ? names : [];
+		typingEl.hidden = !list.length;
+		if (!list.length) {
+			typingEl.textContent = "";
+			return;
+		}
+		const text =
+			list.length === 1
+				? `${list[0]} está escribiendo…`
+				: list.length === 2
+					? `${list[0]} y ${list[1]} están escribiendo…`
+					: `${list[0]} y ${list.length - 1} más están escribiendo…`;
+		typingEl.textContent = text;
+	}
+	function setContext(mode, message) {
+		if (mode === "reply") {
+			replyTarget = { id: message.id, username: message.username, text: message.text || "" };
+			editTarget = null;
+			contextLabel.textContent = `Respondiendo a ${message.username}`;
+			contextText.textContent = String(message.text || "Adjunto").slice(0, 120);
+		} else if (mode === "edit") {
+			editTarget = { id: message.id, text: message.text || "" };
+			replyTarget = null;
+			contextLabel.textContent = "Editando mensaje";
+			contextText.textContent = String(message.text || "").slice(0, 120);
+			if (input) {
+				input.value = message.text || "";
+				input.focus();
+				if (counter) counter.textContent = String(input.value.length);
+			}
+		}
+		if (contextBar) contextBar.hidden = false;
+	}
+	function clearContext() {
+		replyTarget = null;
+		editTarget = null;
+		if (contextBar) contextBar.hidden = true;
+		if (contextLabel) contextLabel.textContent = "";
+		if (contextText) contextText.textContent = "";
+	}
+	function jumpToMessage(id) {
+		const target = box.querySelector(`[data-chat-id="${CSS.escape(String(id))}"]`);
+		if (!target) {
+			showError("Ese mensaje no está en la ventana actual. Usa “Cargar anteriores”.");
+			return;
+		}
+		target.scrollIntoView({ behavior: "smooth", block: "center" });
+		target.classList.add("flash");
+		setTimeout(() => target.classList.remove("flash"), 1200);
 	}
 	function makeAttachment(attachment) {
 		if (!attachment) return null;
@@ -175,23 +334,30 @@
 		}
 		return avatar;
 	}
-	function makeMessage(message) {
+	function makeMessage(message, grouped = false) {
 		const article = document.createElement("article");
 		const own = String(message.username).toLowerCase() === currentUser.toLowerCase();
-		article.className = `chat-message${own ? " own" : ""}`;
+		article.className = `chat-message${own ? " own" : ""}${grouped ? " grouped" : ""}${message.pinned ? " pinned" : ""}`;
 		article.dataset.chatMessage = "";
 		article.dataset.chatId = String(message.id);
 		article.dataset.chatSeq = String(message.seq);
+		messageStore.set(String(message.id), message);
 
-		if (!own) {
+		if (!own && !grouped) {
 			article.appendChild(makeUserAvatar(message.username, message.icon, "chat-msg-avatar"));
+		} else if (!own) {
+			const spacer = document.createElement("span");
+			spacer.className = "chat-msg-avatar-spacer";
+			article.appendChild(spacer);
 		}
 
 		const bubble = document.createElement("div");
 		bubble.className = "chat-bubble";
+		const reply = makeReplyQuote(message);
+		if (reply) bubble.appendChild(reply);
 		const meta = document.createElement("div");
 		meta.className = "chat-meta";
-		if (!own) {
+		if (!own && !grouped) {
 			const author = document.createElement("span");
 			author.className = "chat-author";
 			author.textContent = String(message.username);
@@ -199,17 +365,23 @@
 		}
 		const badge = roleBadge(message.role);
 		if (badge) meta.appendChild(badge);
+		if (message.pinned) {
+			const pin = document.createElement("span");
+			pin.className = "chat-pin-badge";
+			pin.title = "Mensaje fijado";
+			pin.textContent = "📌";
+			meta.appendChild(pin);
+		}
 		const time = document.createElement("time");
 		time.dateTime = String(message.at);
 		time.textContent = timeText(message.at);
 		meta.appendChild(time);
-		if (message.canDelete) {
-			const remove = document.createElement("button");
-			remove.type = "button";
-			remove.className = "link chat-delete";
-			remove.dataset.chatDelete = String(message.id);
-			remove.textContent = "Eliminar";
-			meta.appendChild(remove);
+		if (message.editedAt) {
+			const edited = document.createElement("span");
+			edited.className = "chat-edited";
+			edited.title = `Editado ${timeText(message.editedAt)}`;
+			edited.textContent = "editado";
+			meta.appendChild(edited);
 		}
 		bubble.appendChild(meta);
 		if (message.text) {
@@ -233,27 +405,109 @@
 		const poll = makePoll(message);
 		if (poll) bubble.appendChild(poll);
 		bubble.appendChild(makeReactions(message));
+		bubble.appendChild(makeTools(message));
 		article.appendChild(bubble);
 		return article;
 	}
 	function clearMessages() {
 		for (const el of box.querySelectorAll("[data-chat-message]")) el.remove();
 		seen.clear();
+		messageStore.clear();
 		lastSeq = 0;
 		ensureEmpty();
 	}
 	function appendMessages(messages) {
 		let added = false;
+		const existing = [...box.querySelectorAll("[data-chat-message]")];
+		let previous = existing[existing.length - 1] || null;
+		let previousAt = previous?.querySelector("time")?.dateTime || "";
+		let previousUser =
+			previous?.querySelector(".chat-author")?.textContent ||
+			(previous?.classList.contains("own") ? currentUser : "");
 		for (const message of messages || []) {
 			if (!message || !message.id || seen.has(String(message.id))) continue;
 			if (Number(message.seq) <= lastSeq) continue;
+			if (previousAt && dayLabel(previousAt) !== dayLabel(message.at)) {
+				box.appendChild(makeDaySeparator(message.at));
+				previousAt = "";
+				previousUser = "";
+			}
+			const grouped =
+				!!previousAt &&
+				String(previousUser).toLowerCase() === String(message.username).toLowerCase() &&
+				new Date(message.at).getTime() - new Date(previousAt).getTime() < 5 * 60_000 &&
+				!message.replyTo;
 			seen.add(String(message.id));
-			box.appendChild(makeMessage(message));
+			const article = makeMessage(message, grouped);
+			box.appendChild(article);
+			previous = article;
+			previousAt = message.at;
+			previousUser = message.username;
 			lastSeq = Math.max(lastSeq, Number(message.seq) || 0);
 			added = true;
 		}
 		if (added) removeEmpty();
 		return added;
+	}
+	function insertUnreadDivider() {
+		if (!readSeq) return;
+		const firstUnread = [...box.querySelectorAll("[data-chat-message]")].find(
+			(element) => Number(element.dataset.chatSeq) > readSeq,
+		);
+		if (!firstUnread || box.querySelector(".chat-unread-divider")) return;
+		const divider = document.createElement("div");
+		divider.className = "chat-unread-divider";
+		divider.innerHTML = "<span>Mensajes nuevos</span>";
+		firstUnread.before(divider);
+	}
+	async function loadOlder() {
+		if (loadingOlder) return;
+		const first = box.querySelector("[data-chat-message]");
+		const oldest = Number(first?.dataset.chatSeq) || 0;
+		if (!oldest) return;
+		loadingOlder = true;
+		if (loadOlderButton) loadOlderButton.disabled = true;
+		const previousHeight = box.scrollHeight;
+		const previousTop = box.scrollTop;
+		try {
+			const data = await request(
+				`/api/chat/messages?channel=${encodeURIComponent(channelId)}&before=${oldest}`,
+			);
+			const fragment = document.createDocumentFragment();
+			const existingFirst = box.querySelector("[data-chat-message]");
+			let previousAt = "";
+			let previousUser = "";
+			const messages = data.messages || [];
+			for (let i = 0; i < messages.length; i++) {
+				const message = messages[i];
+				if (seen.has(String(message.id))) continue;
+				if (previousAt && dayLabel(previousAt) !== dayLabel(message.at)) {
+					fragment.appendChild(makeDaySeparator(message.at));
+					previousAt = "";
+					previousUser = "";
+				}
+				const grouped =
+					!!previousAt &&
+					String(previousUser).toLowerCase() === String(message.username).toLowerCase() &&
+					new Date(message.at).getTime() - new Date(previousAt).getTime() < 5 * 60_000 &&
+					!message.replyTo;
+				fragment.appendChild(makeMessage(message, grouped));
+				seen.add(String(message.id));
+				previousAt = message.at;
+				previousUser = message.username;
+			}
+			if (existingFirst) existingFirst.before(fragment);
+			else box.appendChild(fragment);
+			hasMore = !!data.hasMore;
+			if (loadOlderButton) loadOlderButton.hidden = !hasMore;
+			box.scrollTop = previousTop + (box.scrollHeight - previousHeight);
+			removeEmpty();
+		} catch (error) {
+			showError(error.message);
+		} finally {
+			loadingOlder = false;
+			if (loadOlderButton) loadOlderButton.disabled = false;
+		}
 	}
 	function replaceMessage(message) {
 		const old = box.querySelector(`[data-chat-id="${CSS.escape(String(message.id))}"]`);
@@ -336,13 +590,20 @@
 				appendMessages(data.messages);
 			}
 			lastSeq = Math.max(lastSeq, Number(data.latestSeq) || 0);
+			if (data.readSeq !== undefined && !readSeq) readSeq = Number(data.readSeq) || 0;
+			renderPinned(data.pinned);
+			renderTyping(data.typing);
+			hasMore = !!data.hasMore;
+			if (loadOlderButton) loadOlderButton.hidden = !hasMore;
 			updateOnline(data.online, data.onlineIcons);
 			if (Number(data.maxLength) > 0) maxLength = Number(data.maxLength);
 			if (input && Number(input.maxLength) !== maxLength) input.maxLength = maxLength;
 			if (counter) counter.textContent = String((input?.value || "").length);
+			if (rebuilt) insertUnreadDivider();
 			if (stick) scrollBottom(true);
 			else if (rebuilt) box.scrollTop = previousTop;
 			markRead();
+			readSeq = Math.max(readSeq, lastSeq);
 			clearError();
 		} catch (error) {
 			if (error.status === 403) {
@@ -367,6 +628,18 @@
 						? `Grupo · ${channel.members?.length || 0} miembros`
 						: "Chat privado";
 		}
+	}
+	function syncMobileChannels() {
+		const select = document.getElementById("chat-mobile-channel");
+		if (!select) return;
+		select.textContent = "";
+		for (const channel of channelsCache) {
+			const option = document.createElement("option");
+			option.value = channel.id;
+			option.textContent = `${channel.name}${channel.unread ? ` (${channel.unread})` : ""}`;
+			select.appendChild(option);
+		}
+		select.value = channelId;
 	}
 	function renderChannelList() {
 		if (!channelList) return;
@@ -404,10 +677,13 @@
 		channelsCache = data.channels || [];
 		updateOnline(data.online, data.onlineIcons);
 		renderChannelList();
+		syncMobileChannels();
 		updateHeader();
 	}
 	function switchChannel(value) {
 		channelId = value || "general";
+		clearContext();
+		messageStore.clear();
 		box.dataset.channel = channelId;
 		if (channelHidden) channelHidden.value = channelId;
 		const url = new URL(location.href);
@@ -418,6 +694,7 @@
 			item.classList.toggle("active", item.dataset.channelId === channelId);
 		}
 		updateHeader();
+		syncMobileChannels();
 		seen.clear();
 		lastSeq = 0;
 		revision = "0";
@@ -427,30 +704,85 @@
 		forceScroll = true;
 		refresh();
 	}
+	function uploadFile(file, onProgress) {
+		return new Promise((resolve, reject) => {
+			const xhr = new XMLHttpRequest();
+			xhr.open("POST", "/api/chat/upload");
+			xhr.setRequestHeader("Content-Type", "application/octet-stream");
+			xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
+			xhr.setRequestHeader("X-File-Type", file.type || "application/octet-stream");
+			xhr.setRequestHeader("Accept", "application/json");
+			xhr.upload.onprogress = (event) => {
+				if (event.lengthComputable && onProgress) {
+					onProgress(Math.round((event.loaded / event.total) * 100));
+				}
+			};
+			xhr.onload = () => {
+				let data = {};
+				try { data = JSON.parse(xhr.responseText || "{}"); } catch {}
+				if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+				else {
+					const error = new Error(
+						data.error === "invalid-type"
+							? "Tipo de archivo no permitido."
+							: data.error === "quota" || data.error === "user_quota"
+								? "Has alcanzado la cuota de adjuntos."
+								: data.error === "disk"
+									? "No hay espacio suficiente en el servidor."
+									: "No se pudo subir el archivo.",
+					);
+					error.data = data;
+					reject(error);
+				}
+			};
+			xhr.onerror = () => reject(new Error("No se pudo subir el archivo."));
+			xhr.send(file);
+		});
+	}
 	async function uploadAndSend(text) {
+		if (editTarget) {
+			const data = await request(
+				`/api/chat/messages/${encodeURIComponent(editTarget.id)}/edit`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ text, channel: channelId }),
+				},
+			);
+			clearContext();
+			return data;
+		}
 		let attachment = "";
 		if (selectedFile) {
 			if (selectedFile.size > 5 * 1024 * 1024) throw new Error("El archivo supera 5 MB.");
-			const response = await fetch("/api/chat/upload", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/octet-stream",
-					"X-File-Name": encodeURIComponent(selectedFile.name),
-					"X-File-Type": selectedFile.type,
-					Accept: "application/json",
-				},
-				body: selectedFile,
-			});
-			const data = await response.json().catch(() => ({}));
-			if (!response.ok) throw new Error(data.error === "invalid-type" ? "Tipo de archivo no permitido." : "No se pudo subir el archivo.");
-			attachment = data.upload.id;
+			if (uploadProgress) uploadProgress.hidden = false;
+			if (uploadBar) uploadBar.style.width = "0%";
+			try {
+				const data = await uploadFile(selectedFile, (percent) => {
+					if (uploadBar) uploadBar.style.width = `${percent}%`;
+				});
+				attachment = data.upload.id;
+			} finally {
+				if (uploadProgress) uploadProgress.hidden = true;
+				if (uploadBar) uploadBar.style.width = "0%";
+			}
 		}
-		return request("/api/chat/messages", {
+		const data = await request("/api/chat/messages", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ text, channel: channelId, attachment }),
+			body: JSON.stringify({
+				text,
+				channel: channelId,
+				attachment,
+				reply: replyTarget?.id || "",
+			}),
 		});
+		clearContext();
+		return data;
 	}
+
+	const mobileChannel = document.getElementById("chat-mobile-channel");
+	mobileChannel?.addEventListener("change", () => switchChannel(mobileChannel.value));
 
 	if (channelList) {
 		channelList.addEventListener("click", (event) => {
@@ -461,6 +793,14 @@
 	if (input) {
 		input.addEventListener("input", () => {
 			if (counter) counter.textContent = String(input.value.length);
+			if (input.value.trim() && Date.now() - lastTypingAt > 2500) {
+				lastTypingAt = Date.now();
+				request("/api/chat/typing", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ channel: channelId }),
+				}).catch(() => {});
+			}
 		});
 		input.addEventListener("keydown", (event) => {
 			if (event.key === "Enter" && !event.shiftKey) {
@@ -469,10 +809,54 @@
 			}
 		});
 	}
+	function selectFile(file) {
+		if (!file) return;
+		if (file.size > 5 * 1024 * 1024) {
+			showError("El archivo supera 5 MB.");
+			return;
+		}
+		selectedFile = file;
+		if (fileName) fileName.textContent = `${file.name} · ${Math.ceil(file.size / 1024)} KB`;
+	}
 	if (fileInput) {
 		fileInput.addEventListener("change", () => {
-			selectedFile = fileInput.files?.[0] || null;
-			if (fileName) fileName.textContent = selectedFile ? selectedFile.name : "";
+			selectFile(fileInput.files?.[0] || null);
+		});
+	}
+	input?.addEventListener("paste", (event) => {
+		const items = [...(event.clipboardData?.items || [])];
+		const image = items.find((item) => item.kind === "file" && item.type.startsWith("image/"));
+		if (!image) return;
+		const file = image.getAsFile();
+		if (file) {
+			event.preventDefault();
+			selectFile(file);
+			input.focus();
+		}
+	});
+	const main = document.querySelector(".chat-main");
+	if (main) {
+		let dragDepth = 0;
+		main.addEventListener("dragenter", (event) => {
+			if (!event.dataTransfer?.types?.includes("Files")) return;
+			event.preventDefault();
+			dragDepth += 1;
+			main.classList.add("dragover");
+		});
+		main.addEventListener("dragover", (event) => {
+			if (event.dataTransfer?.types?.includes("Files")) event.preventDefault();
+		});
+		main.addEventListener("dragleave", () => {
+			dragDepth = Math.max(0, dragDepth - 1);
+			if (!dragDepth) main.classList.remove("dragover");
+		});
+		main.addEventListener("drop", (event) => {
+			if (!event.dataTransfer?.files?.length) return;
+			event.preventDefault();
+			dragDepth = 0;
+			main.classList.remove("dragover");
+			selectFile(event.dataTransfer.files[0]);
+			input?.focus();
 		});
 	}
 	if (form && input) {
@@ -511,6 +895,53 @@
 		});
 	}
 	box.addEventListener("click", async (event) => {
+		const replyButton = event.target.closest("[data-chat-reply]");
+		if (replyButton) {
+			const article = replyButton.closest("[data-chat-message]");
+			const id = replyButton.dataset.chatReply;
+			const stored = messageStore.get(String(id));
+			const username =
+				stored?.username ||
+				article?.querySelector(".chat-author")?.textContent ||
+				(article?.classList.contains("own") ? currentUser : "");
+			const text =
+				stored?.text || article?.querySelector(".chat-text")?.textContent || "";
+			setContext("reply", { id, username, text });
+			input?.focus();
+			return;
+		}
+		const editButton = event.target.closest("[data-chat-edit]");
+		if (editButton) {
+			const article = editButton.closest("[data-chat-message]");
+			const id = editButton.dataset.chatEdit;
+			const stored = messageStore.get(String(id));
+			const text =
+				stored?.text || article?.querySelector(".chat-text")?.textContent || "";
+			setContext("edit", { id, text });
+			return;
+		}
+		const pinButton = event.target.closest("[data-chat-pin]");
+		if (pinButton) {
+			const id = pinButton.dataset.chatPin;
+			const unpin = pinButton.dataset.pinned === "1";
+			pinButton.disabled = true;
+			try {
+				const data = await request(
+					`/api/chat/messages/${encodeURIComponent(id)}/${unpin ? "unpin" : "pin"}`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ channel: channelId }),
+					},
+				);
+				if (data.message) replaceMessage(data.message);
+				renderPinned(data.pinned);
+			} catch (error) {
+				showError(error.message);
+				pinButton.disabled = false;
+			}
+			return;
+		}
 		const deleteButton = event.target.closest("[data-chat-delete]");
 		if (deleteButton) {
 			if (!confirm("¿Eliminar este mensaje?")) return;
@@ -528,6 +959,7 @@
 				box.scrollTop = top;
 				ensureEmpty();
 				await refreshChannels();
+				await refresh();
 			} catch (error) {
 				showError(error.message);
 				deleteButton.disabled = false;
@@ -611,6 +1043,97 @@
 	}
 	document.querySelectorAll("[data-close-dialog]").forEach((button) => {
 		button.addEventListener("click", () => button.closest("dialog")?.close());
+	});
+	contextCancel?.addEventListener("click", () => {
+		const wasEditing = !!editTarget;
+		clearContext();
+		if (wasEditing && input) {
+			input.value = "";
+			if (counter) counter.textContent = "0";
+		}
+	});
+	loadOlderButton?.addEventListener("click", loadOlder);
+	pinnedBar?.addEventListener("click", (event) => {
+		const chip = event.target.closest("[data-chat-jump]");
+		if (chip) jumpToMessage(chip.dataset.chatJump);
+	});
+	let searchTimer = null;
+	async function runSearch() {
+		if (!searchInput || !searchResults) return;
+		const query = searchInput.value.trim();
+		searchResults.textContent = "";
+		if (query.length < 2) {
+			const hint = document.createElement("p");
+			hint.className = "muted";
+			hint.textContent = "Escribe al menos 2 caracteres.";
+			searchResults.appendChild(hint);
+			return;
+		}
+		const currentOnly = searchCurrent?.checked ? channelId : "";
+		try {
+			const data = await request(
+				`/api/chat/search?q=${encodeURIComponent(query)}&channel=${encodeURIComponent(currentOnly)}`,
+			);
+			const channels = new Map(
+				(data.channels || []).map((channel) => [channel.id, channel]),
+			);
+			for (const message of data.messages || []) {
+				const button = document.createElement("button");
+				button.type = "button";
+				button.className = "chat-search-result";
+				button.dataset.chatResult = String(message.id);
+				button.dataset.chatChannel = String(message.channelId);
+				const head = document.createElement("div");
+				head.className = "chat-search-result-head";
+				const author = document.createElement("strong");
+				author.textContent = message.username;
+				const channel = document.createElement("span");
+				channel.className = "badge";
+				channel.textContent =
+					channels.get(message.channelId)?.name || message.channelId;
+				const time = document.createElement("time");
+				time.textContent = timeText(message.at);
+				head.append(author, channel, time);
+				const text = document.createElement("p");
+				text.textContent = String(message.text || "Adjunto").slice(0, 180);
+				button.append(head, text);
+				searchResults.appendChild(button);
+			}
+			if (!data.messages?.length) {
+				const empty = document.createElement("p");
+				empty.className = "muted";
+				empty.textContent = "Sin resultados.";
+				searchResults.appendChild(empty);
+			}
+		} catch (error) {
+			const empty = document.createElement("p");
+			empty.className = "msg error";
+			empty.textContent = error.message;
+			searchResults.appendChild(empty);
+		}
+	}
+	searchOpen?.addEventListener("click", () => {
+		searchDialog?.showModal();
+		setTimeout(() => searchInput?.focus(), 30);
+		if (searchInput && !searchInput.value) runSearch();
+	});
+	searchInput?.addEventListener("input", () => {
+		clearTimeout(searchTimer);
+		searchTimer = setTimeout(runSearch, 180);
+	});
+	searchCurrent?.addEventListener("change", runSearch);
+	searchResults?.addEventListener("click", (event) => {
+		const item = event.target.closest("[data-chat-result]");
+		if (!item) return;
+		const targetChannel = item.dataset.chatChannel;
+		const messageId = item.dataset.chatResult;
+		searchDialog?.close();
+		if (targetChannel && targetChannel !== channelId) {
+			switchChannel(targetChannel);
+			setTimeout(() => jumpToMessage(messageId), 500);
+		} else {
+			jumpToMessage(messageId);
+		}
 	});
 
 	async function createDm(username) {
@@ -724,6 +1247,7 @@
 	});
 	setInterval(refresh, 4000);
 	setInterval(refreshChannels, 15000);
+	insertUnreadDivider();
 	markRead();
 	refresh();
 	refreshChannels();

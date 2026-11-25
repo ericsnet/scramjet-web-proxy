@@ -915,7 +915,7 @@ function userAvatar(name, icon, className = "user-avatar") {
 	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${image}</span>`;
 }
 
-function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) {
+function shell(title, body, { topbar = "", chatFab = true, wide = false, head = "" } = {}) {
 	return `<!doctype html>
 <html lang="es">
 <head>
@@ -927,6 +927,7 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) 
 <script src="/page-i18n.js" defer></script>
 <script src="/global-search.js?v=2" defer></script>
 <style>${CSS}</style>
+${head}
 </head>
 <body>
 <div id="page-progress" class="page-progress" hidden><i></i></div>
@@ -1503,6 +1504,9 @@ export function chatPage({
 	user,
 	settings,
 	messages = [],
+	pinned = [],
+	readSeq = 0,
+	hasMore = false,
 	latestSeq = 0,
 	revision = 0,
 	online = 0,
@@ -1660,24 +1664,49 @@ export function chatPage({
 						`<button type="button" data-chat-react="${esc(emoji)}" aria-label="Reaccionar con ${esc(emoji)}">${esc(emoji)}</button>`,
 				)
 				.join("")}</div></details>`;
-			return `<article class="chat-message${own ? " own" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
+			const replyQuote = m.replyTo
+				? `<div class="chat-reply-quote"><strong>@${esc(m.replyTo.username)}</strong><span>${esc((m.replyTo.text || "").slice(0, 140) || "Adjunto")}</span></div>`
+				: "";
+			const edited = m.editedAt
+				? `<span class="chat-edited" title="Editado ${esc(fmtDate(m.editedAt))}">editado</span>`
+				: "";
+			const pinBadge = m.pinned ? '<span class="chat-pin-badge" title="Mensaje fijado">📌</span>' : "";
+			const tools = `<div class="chat-msg-tools">
+        <button type="button" class="chat-tool" data-chat-reply="${esc(m.id)}" title="Responder">↩</button>
+        ${m.canEdit ? `<button type="button" class="chat-tool" data-chat-edit="${esc(m.id)}" title="Editar">✎</button>` : ""}
+        ${m.canPin ? `<button type="button" class="chat-tool" data-chat-pin="${esc(m.id)}" data-pinned="${m.pinned ? "1" : "0"}" title="${m.pinned ? "Desfijar" : "Fijar"}">📌</button>` : ""}
+        ${canDelete ? `<button type="button" class="chat-tool danger" data-chat-delete="${esc(m.id)}" title="Eliminar">🗑</button>` : ""}
+      </div>`;
+			return `<article class="chat-message${own ? " own" : ""}${m.pinned ? " pinned" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
   ${own ? "" : userAvatar(m.username, m.icon, "chat-msg-avatar")}
   <div class="chat-bubble">
+    ${replyQuote}
     <div class="chat-meta">
       ${own ? "" : `<span class="chat-author">${esc(m.username)}</span>`}
       ${roleBadge(role)}
+      ${pinBadge}
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
-      ${canDelete ? `<button class="link chat-delete" type="button" data-chat-delete="${esc(m.id)}">Eliminar</button>` : ""}
+      ${edited}
     </div>
     ${m.text ? `<p class="chat-text">${formatText(m.text)}</p>` : ""}
     ${attachment}
     ${poll}
     <div class="chat-reactions">${reactions}${picker}</div>
+    ${tools}
   </div>
 </article>`;
 		})
 		.join("");
 
+	const pinnedHtml = pinned.length
+		? pinned
+				.slice(0, 3)
+				.map(
+					(message) =>
+						`<button type="button" class="chat-pin-chip" data-chat-jump="${esc(message.id)}" title="${esc(message.text || "")}"><span>📌</span><strong>${esc(message.username)}</strong><small>${esc((message.text || "").slice(0, 80) || "Adjunto")}</small></button>`,
+				)
+				.join("")
+		: "";
 	const body = enabled ? `
 <div class="chat-app">
   <aside class="chat-sidebar">
@@ -1698,7 +1727,11 @@ export function chatPage({
           <p><span id="chat-channel-meta">${esc(channelMeta)}</span>${settings.chatShowOnline ? ` <span class="chat-online" id="chat-online">${esc(online)} conectado${online === 1 ? "" : "s"}</span>` : ""}</p>
         </div>
       </div>
+      <select id="chat-mobile-channel" class="chat-mobile-channel" aria-label="Canal">${channelOptions}</select>
       <div class="chat-header-actions">
+        <button class="chat-action" type="button" id="chat-search-open" title="Buscar mensajes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Buscar</span>
+        </button>
         <button class="chat-action" type="button" id="chat-friends" title="Amigos">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Amigos</span>${pendingCount ? `<b class="friend-badge">${pendingCount}</b>` : ""}
         </button>
@@ -1716,9 +1749,16 @@ export function chatPage({
     ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
     ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
     <p class="msg error" id="chat-error" hidden></p>
+    <div class="chat-pinned-bar" id="chat-pinned-bar"${pinned.length ? "" : " hidden"}>
+      <span class="chat-pinned-label">📌 Fijados</span>
+      <div class="chat-pinned-list" id="chat-pinned-list">${pinnedHtml}</div>
+    </div>
+    <button type="button" class="chat-load-older" id="chat-load-older"${hasMore ? "" : " hidden"}>Cargar mensajes anteriores</button>
     <div class="chat-messages" id="chat-messages"
       data-channel="${esc(currentChannel)}"
       data-last-seq="${esc(latestSeq)}"
+      data-read-seq="${esc(readSeq)}"
+      data-has-more="${hasMore ? "1" : "0"}"
       data-revision="${esc(revision)}"
       data-current-user="${esc(current)}"
       data-max-length="${esc(settings.chatMaxLength)}"
@@ -1726,6 +1766,13 @@ export function chatPage({
       data-allow-delete="${allowDelete ? "1" : "0"}">
       ${rows || '<div class="chat-empty"><span class="chat-empty-icon">💬</span><strong>Todavía no hay mensajes</strong><span>Escribe el primero en este canal.</span></div>'}
     </div>
+    <div class="chat-typing" id="chat-typing" hidden></div>
+    <div class="chat-context-bar" id="chat-context" hidden>
+      <span class="chat-context-label" id="chat-context-label"></span>
+      <span class="chat-context-text" id="chat-context-text"></span>
+      <button type="button" class="chat-context-cancel" id="chat-context-cancel" aria-label="Cancelar">×</button>
+    </div>
+    <div class="chat-upload-progress" id="chat-upload-progress" hidden><span id="chat-upload-bar"></span></div>
     <form method="post" action="/api/chat/messages" class="chat-composer" id="chat-form" autocomplete="off">
       <input type="hidden" name="channel" id="chat-channel-hidden" value="${esc(currentChannel)}">
       <label class="chat-attach" for="chat-file" title="Adjuntar archivo" aria-label="Adjuntar archivo">
@@ -1808,6 +1855,18 @@ export function chatPage({
     <h3>Solicitudes enviadas (${outgoingEntries.length})</h3>
     <div class="friend-list">${outgoingRows || '<p class="muted">No tienes solicitudes enviadas.</p>'}</div>
 </dialog>
+<dialog id="chat-search-dialog" class="chat-dialog chat-search-dialog">
+  <form method="dialog">
+    <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
+    <h2>Buscar mensajes</h2>
+    <p class="muted">Busca en todos tus canales o solo en el actual.</p>
+    <div class="chat-search-row">
+      <input id="chat-search-input" type="search" placeholder="Texto o usuario…" autocomplete="off" aria-label="Buscar mensajes">
+      <label class="check"><input type="checkbox" id="chat-search-current"> Solo este canal</label>
+    </div>
+    <div id="chat-search-results" class="chat-search-results"></div>
+  </form>
+</dialog>
 <script src="/chat.js" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
@@ -1815,7 +1874,12 @@ export function chatPage({
     ${["admin", "creator"].includes(user?.role) ? '<a class="small" href="/admin/settings">Activar en Ajustes</a>' : '<a class="small" href="/">Volver al proxy</a>'}
   </div>
 </div>`;
-	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, { topbar: topbar(user), chatFab: false, wide: true });
+	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, {
+		topbar: topbar(user),
+		chatFab: false,
+		wide: true,
+		head: '<link rel="stylesheet" href="/chat.css">',
+	});
 }
 
 export function statsPage({

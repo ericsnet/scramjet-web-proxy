@@ -12,6 +12,8 @@ const UPLOAD_DIR = path.join(DATA_DIR, "chat-uploads");
 const GENERAL = "general";
 const MAX_FILE = 5 * 1024 * 1024;
 const MAX_CHANNEL_MEMBERS = 50;
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
+const SEARCH_LIMIT = 50;
 const REACTIONS = new Set(["👍", "❤️", "😂", "😮", "😢", "🔥"]);
 const MIME_EXT = {
 	"image/png": ".png",
@@ -219,6 +221,7 @@ export function listChatChannels(username) {
 				members: channel.members,
 				latestSeq: last?.seq || 0,
 				lastAt: last?.at || null,
+				readSeq: read,
 				unread,
 			};
 		})
@@ -283,7 +286,11 @@ export function getOrCreateDmChannel(username, other) {
 	return { channel };
 }
 
-export function postChatMessage(username, value, { channelId = GENERAL, attachmentId = "" } = {}) {
+export function postChatMessage(
+	username,
+	value,
+	{ channelId = GENERAL, attachmentId = "", replyTo = "" } = {},
+) {
 	const settings = getSettings();
 	if (!settings.chatEnabled) return { error: "disabled" };
 	const channel = channelFor(username, channelId);
@@ -312,6 +319,19 @@ export function postChatMessage(username, value, { channelId = GENERAL, attachme
 		attachment = { id: upload.id, name: upload.name, type: upload.type, size: upload.size };
 		delete uploads[String(attachmentId)];
 	}
+	let reply = null;
+	if (replyTo) {
+		const original = messages.find(
+			(item) => item.id === String(replyTo) && item.channelId === channel.id,
+		);
+		if (original) {
+			reply = {
+				id: original.id,
+				username: original.username,
+				text: String(original.text || "").slice(0, 140),
+			};
+		}
+	}
 	const message = {
 		id: crypto.randomBytes(8).toString("hex"),
 		seq: nextSeq++,
@@ -323,6 +343,12 @@ export function postChatMessage(username, value, { channelId = GENERAL, attachme
 		attachment,
 		poll: null,
 		mentions: mentionsIn(text),
+		replyTo: reply,
+		pinned: false,
+		pinnedBy: "",
+		pinnedAt: null,
+		editedAt: null,
+		editedBy: "",
 	};
 	messages.push(message);
 	entry.last = now;
@@ -365,6 +391,12 @@ export function postChatPoll(username, { channelId = GENERAL, question, options 
 		attachment: null,
 		poll: { question: text, options: choices.map((choice) => ({ text: choice, votes: [] })) },
 		mentions: [],
+		replyTo: null,
+		pinned: false,
+		pinnedBy: "",
+		pinnedAt: null,
+		editedAt: null,
+		editedBy: "",
 	};
 	entry.last = now;
 	entry.times.push(now);
@@ -413,6 +445,97 @@ export function toggleReaction(username, messageId, emoji, channelId) {
 	dirty = true;
 	scheduleSave();
 	return { message: { ...message } };
+}
+
+export function editChatMessage(
+	username,
+	messageId,
+	value,
+	{ channelId = GENERAL, moderator = false } = {},
+) {
+	const settings = getSettings();
+	if (!settings.chatEnabled) return { error: "disabled" };
+	const message = messages.find(
+		(item) => item.id === String(messageId || "") && item.channelId === channelId,
+	);
+	if (!message) return { error: "notfound" };
+	if (!channelFor(username, channelId)) return { error: "forbidden" };
+	const own = String(message.username).toLowerCase() === String(username).toLowerCase();
+	if (!own && !moderator) return { error: "forbidden" };
+	if (own && !moderator && Date.now() - new Date(message.at).getTime() > EDIT_WINDOW_MS) {
+		return { error: "edit_window" };
+	}
+	const text = cleanText(value);
+	if (!text) return { error: "empty" };
+	if ([...text].length > settings.chatMaxLength) return { error: "too_long" };
+	message.text = text;
+	message.mentions = mentionsIn(text);
+	message.editedAt = new Date().toISOString();
+	message.editedBy = String(username).slice(0, 32);
+	revision += 1;
+	dirty = true;
+	scheduleSave();
+	return { message: { ...message } };
+}
+
+export function pinChatMessage(username, messageId, channelId, pinned) {
+	const message = messages.find(
+		(item) => item.id === String(messageId || "") && item.channelId === channelId,
+	);
+	if (!message) return { error: "notfound" };
+	if (!channelFor(username, channelId)) return { error: "forbidden" };
+	message.pinned = !!pinned;
+	message.pinnedBy = pinned ? String(username).slice(0, 32) : "";
+	message.pinnedAt = pinned ? new Date().toISOString() : null;
+	revision += 1;
+	dirty = true;
+	scheduleSave();
+	return { message: { ...message } };
+}
+
+export function listChatPinned(username, channelId = GENERAL) {
+	const channel = channelFor(username, channelId);
+	if (!channel) return { error: "forbidden" };
+	return {
+		messages: messages
+			.filter((message) => message.channelId === channel.id && message.pinned)
+			.sort((a, b) => new Date(b.pinnedAt || 0) - new Date(a.pinnedAt || 0))
+			.slice(0, 20)
+			.map((message) => ({ ...message })),
+	};
+}
+
+export function searchChat(
+	username,
+	{ query = "", channelId = "", limit = SEARCH_LIMIT } = {},
+) {
+	const needle = String(query || "").trim().toLowerCase();
+	if (needle.length < 2) return { messages: [] };
+	const visible = new Set(
+		channels
+			.filter(
+				(channel) =>
+					channel.type === "public" ||
+					channel.members.some(
+						(member) =>
+							member.toLowerCase() === String(username || "").toLowerCase(),
+					),
+			)
+			.map((channel) => channel.id),
+	);
+	if (channelId && !visible.has(channelId)) return { error: "forbidden" };
+	const max = Math.min(100, Math.max(1, Number(limit) || SEARCH_LIMIT));
+	const found = messages
+		.filter((message) => {
+			if (!visible.has(message.channelId)) return false;
+			if (channelId && message.channelId !== channelId) return false;
+			const text = String(message.text || "").toLowerCase();
+			const author = String(message.username || "").toLowerCase();
+			return text.includes(needle) || author.includes(needle);
+		})
+		.sort((a, b) => b.seq - a.seq)
+		.slice(0, max);
+	return { messages: found.map((message) => ({ ...message })) };
 }
 
 export function saveChatUpload(username, buffer, { name = "archivo", type = "" } = {}) {
@@ -469,23 +592,46 @@ export function getChatAttachment(id) {
 	return { path: full };
 }
 
-export function listChat({ username, channelId = GENERAL, after = 0, limit = 200 } = {}) {
+export function listChat({
+	username,
+	channelId = GENERAL,
+	after = 0,
+	before = 0,
+	limit = 200,
+} = {}) {
 	const channel = channelFor(username, channelId);
 	if (!channel) return { error: "forbidden" };
 	if (trimMessages()) scheduleSave();
 	const afterSeq = Math.max(0, Number.parseInt(after, 10) || 0);
+	const beforeSeq = Math.max(0, Number.parseInt(before, 10) || 0);
 	const max = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 200));
 	const all = messages.filter((message) => message.channelId === channel.id);
 	const oldestSeq = all.length ? all[0].seq : nextSeq;
-	const matching = all.filter((message) => message.seq > afterSeq);
+	const selected = beforeSeq
+		? all.filter((message) => message.seq < beforeSeq).slice(-max)
+		: all.filter((message) => message.seq > afterSeq).slice(0, max);
+	const lower = String(username || "").toLowerCase();
+	const pinned = all.filter((message) => message.pinned);
 	return {
 		channelId: channel.id,
-		messages: matching.slice(0, max).map((message) => ({ ...message })),
+		messages: selected.map((message) => ({ ...message })),
+		pinned: pinned
+			.sort((a, b) => new Date(b.pinnedAt || 0) - new Date(a.pinnedAt || 0))
+			.slice(0, 20)
+			.map((message) => ({ ...message })),
 		latestSeq: all.length ? all[all.length - 1].seq : nextSeq - 1,
-		oldestSeq,
+		oldestSeq: selected.length ? selected[0].seq : oldestSeq,
+		readSeq: Number(reads[lower]?.[channel.id]) || 0,
+		hasMore: beforeSeq
+			? selected.length === max && all.some((message) => message.seq < selected[0].seq)
+			: all.some(
+					(message) =>
+						message.seq >
+						(selected.length ? selected[selected.length - 1].seq : afterSeq),
+				),
 		generation,
 		revision,
-		reset: afterSeq > 0 && afterSeq < oldestSeq - 1,
+		reset: !beforeSeq && afterSeq > 0 && afterSeq < oldestSeq - 1,
 	};
 }
 
