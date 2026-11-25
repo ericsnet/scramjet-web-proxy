@@ -2,6 +2,7 @@ import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
+import net from "node:net";
 import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -47,6 +48,8 @@ import {
 	isIpRateLimited,
 	isAccountIpRateLimited,
 	isRateLimited,
+	clearIpFailures,
+	clearAccountIpFailures,
 	recordIpFailure,
 	recordAccountIpFailure,
 	flushSessions,
@@ -141,6 +144,7 @@ import {
 	banTarget,
 	unbanTarget,
 	isUserBanned,
+	isDeviceBannedFor,
 	dismissAlert,
 	recordSuccessfulLogin,
 	flushSecurity,
@@ -233,7 +237,12 @@ app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(express.json({ limit: "64kb" }));
 app.use((req, res, next) => {
 	const host = hostName(req);
-	if (req.path === "/healthz" && ["localhost", "127.0.0.1", "[::1]"].includes(host)) {
+	if (
+		req.path === "/healthz" &&
+		["localhost", "127.0.0.1", "[::1]"].includes(host) &&
+		!req.headers["x-forwarded-for"] &&
+		!req.headers["forwarded"]
+	) {
 		return next();
 	}
 	if (!ALLOWED_HOSTS.has(host)) {
@@ -327,6 +336,36 @@ function applyWispBlocklist() {
 }
 
 applyWispBlocklist();
+wisp.options.allow_direct_ip = false;
+wisp.options.allow_udp_streams = false;
+wisp.options.stream_limit_total = 64;
+wisp.options.stream_limit_per_host = 16;
+wisp.options.port_blacklist = [
+	[22, 22],
+	[23, 23],
+	[25, 25],
+	[53, 53],
+	[110, 110],
+	[135, 135],
+	[137, 139],
+	[143, 143],
+	[445, 445],
+	[465, 465],
+	[587, 587],
+	[993, 993],
+	[995, 995],
+	[1433, 1433],
+	[1521, 1521],
+	[2049, 2049],
+	[2375, 2375],
+	[3306, 3306],
+	[3389, 3389],
+	[5432, 5432],
+	[5900, 5900],
+	[6379, 6379],
+	[11211, 11211],
+	[27017, 27017],
+];
 instrumentWispTraffic();
 initCategories().then(() => {
 	if ((getSettings().categories || []).length) {
@@ -527,6 +566,16 @@ function requireAuth(req, res, next) {
 		}
 		return res.redirect(303, `/blocked?t=${token}`);
 	}
+	if (isDeviceBannedFor(req._deviceId, session.username, clientIp(req))) {
+		destroySession(session.token);
+		const token = createBlockFlash(
+			"Este dispositivo está bloqueado por seguridad. Contacta con un administrador.",
+		);
+		if (req.path.startsWith("/api/")) {
+			return res.status(403).json({ error: "device_banned" });
+		}
+		return res.redirect(303, `/blocked?t=${token}`);
+	}
 
 	const settings = getSettings();
 	if (settings.quarantineMode && !isAdminRole(session.role)) {
@@ -614,6 +663,7 @@ const CHAT_ERRORS = {
 
 const FRIEND_ERRORS = {
 	"invalid-user": "Usuario no válido.",
+	"unavailable": "No se pudo completar la solicitud.",
 	"already-friends": "Ya sois amigos.",
 	pending: "Ya hay una solicitud pendiente.",
 	limit: "Tienes demasiadas solicitudes pendientes.",
@@ -741,6 +791,26 @@ function createBlockFlash(message) {
 /* ------------------------- conexiones Wisp activas ------------------------- */
 
 const wispConnections = new Map(); // sessionId -> Set<{ username, socket }>
+const chatUploadBuckets = new Map(); // username:ip -> [timestamps]
+
+function allowChatUpload(username, ip) {
+	const key = `${String(username || "").toLowerCase()}:${ip || ""}`;
+	const now = Date.now();
+	const max = Math.max(1, Number(getSettings().chatUploadMaxPerMinute) || 6);
+	const bucket = (chatUploadBuckets.get(key) || []).filter((at) => now - at < 60_000);
+	if (bucket.length >= max) {
+		chatUploadBuckets.set(key, bucket);
+		return false;
+	}
+	bucket.push(now);
+	chatUploadBuckets.set(key, bucket);
+	if (chatUploadBuckets.size > 5000) {
+		for (const [entry, values] of chatUploadBuckets) {
+			if (!values.some((at) => now - at < 60_000)) chatUploadBuckets.delete(entry);
+		}
+	}
+	return true;
+}
 
 function trackWisp(sessionId, username, socket) {
 	let set = wispConnections.get(sessionId);
@@ -818,6 +888,14 @@ function checkHostPolicy(user, hostname) {
 	if (!host) return { blocked: false };
 
 	if (matchSite(host, user.unblockOverrides)) return { blocked: false };
+
+	if (net.isIP(host) && settings.accessMode !== "allowlist") {
+		return {
+			blocked: true,
+			reason: "direct-ip",
+			message: "No se permite navegar directamente por dirección IP.",
+		};
+	}
 
 	if (settings.accessMode === "allowlist") {
 		const allowed = settings.allowedSites || [];
@@ -927,7 +1005,7 @@ function ensureCsrf(req, res) {
 	let token = cookieValue(req, HOST_CSRF_COOKIE) || cookieValue(req, CSRF_COOKIE);
 	if (!/^[a-f0-9]{48}$/.test(token)) {
 		token = crypto.randomBytes(24).toString("hex");
-		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+		const secure = !!req.secure;
 		const name = secure ? HOST_CSRF_COOKIE : CSRF_COOKIE;
 		const cookie = `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`;
 		try {
@@ -1008,7 +1086,7 @@ app.get("/.well-known/security.txt", (req, res) => {
 		[
 			"Contact: https://github.com/ericsnet/scramjet-web-proxy/security/advisories/new",
 			"Preferred-Languages: es, en",
-			"Canonical: https://raspi-eric.tail41ccf3.ts.net/.well-known/security.txt",
+			"Canonical: https://raspi-eric.tail41ccf3.ts.net:8443/.well-known/security.txt",
 			"Expires: 2027-11-24T00:00:00Z",
 			"",
 		].join("\n"),
@@ -1170,11 +1248,7 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 	const settings = getSettings();
 	const ip = clientIp(req);
 
-	if (
-		isIpRateLimited(ip) ||
-		isAccountIpRateLimited(ip, username) ||
-		isRateLimited(username)
-	) {
+	if (isIpRateLimited(ip) || isAccountIpRateLimited(ip, username)) {
 		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
@@ -1278,6 +1352,8 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 	});
 
 	clearFailedLogins(username);
+	clearIpFailures(ip);
+	clearAccountIpFailures(ip, username);
 	metric("logins_success_total");
 	const session = createSession(user.username, {
 		ip,
@@ -1374,6 +1450,14 @@ app.get("/avatar/:user", (req, res) => {
 });
 
 app.get("/api/navigate-check", async (req, res) => {
+	if (isStaffRole(req.user.role) && !getSettings().proxyAllowStaffBrowsing) {
+		return res.status(200).json({
+			blocked: true,
+			reason: "staff",
+			message:
+				"La navegación está desactivada para cuentas de administración y moderación. Usa una cuenta de alumno para navegar.",
+		});
+	}
 	const url = String(req.query.url || "");
 	let parsed;
 	try {
@@ -1552,7 +1636,10 @@ app.get("/api/chat/channels", (req, res) => {
 app.post("/api/chat/channels/dm", sameOrigin, (req, res) => {
 	const target = getUser(req.body.username || "");
 	if (!target || target.username.toLowerCase() === req.user.username.toLowerCase()) {
-		return res.status(400).json({ error: "invalid-user" });
+		return res.status(403).json({
+			error: "not_friends",
+			message: "Solo puedes abrir un chat privado con amigos.",
+		});
 	}
 	if (req.user.role !== "creator" && !areFriends(req.user.username, target.username)) {
 		return res.status(403).json({
@@ -1599,7 +1686,7 @@ function friendRedirect(req, res, key, value) {
 app.post("/api/friends/request", sameOrigin, (req, res) => {
 	const target = getUser(req.body.username || "");
 	if (!target || target.username.toLowerCase() === req.user.username.toLowerCase()) {
-		return friendRedirect(req, res, "error", "invalid-user");
+		return friendRedirect(req, res, "error", "unavailable");
 	}
 	const result = sendFriendRequest(req.user.username, target.username);
 	if (result.error) return friendRedirect(req, res, "error", result.error.replaceAll("_", "-"));
@@ -1731,8 +1818,19 @@ app.post("/api/chat/messages/:id/reaction", sameOrigin, (req, res) => {
 	res.json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
 });
 
-app.post("/api/chat/upload", sameOrigin, express.raw({ type: "application/octet-stream", limit: "6mb" }), (req, res) => {
-	if (!getSettings().chatEnabled) return res.status(403).json({ error: "disabled" });
+app.post(
+	"/api/chat/upload",
+	sameOrigin,
+	(req, res, next) => {
+		if (!getSettings().chatEnabled) return res.status(403).json({ error: "disabled" });
+		if (!allowChatUpload(req.user.username, clientIp(req))) {
+			res.set("Retry-After", "60");
+			return res.status(429).json({ error: "rate" });
+		}
+		next();
+	},
+	express.raw({ type: "application/octet-stream", limit: "6mb" }),
+	(req, res) => {
 	let fileName = String(req.headers["x-file-name"] || "archivo");
 	try {
 		fileName = decodeURIComponent(fileName);
@@ -1742,11 +1840,17 @@ app.post("/api/chat/upload", sameOrigin, express.raw({ type: "application/octet-
 		type: req.headers["x-file-type"],
 	});
 	if (result.error) {
-		const status = result.error === "too_large" ? 413 : 400;
+		const status =
+			result.error === "too_large" || result.error === "quota" || result.error === "user_quota"
+				? 413
+				: result.error === "disk"
+					? 507
+					: 400;
 		return res.status(status).json({ error: result.error });
 	}
 	res.status(201).json({ upload: result.upload });
-});
+	},
+);
 
 app.get("/api/chat/files/:id", (req, res) => {
 	const message = getChatAttachmentMessage(req.params.id);
@@ -2196,11 +2300,19 @@ app.post("/api/admin/security/ban", requireAdmin, sameOrigin, (req, res) => {
 	if (type === "user" && !getUser(target)) {
 		return res.redirect(303, "/admin/security?error=notfound");
 	}
+	const alert =
+		type === "device" && req.body.alert
+			? listSecurityAlerts({ includeDismissed: true, limit: 1000 }).find(
+					(item) => item.id === String(req.body.alert),
+				)
+			: null;
 	const result = banTarget(type, target, {
 		by: req.user.username,
 		reason: String(req.body.reason || "").slice(0, 200),
 		alertId: String(req.body.alert || ""),
 		kind: String(req.body.kind || (type === "user" ? "user" : "")),
+		ip: type === "device" ? alert?.ip || "" : "",
+		username: type === "device" ? alert?.username || "" : "",
 	});
 	if (result.error) return res.redirect(303, `/admin/security?error=${result.error}`);
 	if (type === "user") {
@@ -2639,6 +2751,9 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		chatRetentionDays: req.body.chatRetentionDays,
 		chatSlowModeSeconds: req.body.chatSlowModeSeconds,
 		chatMaxPerMinute: req.body.chatMaxPerMinute,
+		chatUploadMaxPerMinute: req.body.chatUploadMaxPerMinute,
+		chatUploadMaxTotalMB: req.body.chatUploadMaxTotalMB,
+		chatUploadMaxPerUserMB: req.body.chatUploadMaxPerUserMB,
 		maintenanceMode: req.body.maintenanceMode === "on",
 		maintenanceMessage: req.body.maintenanceMessage,
 		quarantineMode: req.body.quarantineMode === "on",
@@ -2669,6 +2784,7 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		backupRetentionDays: req.body.backupRetentionDays,
 		metricsToken: req.body.metricsToken,
 		allowUserHistoryClear: req.body.allowUserHistoryClear === "on",
+		proxyAllowStaffBrowsing: req.body.proxyAllowStaffBrowsing === "on",
 		revision: req.body.revision,
 	};
 	const result = saveSettings(payload);
@@ -3104,6 +3220,20 @@ app.get("/sw.js", (req, res) => {
 	res.type("application/javascript").sendFile(path.join(__dirname, "sw.js"));
 });
 
+app.get(["/", "/index.html"], (req, res, next) => {
+	if (isStaffRole(req.user.role) && !getSettings().proxyAllowStaffBrowsing) {
+		return res.status(403).set("Cache-Control", "no-store").type("html").send(
+			blockedPage({
+				title: "Navegación restringida",
+				message:
+					"Por seguridad, las cuentas de administración y moderación no pueden navegar por webs de terceros. Cierra sesión y entra con una cuenta de alumno para usar el proxy.",
+				user: req.user,
+			}),
+		);
+	}
+	next();
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use((req, res) => {
@@ -3205,6 +3335,7 @@ server.on("upgrade", (req, socket, head) => {
 	const currentUser = session ? getUser(session.username) : null;
 	if (
 		!session ||
+		(isStaffRole(session.role) && !settings.proxyAllowStaffBrowsing) ||
 		(settings.quarantineMode && !isAdminRole(session.role)) ||
 		(settings.maintenanceMode && !isAdminRole(session.role)) ||
 		session.mustChangePassword ||

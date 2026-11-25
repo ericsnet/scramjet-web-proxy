@@ -2736,6 +2736,18 @@ ${adminTabs("settings")}
         <label for="chatRetentionDays">Días de retención</label>
         <input id="chatRetentionDays" name="chatRetentionDays" type="number" min="1" max="365" value="${settings.chatRetentionDays}" required>
       </div>
+      <div>
+        <label for="chatUploadMaxPerMinute">Subidas por minuto</label>
+        <input id="chatUploadMaxPerMinute" name="chatUploadMaxPerMinute" type="number" min="1" max="60" value="${settings.chatUploadMaxPerMinute}" required>
+      </div>
+      <div>
+        <label for="chatUploadMaxTotalMB">Almacenamiento total de adjuntos (MB)</label>
+        <input id="chatUploadMaxTotalMB" name="chatUploadMaxTotalMB" type="number" min="16" max="4096" value="${settings.chatUploadMaxTotalMB}" required>
+      </div>
+      <div>
+        <label for="chatUploadMaxPerUserMB">Almacenamiento por usuario (MB)</label>
+        <input id="chatUploadMaxPerUserMB" name="chatUploadMaxPerUserMB" type="number" min="8" max="1024" value="${settings.chatUploadMaxPerUserMB}" required>
+      </div>
     </div>
     <label for="chatWelcome">Mensaje de bienvenida</label>
     <textarea id="chatWelcome" name="chatWelcome" maxlength="200" style="min-height:60px">${esc(settings.chatWelcome || "")}</textarea>
@@ -2760,6 +2772,8 @@ ${adminTabs("settings")}
 
   <div class="section settings-block" id="settings-sites" data-settings-search="sitios dominios permitidos prohibidos lista negra blanca categorías adultos apuestas social">
     <h3>🌐 Sitios y modo de acceso</h3>
+    <label class="check"><input type="checkbox" name="proxyAllowStaffBrowsing"${settings.proxyAllowStaffBrowsing ? " checked" : ""}> Permitir que administradores y moderadores naveguen por webs de terceros (no recomendado)</label>
+    <p class="hint">Por seguridad, las cuentas de gestión no navegan por el proxy. Si lo activas, una web maliciosa podría intentar actuar con los permisos de esa cuenta.</p>
     <label for="accessMode">Modo</label>
     <select id="accessMode" name="accessMode">
       <option value="blacklist"${settings.accessMode === "blacklist" ? " selected" : ""}>Lista negra: se permite todo salvo los prohibidos</option>

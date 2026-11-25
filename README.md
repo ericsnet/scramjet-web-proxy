@@ -249,6 +249,18 @@ usuario puede vaciar su propio historial.
 
 ## Datos y seguridad
 
+### Endurecimiento tras la auditoría
+
+- Las cuentas de administración y moderación **no navegan por el proxy** por defecto. El contenido proxificado comparte origen con la aplicación; hasta aislarlo en otro dominio, una web maliciosa podría actuar con la sesión de esa cuenta. Se puede permitir en Ajustes, pero no es recomendable.
+- Wisp bloquea IPs literales, UDP, puertos sensibles y limita streams por conexión y por host.
+- Las subidas del chat tienen límite por minuto, cuota total, cuota por usuario y comprobación de espacio libre.
+- El identificador de dispositivo es aleatorio y va en cookie `__Host-`; los bloqueos de dispositivo se refuerzan con usuario e IP.
+- El login ya no bloquea la cuenta solo por nombre de usuario: el límite es por IP y por IP+cuenta, y se limpia al acertar.
+- Apache fuerza `X-Forwarded-Proto: https` y `mod_remoteip` restaura la IP real detrás de Funnel.
+- El servicio de `:443` usa bcrypt y tiene fail2ban para fallos de autenticación básica.
+
+> Pendiente: aislar el contenido proxificado en un origen distinto (subdominio o puerto dedicado) para eliminar por completo el riesgo same-origin. Mientras tanto, usa una cuenta de alumno para navegar.
+
 - `data/users.json`: usuarios, hashes y estado.
 - `data/sessions.json`: sesiones con tokens hasheados.
 - `data/login-attempts.json`: contadores persistentes de intentos de login por cuenta, IP y cuenta+IP.

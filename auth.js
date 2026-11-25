@@ -796,7 +796,7 @@ export function getSession(req) {
 }
 
 export function sessionCookie(req, token, expires) {
-	const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+	const secure = !!req.secure;
 	const settings = getSettings();
 	const maxAge = Math.max(
 		0,
@@ -807,7 +807,7 @@ export function sessionCookie(req, token, expires) {
 }
 
 export function clearSessionCookie(req) {
-	const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+	const secure = !!req.secure;
 	const suffix = secure ? "; Secure" : "";
 	return [
 		`${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${suffix}`,
@@ -973,6 +973,13 @@ export function clearIpFailures(ip) {
 		ipAttempts.delete(ip);
 		scheduleAttemptsSave();
 	}
+}
+
+export function clearAccountIpFailures(ip, username) {
+	if (!ip) return;
+	const key = `${String(ip || "")}:${String(username || "").toLowerCase().slice(0, 64)}`;
+	accountIpAttempts.delete(key);
+	scheduleAttemptsSave();
 }
 
 export function clearFailedLogins(username) {

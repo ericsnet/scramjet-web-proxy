@@ -26,6 +26,9 @@ export const DEFAULTS = Object.freeze({
 	chatMaxPerMinute: 20,
 	chatAllowUserDelete: false,
 	chatShowOnline: true,
+	chatUploadMaxPerMinute: 6,
+	chatUploadMaxTotalMB: 256,
+	chatUploadMaxPerUserMB: 50,
 	activityEnabled: true,
 	activityPerUser: 500,
 	activityTotal: 3000,
@@ -65,6 +68,7 @@ export const DEFAULTS = Object.freeze({
 	backupRetentionDays: 14,
 	metricsToken: "",
 	allowUserHistoryClear: false,
+	proxyAllowStaffBrowsing: false,
 	revision: "",
 });
 
@@ -80,6 +84,9 @@ const LIMITS = {
 	chatRetentionDays: [1, 365],
 	chatSlowModeSeconds: [0, 300],
 	chatMaxPerMinute: [1, 120],
+	chatUploadMaxPerMinute: [1, 60],
+	chatUploadMaxTotalMB: [16, 4096],
+	chatUploadMaxPerUserMB: [8, 1024],
 	activityPerUser: [50, 2000],
 	activityTotal: [100, 10000],
 };
@@ -206,6 +213,12 @@ function normalize(input, silent = false) {
 			input.allowUserPasswordChange === true ||
 			input.allowUserPasswordChange === "1" ||
 			input.allowUserPasswordChange === "on";
+	}
+	if (input.proxyAllowStaffBrowsing !== undefined) {
+		next.proxyAllowStaffBrowsing =
+			input.proxyAllowStaffBrowsing === true ||
+			input.proxyAllowStaffBrowsing === "1" ||
+			input.proxyAllowStaffBrowsing === "on";
 	}
 
 	if (input.chatEnabled !== undefined) {

@@ -101,7 +101,11 @@ function trimMessages() {
 		for (const message of messages.slice(0, messages.length - max)) removeFile(message);
 		messages = messages.slice(-max);
 	}
+	const referenced = new Set(
+		messages.map((message) => message.attachment?.id).filter(Boolean),
+	);
 	for (const [id, upload] of Object.entries(uploads)) {
+		if (referenced.has(id)) continue;
 		if (Date.now() - new Date(upload.createdAt).getTime() > 60 * 60 * 1000) {
 			try { fs.rmSync(path.join(UPLOAD_DIR, `${id}.bin`), { force: true }); } catch {}
 			delete uploads[id];
@@ -424,6 +428,22 @@ export function saveChatUpload(username, buffer, { name = "archivo", type = "" }
 		if (!png && !jpg && !gif && !webp) return { error: "invalid-type" };
 	}
 	if (mime === "application/pdf" && buffer.subarray(0, 4).toString() !== "%PDF") return { error: "invalid-type" };
+	const settings = getSettings();
+	const maxTotal = Math.max(16, Number(settings.chatUploadMaxTotalMB) || 256) * 1024 * 1024;
+	const maxUser = Math.max(8, Number(settings.chatUploadMaxPerUserMB) || 50) * 1024 * 1024;
+	let totalBytes = 0;
+	let userBytes = 0;
+	for (const upload of Object.values(uploads)) {
+		const size = Math.max(0, Number(upload.size) || 0);
+		totalBytes += size;
+		if (String(upload.owner || "").toLowerCase() === String(username || "").toLowerCase()) userBytes += size;
+	}
+	if (totalBytes + buffer.length > maxTotal) return { error: "quota" };
+	if (userBytes + buffer.length > maxUser) return { error: "user_quota" };
+	try {
+		const stat = fs.statfsSync(DATA_DIR);
+		if (stat.bavail * stat.bsize < 512 * 1024 * 1024) return { error: "disk" };
+	} catch {}
 	const id = crypto.randomBytes(16).toString("hex");
 	fs.mkdirSync(UPLOAD_DIR, { recursive: true, mode: 0o700 });
 	fs.writeFileSync(path.join(UPLOAD_DIR, `${id}.bin`), buffer, { mode: 0o600 });

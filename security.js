@@ -216,21 +216,13 @@ function validDeviceCookie(raw) {
 }
 
 function deviceId(req, res) {
-	const existing =
-		validDeviceCookie(cookieValue(req, HOST_DEVICE_COOKIE)) ||
-		validDeviceCookie(cookieValue(req, DEVICE_COOKIE));
+	const secure = !!req.secure;
+	const name = secure ? HOST_DEVICE_COOKIE : DEVICE_COOKIE;
+	const existing = validDeviceCookie(cookieValue(req, name));
 	if (existing) return existing;
 
-	const id = crypto
-		.createHash("sha256")
-		.update(
-			`${clientIp(req)}|${req.headers["user-agent"] || ""}|${req.headers["accept-language"] || ""}|${req.headers["sec-ch-ua"] || ""}`,
-		)
-		.digest("hex")
-		.slice(0, 32);
+	const id = crypto.randomBytes(16).toString("hex");
 	if (res) {
-		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-		const name = secure ? HOST_DEVICE_COOKIE : DEVICE_COOKIE;
 		const cookie = `${name}=${id}.${signDevice(id)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
 		try {
 			res.append("Set-Cookie", cookie);
@@ -637,11 +629,23 @@ export function isDeviceBanned(device) {
 	return !!state.banned[`device:${String(device || "")}`];
 }
 
+export function isDeviceBannedFor(device, username, ip) {
+	if (isDeviceBanned(device)) return true;
+	const user = String(username || "").toLowerCase();
+	const address = normalizeIp(ip || "");
+	if (!user || !address) return false;
+	for (const info of Object.values(state.banned)) {
+		if (info.type !== "device") continue;
+		if (info.username === user && info.ip === address) return true;
+	}
+	return false;
+}
+
 export function isUserBanned(username) {
 	return !!state.banned[`user:${String(username || "").toLowerCase()}`];
 }
 
-export function banTarget(type, value, { by = "sistema", reason = "", alertId = "", kind = "" } = {}) {
+export function banTarget(type, value, { by = "sistema", reason = "", alertId = "", kind = "", ip = "", username = "" } = {}) {
 	const targetType = ["ip", "device", "user"].includes(type) ? type : "ip";
 	const raw = String(value || "").trim();
 	let clean = raw;
@@ -666,6 +670,12 @@ export function banTarget(type, value, { by = "sistema", reason = "", alertId = 
 		reason: String(reason || "").slice(0, 200),
 		alertId: String(alertId || ""),
 		kind: kind === "bot" ? "bot" : kind === "hack" ? "hack" : kind === "user" ? "user" : "",
+		...(targetType === "device"
+			? {
+					ip: normalizeIp(ip || ""),
+					username: String(username || "").toLowerCase().slice(0, 64),
+				}
+			: {}),
 	};
 	dirty = true;
 	saveNow();
