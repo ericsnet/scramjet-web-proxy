@@ -6,6 +6,8 @@ const frameAddress = document.getElementById("frame-address");
 const frameWrapper = document.getElementById("sj-frame-wrapper");
 const frameElement = document.getElementById("sj-frame");
 const frameUrl = document.getElementById("sj-frame-url");
+const pageProgress = document.getElementById("page-progress");
+const frameLoading = document.getElementById("frame-loading");
 const homeButton = document.getElementById("home-btn");
 const error = document.getElementById("sj-error");
 const errorCode = document.getElementById("sj-error-code");
@@ -139,6 +141,36 @@ fetch("/api/me", { headers: { Accept: "application/json" }, cache: "no-store" })
 let controller;
 let frame;
 let currentUrl = "";
+let loadingActive = false;
+let loadingTimer = null;
+
+function startLoading() {
+	loadingActive = true;
+	if (pageProgress) pageProgress.hidden = false;
+	if (frameLoading) frameLoading.hidden = false;
+	if (loadingTimer) clearTimeout(loadingTimer);
+	loadingTimer = setTimeout(stopLoading, 15000);
+}
+
+function stopLoading() {
+	loadingActive = false;
+	if (pageProgress) pageProgress.hidden = true;
+	if (frameLoading) frameLoading.hidden = true;
+	if (loadingTimer) {
+		clearTimeout(loadingTimer);
+		loadingTimer = null;
+	}
+}
+
+function pulseProgress() {
+	if (loadingActive || !pageProgress) return;
+	pageProgress.hidden = false;
+	if (loadingTimer) clearTimeout(loadingTimer);
+	loadingTimer = setTimeout(() => {
+		pageProgress.hidden = true;
+		loadingTimer = null;
+	}, 650);
+}
 
 async function init() {
 	if (controller) return;
@@ -183,6 +215,7 @@ async function init() {
 	frame = controller.createFrame(frameElement, {
 		plugins: [urlWatcher, catchEscapedLinks],
 	});
+	frameElement.addEventListener("load", stopLoading);
 }
 
 setInterval(() => {
@@ -312,6 +345,7 @@ function recoverNavigation(url) {
 
 function handleFrameUrl(url) {
 	currentUrl = url;
+	pulseProgress();
 	const info = proxyInfo(url);
 	const external = info.depth <= 1 ? externalUrl(url) : "";
 	const display = external || url;
@@ -516,6 +550,7 @@ async function navigate(url, { silent = false, log = true } = {}) {
 	if (log) logActivity(url, query);
 
 	hideError();
+	startLoading();
 	try {
 		if (!frame) await init();
 		await frame.go(url);
@@ -527,11 +562,13 @@ async function navigate(url, { silent = false, log = true } = {}) {
 		landing.style.display = "none";
 		frameWrapper.style.display = "flex";
 	} catch (err) {
+		stopLoading();
 		if (!silent) showErrorScreen(err.message, err.stack);
 	}
 }
 
 function goHome() {
+	stopLoading();
 	frameWrapper.style.display = "none";
 	landing.style.display = "flex";
 	document.title = "Inici - Classroom";
@@ -727,16 +764,19 @@ blockedRequestBtn?.addEventListener("click", async () => {
 });
 
 backButton?.addEventListener("click", () => {
+	startLoading();
 	try {
 		frame?.back();
 	} catch {}
 });
 forwardButton?.addEventListener("click", () => {
+	startLoading();
 	try {
 		frame?.forward();
 	} catch {}
 });
 reloadButton?.addEventListener("click", () => {
+	startLoading();
 	try {
 		frame?.reload();
 	} catch {}

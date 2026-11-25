@@ -142,6 +142,13 @@ body{
   background:var(--bg);
 }
 body::before{display:none}
+.page-progress{position:fixed;top:0;left:0;width:100%;height:3px;z-index:100;overflow:hidden;
+  background:rgba(59,130,246,.16)}
+.page-progress[hidden]{display:none}
+.page-progress i{display:block;width:36%;height:100%;border-radius:999px;
+  background:linear-gradient(90deg,#60a5fa,#3b82f6);box-shadow:0 0 12px rgba(59,130,246,.8);
+  animation:pageProgress 1.1s ease-in-out infinite}
+@keyframes pageProgress{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
 .topbar,.wrap,footer{position:relative;z-index:1}
 .topbar{
   background:var(--soft);
@@ -735,11 +742,47 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) 
 <style>${CSS}</style>
 </head>
 <body>
+<div id="page-progress" class="page-progress" hidden><i></i></div>
 ${topbar}
 <main class="wrap${wide ? " wide" : ""}">${body}</main>
 <footer>Proxy Web</footer>
 ${topbar ? `<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">⚠ Pánico</button></form>` : ""}
 ${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js" defer></script>' : ""}
+<script>
+(() => {
+  const bar = document.getElementById("page-progress");
+  if (!bar) return;
+  let timer = null;
+  const show = () => {
+    bar.hidden = false;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { bar.hidden = true; timer = null; }, 15000);
+  };
+  const hide = () => {
+    bar.hidden = true;
+    if (timer) { clearTimeout(timer); timer = null; }
+  };
+  window.addEventListener("pageshow", hide);
+  document.addEventListener("submit", (event) => {
+    if (!(event.target instanceof HTMLFormElement)) return;
+    const action = event.target.getAttribute("action") || "";
+    if (action.includes("/backup/download")) return;
+    show();
+  }, true);
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest && event.target.closest("a[href]");
+    if (!link) return;
+    if (link.target && link.target !== "_self") return;
+    if (link.hasAttribute("download")) return;
+    const href = link.getAttribute("href") || "";
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+    if (href.endsWith(".csv") || href.includes("/api/admin/backup/download")) return;
+    try {
+      if (new URL(link.href, location.href).origin === location.origin) show();
+    } catch {}
+  }, true);
+})();
+</script>
 </body>
 </html>`;
 }

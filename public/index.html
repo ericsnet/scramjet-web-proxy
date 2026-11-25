@@ -10,6 +10,7 @@
 		<link rel="stylesheet" href="/index.css?v=20261125b" />
 	</head>
 	<body>
+		<div id="page-progress" class="page-progress" hidden><i></i></div>
 		<div id="session-bar" class="session-bar" hidden>
 			<span id="session-avatar" class="avatar" aria-hidden="true">?</span>
 			<span id="session-who"></span>
@@ -129,7 +130,13 @@
 				</form>
 				<span id="sj-frame-url" title="URL proxificada"></span>
 			</div>
-			<iframe id="sj-frame" title="Contenido proxificado"></iframe>
+			<div class="frame-stage">
+				<iframe id="sj-frame" title="Contenido proxificado"></iframe>
+				<div id="frame-loading" class="frame-loading" hidden>
+					<span class="spinner" aria-hidden="true"></span>
+					<span>Cargando…</span>
+				</div>
+			</div>
 		</section>
 
 		<dialog id="bookmark-dialog">
