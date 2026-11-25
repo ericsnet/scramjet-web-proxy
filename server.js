@@ -117,6 +117,7 @@ import { count as metric, metricsSnapshot } from "./metrics.js";
 import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
 import { normalizeIp } from "./ip.js";
 import { activatePanic, panicUntil, flushPanic, CLASSROOM_URL } from "./panic.js";
+import { handleHtcpcp } from "./htcpcp.js";
 import {
 	areFriends,
 	acceptFriendRequest,
@@ -1332,6 +1333,12 @@ app.param("username", (req, res, next, value) => {
 	}
 	next();
 });
+
+app.all(
+	["/coffee", "/teapot"],
+	express.text({ type: "message/coffeepot", limit: "4kb" }),
+	handleHtcpcp,
+);
 
 app.post("/api/panic", requireAuth, sameOrigin, (req, res) => {
 	const until = activatePanic(req._deviceId);
