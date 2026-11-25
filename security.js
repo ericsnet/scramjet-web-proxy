@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
+import { normalizeIp, preferredIp } from "./ip.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
@@ -61,17 +62,79 @@ function scheduleSave() {
 	saveTimer.unref?.();
 }
 
+function normalizeAlertRecord(alert) {
+	const ips = new Set();
+	for (const value of Array.isArray(alert.ips) ? alert.ips : []) {
+		const ip = normalizeIp(value);
+		if (ip) ips.add(ip);
+	}
+	const direct = normalizeIp(alert.ip);
+	if (direct) ips.add(direct);
+	const list = [...ips];
+	return {
+		...alert,
+		ips: list,
+		ip: preferredIp(list) || direct || "",
+	};
+}
+
+function mergeOpenAlerts(alerts) {
+	const out = [];
+	const byKey = new Map();
+	for (const source of alerts) {
+		const alert = normalizeAlertRecord(source);
+		if (alert.status !== "open") {
+			out.push(alert);
+			continue;
+		}
+		const key = alert.device ? `device:${alert.device}` : `ip:${alert.ip}`;
+		const existing = byKey.get(key);
+		if (!existing) {
+			byKey.set(key, alert);
+			out.push(alert);
+			continue;
+		}
+		existing.ips = [...new Set([...(existing.ips || []), ...(alert.ips || []), alert.ip].filter(Boolean))];
+		existing.ip = preferredIp(existing.ips) || existing.ip;
+		existing.score = Math.max(existing.score || 0, alert.score || 0);
+		existing.count = (existing.count || 0) + (alert.count || 0);
+		existing.firstSeen =
+			new Date(alert.firstSeen) < new Date(existing.firstSeen)
+				? alert.firstSeen
+				: existing.firstSeen;
+		if (new Date(alert.lastSeen) > new Date(existing.lastSeen)) {
+			existing.lastSeen = alert.lastSeen;
+			existing.lastPath = alert.lastPath;
+			existing.lastMethod = alert.lastMethod;
+			existing.statusCode = alert.statusCode;
+			existing.userAgent = alert.userAgent;
+		}
+		existing.reasons = [...new Set([...(existing.reasons || []), ...(alert.reasons || [])])].slice(0, 12);
+		existing.events = [...(existing.events || []), ...(alert.events || [])]
+			.sort((a, b) => new Date(a.at) - new Date(b.at))
+			.slice(-MAX_ALERT_EVENTS);
+		existing.username = existing.username || alert.username || "";
+		existing.device = existing.device || alert.device || "";
+		existing.bot = !!(existing.bot || alert.bot);
+		existing.kind = existing.kind || alert.kind || "";
+	}
+	return out;
+}
+
 function load() {
 	try {
 		fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 		if (!fs.existsSync(FILE)) return;
 		const data = JSON.parse(fs.readFileSync(FILE, "utf8"));
-		if (Array.isArray(data.alerts)) state.alerts = data.alerts.slice(-MAX_ALERTS);
+		if (Array.isArray(data.alerts)) {
+			state.alerts = mergeOpenAlerts(data.alerts.slice(-MAX_ALERTS));
+		}
 		if (data.banned && typeof data.banned === "object" && !Array.isArray(data.banned)) {
 			state.banned = {};
 			for (const [rawKey, entry] of Object.entries(data.banned)) {
 				const type = entry?.type || (rawKey.includes(":") ? rawKey.split(":")[0] : "ip");
-				const value = entry?.value || (rawKey.includes(":") ? rawKey.slice(rawKey.indexOf(":") + 1) : rawKey);
+				const rawValue = entry?.value || (rawKey.includes(":") ? rawKey.slice(rawKey.indexOf(":") + 1) : rawKey);
+				const value = type === "ip" ? normalizeIp(rawValue) : rawValue;
 				const key = `${type}:${value}`;
 				state.banned[key] = { ...entry, type, value };
 			}
@@ -85,8 +148,11 @@ function load() {
 						typeof entry.ip === "string" &&
 						Number.isFinite(new Date(entry.at).getTime()),
 				)
+				.map((entry) => ({ ...entry, ip: normalizeIp(entry.ip) }))
 				.slice(-3000);
 		}
+		dirty = true;
+		saveNow();
 	} catch (err) {
 		console.error("No se pudo cargar security.json:", err.message);
 		state = { alerts: [], banned: {}, logins: [] };
@@ -94,7 +160,7 @@ function load() {
 }
 
 function clientIp(req) {
-	return String(req.ip || req.socket?.remoteAddress || "").slice(0, 64);
+	return normalizeIp(String(req.ip || req.socket?.remoteAddress || "").slice(0, 64));
 }
 
 function cookieValue(req, name) {
@@ -348,12 +414,17 @@ function publicEvent(event) {
 		userAgent: String(event.userAgent || "").slice(0, 200),
 		device: String(event.device || "").slice(0, 64),
 		username: String(event.username || "").slice(0, 32),
+		ip: normalizeIp(event.ip),
 	};
 }
 
 function appendAlertEvent(alert, event) {
 	if (event.staff && String(event.path || "").startsWith("/admin")) return;
 	const clean = publicEvent(event);
+	if (clean.ip) {
+		alert.ips = [...new Set([...(alert.ips || [alert.ip]), clean.ip].filter(Boolean))];
+		alert.ip = preferredIp(alert.ips) || alert.ip;
+	}
 	alert.events = [...(alert.events || []), clean].slice(-MAX_ALERT_EVENTS);
 	alert.lastSeen = clean.at;
 	alert.lastPath = clean.path;
@@ -368,7 +439,11 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 	const now = Date.now();
 	if ((dismissCooldowns.get(ip) || 0) > now) return null;
 	const open = state.alerts.find(
-		(alert) => alert.ip === ip && alert.status === "open",
+		(alert) =>
+			alert.status === "open" &&
+			((req._deviceId && alert.device === req._deviceId) ||
+				alert.ip === ip ||
+				(alert.ips || []).includes(ip)),
 	);
 	if (open) {
 		open.score = Math.max(open.score, score);
@@ -378,6 +453,9 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 		open.lastMethod = String(req.method || "").slice(0, 10);
 		open.bot = open.bot || bot;
 		open.device = open.device || req._deviceId || "";
+		open.username = open.username || req.user?.username || "";
+		open.ips = [...new Set([...(open.ips || [open.ip]), ip].filter(Boolean))];
+		open.ip = preferredIp(open.ips) || open.ip;
 		open.reasons = [...new Set([...(open.reasons || []), ...reasons])].slice(0, 12);
 		open.kind = alertKind(open.reasons, open.bot) || open.kind || "";
 		open.statusCode = Number(res.statusCode) || 0;
@@ -388,7 +466,8 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 
 	const alert = {
 		id: crypto.randomBytes(8).toString("hex"),
-		ip,
+		ip: preferredIp([ip]) || ip,
+		ips: [ip].filter(Boolean),
 		username: req.user?.username || "",
 		score,
 		count: 1,
@@ -452,6 +531,7 @@ function observe(req, res) {
 		userAgent: String(req.headers["user-agent"] || "").slice(0, 200),
 		device: req._deviceId || "",
 		username: req.user?.username || "",
+		ip,
 		staff: ["admin", "creator", "moderator"].includes(req.user?.role),
 	};
 	tracker.events.push(event);
@@ -503,7 +583,7 @@ export function recordSuccessfulLogin(
 	{ exempt = false, device = "", userAgent = "" } = {},
 ) {
 	const name = String(username || "").slice(0, 32);
-	const address = String(ip || "").trim();
+	const address = normalizeIp(ip);
 	if (!name || !net.isIP(address)) return { blocked: false };
 	const now = Date.now();
 	state.logins.push({
@@ -562,7 +642,8 @@ export function banTarget(type, value, { by = "sistema", reason = "", alertId = 
 	const raw = String(value || "").trim();
 	let clean = raw;
 	if (targetType === "ip") {
-		if (!net.isIP(raw)) return { error: "invalid-ip" };
+		clean = normalizeIp(raw);
+		if (!net.isIP(clean)) return { error: "invalid-ip" };
 	}
 	if (targetType === "device") {
 		if (!/^[a-f0-9]{16,64}$/i.test(raw)) return { error: "invalid-device" };
@@ -605,7 +686,7 @@ export function unbanTarget(key) {
 }
 
 export function unbanIp(ip) {
-	const raw = String(ip || "").trim();
+	const raw = normalizeIp(ip);
 	if (state.banned[`ip:${raw}`]) return unbanTarget(`ip:${raw}`);
 	if (state.banned[raw] && !raw.includes(":")) return unbanTarget(raw);
 	return { error: "notfound" };
@@ -624,10 +705,10 @@ export function listSecurityAlerts({ includeDismissed = false, limit = 200 } = {
 		.slice(0, limit)
 		.map((alert) => {
 			const keys = [
-				`ip:${alert.ip}`,
-				...(alert.device ? [`device:${alert.device}`] : []),
-				...(alert.username ? [`user:${String(alert.username).toLowerCase()}`] : []),
-			];
+				...new Set([alert.ip, ...(alert.ips || [])].filter(Boolean)).values(),
+			].map((value) => `ip:${value}`);
+			if (alert.device) keys.push(`device:${alert.device}`);
+			if (alert.username) keys.push(`user:${String(alert.username).toLowerCase()}`);
 			const bans = keys
 				.filter((key) => state.banned[key])
 				.map((key) => ({ key, ...state.banned[key] }));

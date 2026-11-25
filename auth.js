@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { getSettings } from "./settings.js";
 import { avatarInfo, deleteAvatar } from "./avatars.js";
+import { normalizeIp } from "./ip.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
@@ -774,7 +775,7 @@ export function getSession(req) {
 	const ttl = getSettings().sessionHours * 60 * 60 * 1000;
 	const extended = Math.min(now + ttl, session.absoluteExpires || now + ABSOLUTE_SESSION_MS);
 	if (extended > session.expires) session.expires = extended;
-	const ip = String(req.ip || req.socket?.remoteAddress || "").slice(0, 64);
+	const ip = normalizeIp(String(req.ip || req.socket?.remoteAddress || "").slice(0, 64));
 	const ua = String(req.headers["user-agent"] || "").slice(0, 200);
 	if (ip) session.ip = ip;
 	if (ua) session.userAgent = ua;

@@ -115,6 +115,7 @@ import {
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
+import { normalizeIp } from "./ip.js";
 import {
 	areFriends,
 	acceptFriendRequest,
@@ -327,14 +328,14 @@ function isLoopbackAddress(value) {
 
 function clientIp(req) {
 	const remote = String(req.socket?.remoteAddress || "");
-	if (req.ip) return req.ip.slice(0, 64);
+	if (req.ip) return normalizeIp(req.ip.slice(0, 64));
 	if (isLoopbackAddress(remote)) {
 		const forwarded = String(req.headers["x-forwarded-for"] || "")
 			.split(",")[0]
 			.trim();
-		if (forwarded) return forwarded.slice(0, 64);
+		if (forwarded) return normalizeIp(forwarded.slice(0, 64));
 	}
-	return remote.slice(0, 64);
+	return normalizeIp(remote.slice(0, 64));
 }
 
 function clientUa(req) {

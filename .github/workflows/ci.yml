@@ -17,7 +17,7 @@ jobs:
       - run: node scripts/patch-wisp.mjs
       - name: Comprobar sintaxis
         run: |
-          for f in server.js auth.js pages.js activity.js audit.js settings.js \
+          for f in server.js auth.js pages.js activity.js audit.js settings.js ip.js \
                    bookmarks.js backup.js metrics.js categories.js requests.js \
                    net-guard.js chat.js security.js roles.js traffic.js avatars.js friends.js public/index.js public/page-i18n.js \
                    public/chat.js public/chat-notify.js public/traffic.js public/account-icon.js; do

@@ -274,6 +274,7 @@ Medidas de seguridad incluidas:
 - los contadores de intentos se guardan en `data/login-attempts.json` y sobreviven a reinicios;
 - validación de `Origin`/`Referer` con HTTPS obligatorio y token CSRF en el login, con cookie `__Host-pw_csrf` bajo HTTPS;
 - `Host` restringido al dominio canónico (salvo `/healthz` local);
+- IPv4 e IPv6 del mismo dispositivo se unifican en las alertas y se muestra la IPv4;
 - cookie de dispositivo firmada con HMAC, usada para diagnóstico y bloqueos opcionales;
 - `/api/navigate-check` bloquea loopback, RFC1918, CGNAT, link-local, ULA y
   direcciones IPv4 mapeadas en IPv6, resolviendo DNS;
