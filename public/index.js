@@ -168,7 +168,7 @@ async function init() {
 	});
 	await controller.wait();
 
-	const urlWatcher = new $scramjetUtils.UrlWatcherPlugin(handleFrameUrl);
+	const urlWatcher = new $scramjetUtils.UrlWatcherPlugin(observeFrameUrl);
 	const catchEscapedLinks = new $scramjetUtils.CatchEscapedLinksPlugin(
 		(url) =>
 			new URL(
@@ -181,6 +181,17 @@ async function init() {
 		plugins: [urlWatcher, catchEscapedLinks],
 	});
 }
+
+setInterval(() => {
+	if (!frameElement || document.hidden) return;
+	let href = "";
+	try {
+		href = frameElement.contentWindow?.location?.href || "";
+	} catch {
+		return;
+	}
+	if (href) observeFrameUrl(href);
+}, 700);
 
 function looksLikeUrl(value) {
 	return (
@@ -251,6 +262,27 @@ function proxyInfo(raw) {
 	return { url: current, depth };
 }
 
+function externalUrl(raw) {
+	const info = proxyInfo(raw);
+	if (info.depth >= 1) return /^https?:\/\//i.test(info.url) ? info.url : "";
+	try {
+		const parsed = new URL(raw);
+		if (parsed.origin === location.origin) return "";
+		if (!/^https?:$/.test(parsed.protocol)) return "";
+		return parsed.href;
+	} catch {
+		return "";
+	}
+}
+
+let lastObservedExternal = "";
+function observeFrameUrl(raw) {
+	const external = externalUrl(raw) || String(raw || "");
+	if (!external || external === lastObservedExternal) return;
+	lastObservedExternal = external;
+	handleFrameUrl(raw);
+}
+
 function recoverNavigation(url) {
 	if (!url || recovering) return;
 	const now = Date.now();
@@ -277,31 +309,30 @@ function recoverNavigation(url) {
 
 function handleFrameUrl(url) {
 	currentUrl = url;
-	frameUrl.textContent = url;
-	frameUrl.title = url;
-	if (document.activeElement !== frameAddress) frameAddress.value = url;
-
-	if (recovering) return;
-
 	const info = proxyInfo(url);
-	if (info.depth >= 1 && /^https?:\/\//i.test(info.url)) {
-		lastExternal = info.url;
-		try {
-			lastHost = new URL(info.url).host;
-		} catch {}
-		updateActiveTab(info.url);
-	}
-
-	if (info.depth >= 1) {
-		checkPolicy(info.url).then((policy) => {
-			if (policy?.blocked) showBlocked(info.url, policy.message);
-		});
-	}
+	const external = info.depth <= 1 ? externalUrl(url) : "";
+	const display = external || url;
+	frameUrl.textContent = display;
+	frameUrl.title = display;
+	if (document.activeElement !== frameAddress) frameAddress.value = display;
 
 	// Si el proxy se ha anidado (varias capas de /~/sj/), volvemos a la URL real.
 	if (info.depth > 1) {
 		recoverNavigation(info.url);
 		return;
+	}
+	if (recovering) return;
+
+	if (external) {
+		lastExternal = external;
+		try {
+			lastHost = new URL(external).host;
+		} catch {}
+		updateActiveTab(external);
+		checkPolicy(external).then((policy) => {
+			if (policy?.blocked) showBlocked(external, policy.message);
+			else logActivity(external);
+		});
 	}
 
 	// Algunas webs acaban navegando a una ruta de nuestro dominio sin proxificar.
@@ -349,7 +380,16 @@ function hideError() {
 
 function tabLabel(url) {
 	try {
-		return new URL(url).hostname.replace(/^www\./, "");
+		const parsed = new URL(url);
+		const host = parsed.hostname.replace(/^www\./, "");
+		let pathname = "";
+		try {
+			pathname = decodeURIComponent(parsed.pathname);
+		} catch {
+			pathname = parsed.pathname;
+		}
+		const parts = pathname.split("/").filter(Boolean).slice(0, 2);
+		return parts.length ? `${host}/${parts.join("/")}` : host;
 	} catch {
 		return "Nueva pestaña";
 	}
@@ -370,6 +410,7 @@ function renderTabs() {
 	for (const tab of tabs) {
 		const item = document.createElement("div");
 		item.className = `tab${tab.id === activeTab ? " active" : ""}`;
+		item.title = tab.url || tab.label;
 		const label = document.createElement("span");
 		label.textContent = tab.label;
 		item.append(label);
