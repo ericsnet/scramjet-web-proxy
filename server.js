@@ -46,9 +46,11 @@ import {
 	revokeUserSessions,
 	isIpRateLimited,
 	isAccountIpRateLimited,
+	isRateLimited,
 	recordIpFailure,
 	recordAccountIpFailure,
 	flushSessions,
+	flushAttempts,
 } from "./auth.js";
 import {
 	loginPage,
@@ -219,7 +221,7 @@ const nm = (pkg, sub) => path.join(__dirname, "node_modules/@mercuryworkshop", p
 const execFileAsync = promisify(execFile);
 
 const app = express();
-app.set("trust proxy", true);
+app.set("trust proxy", "loopback");
 app.disable("x-powered-by");
 app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(express.json({ limit: "64kb" }));
@@ -313,11 +315,26 @@ initCategories().then(() => {
 	}
 }).catch((err) => console.error("Categorías:", err.message));
 
-function clientIp(req) {	return String(
-		req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-			req.socket?.remoteAddress ||
-			"",
-	).slice(0, 64);
+function isLoopbackAddress(value) {
+	const address = String(value || "");
+	return (
+		address === "::1" ||
+		address === "127.0.0.1" ||
+		address.startsWith("127.") ||
+		address === "::ffff:127.0.0.1"
+	);
+}
+
+function clientIp(req) {
+	const remote = String(req.socket?.remoteAddress || "");
+	if (req.ip) return req.ip.slice(0, 64);
+	if (isLoopbackAddress(remote)) {
+		const forwarded = String(req.headers["x-forwarded-for"] || "")
+			.split(",")[0]
+			.trim();
+		if (forwarded) return forwarded.slice(0, 64);
+	}
+	return remote.slice(0, 64);
 }
 
 function clientUa(req) {
@@ -861,13 +878,14 @@ function checkUrlPolicy(user, value) {
 const LOGIN_ERRORS = {
 	1: "Usuario o contraseña incorrectos.",
 	password: "La contraseña no es correcta.",
-	rate: "Demasiados intentos fallidos. Espera un minuto.",
+	rate: "Demasiados intentos fallidos. Espera unos minutos.",
 	blocked: "Esta cuenta está bloqueada. Contacta con el administrador.",
 	temporary: "Esta cuenta está bloqueada temporalmente. Contacta con el administrador.",
 	maintenance: "El proxy está en mantenimiento. Solo los administradores pueden entrar.",
 };
 
 const CSRF_COOKIE = "pw_csrf";
+const HOST_CSRF_COOKIE = "__Host-pw_csrf";
 
 function cookieValue(req, name) {
 	for (const part of String(req.headers.cookie || "").split(";")) {
@@ -885,11 +903,12 @@ function cookieValue(req, name) {
 }
 
 function ensureCsrf(req, res) {
-	let token = cookieValue(req, CSRF_COOKIE);
+	let token = cookieValue(req, HOST_CSRF_COOKIE) || cookieValue(req, CSRF_COOKIE);
 	if (!/^[a-f0-9]{48}$/.test(token)) {
 		token = crypto.randomBytes(24).toString("hex");
 		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-		const cookie = `${CSRF_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`;
+		const name = secure ? HOST_CSRF_COOKIE : CSRF_COOKIE;
+		const cookie = `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`;
 		try {
 			res.append("Set-Cookie", cookie);
 		} catch {
@@ -900,7 +919,7 @@ function ensureCsrf(req, res) {
 }
 
 function validCsrf(req) {
-	const token = cookieValue(req, CSRF_COOKIE);
+	const token = cookieValue(req, HOST_CSRF_COOKIE) || cookieValue(req, CSRF_COOKIE);
 	const provided = String(req.body.csrf || "");
 	if (!/^[a-f0-9]{48}$/.test(token) || !/^[a-f0-9]{48}$/.test(provided)) return false;
 	return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(provided));
@@ -987,7 +1006,7 @@ app.get("/page-i18n.js", (req, res) => {
 	res.type("application/javascript").sendFile(path.join(__dirname, "public/page-i18n.js"));
 });
 
-app.get("/api/config", (req, res) => {
+app.get("/api/config", requireAuth, (req, res) => {
 	const settings = getSettings();
 	const session = getSession(req);
 	const payload = {
@@ -1120,7 +1139,7 @@ app.get("/denied", (req, res) => {
 	);
 });
 
-app.post("/api/login", sameOrigin, (req, res) => {
+app.post("/api/login", sameOrigin, async (req, res) => {
 	if (!validCsrf(req)) {
 		return sendHttpError(req, res, 403, "Token de seguridad no válido", "Recarga el login e inténtalo de nuevo.");
 	}
@@ -1130,7 +1149,11 @@ app.post("/api/login", sameOrigin, (req, res) => {
 	const settings = getSettings();
 	const ip = clientIp(req);
 
-	if (isIpRateLimited(ip) || isAccountIpRateLimited(ip, username)) {
+	if (
+		isIpRateLimited(ip) ||
+		isAccountIpRateLimited(ip, username) ||
+		isRateLimited(username)
+	) {
 		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
@@ -1138,7 +1161,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 			ip,
 			userAgent: clientUa(req),
 		});
-		res.set("Retry-After", "900");
+		res.set("Retry-After", "600");
 		const wantsJson =
 			req.is("application/json") ||
 			String(req.get("accept") || "").includes("application/json");
@@ -1153,7 +1176,7 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		);
 	}
 
-	const user = verifyLogin(username, password);
+	const user = await verifyLogin(username, password);
 	if (!user) {
 		recordFailedLogin(username);
 		recordIpFailure(ip);
@@ -1891,7 +1914,7 @@ app.post("/api/account/icon/delete", sameOrigin, (req, res) => {
 	res.redirect(303, "/account?ok=icon-removed");
 });
 
-app.post("/api/account/password", sameOrigin, (req, res) => {
+app.post("/api/account/password", sameOrigin, async (req, res) => {
 	const settings = getSettings();
 	if (
 		!settings.allowUserPasswordChange &&
@@ -1904,7 +1927,7 @@ app.post("/api/account/password", sameOrigin, (req, res) => {
 	const password = String(req.body.password || "");
 	const confirm = String(req.body.confirm || "");
 
-	if (!verifyUserPassword(req.user.username, current)) {
+	if (!(await verifyUserPassword(req.user.username, current))) {
 		return res.redirect(303, "/account?error=current");
 	}
 	if (password !== confirm) return res.redirect(303, "/account?error=match");
@@ -2613,10 +2636,10 @@ app.get("/admin/system", requireAdmin, async (req, res) => {
 	);
 });
 
-app.post("/api/admin/backup/download", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/backup/download", requireAdmin, sameOrigin, async (req, res) => {
 	const name = String(req.body.name || "");
 	const password = String(req.body.password || "");
-	if (!verifyUserPassword(req.user.username, password)) {
+	if (!(await verifyUserPassword(req.user.username, password))) {
 		return res.status(403).type("text/plain").send("Contraseña incorrecta.");
 	}
 	const full = backupPath(name);
@@ -2631,14 +2654,14 @@ app.post("/api/admin/backup/create", requireAdmin, sameOrigin, (req, res) => {
 	res.redirect(303, "/admin/system?ok=backup");
 });
 
-app.post("/api/admin/backup/restore", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/backup/restore", requireAdmin, sameOrigin, async (req, res) => {
 	const name = String(req.body.name || "");
 	const password = String(req.body.password || "");
 	const confirm = String(req.body.confirm || "");
 	if (confirm !== "RESTAURAR") {
 		return res.status(400).type("html").send("Confirmación incorrecta. Escribe RESTAURAR.");
 	}
-	if (!verifyUserPassword(req.user.username, password)) {
+	if (!(await verifyUserPassword(req.user.username, password))) {
 		return res.status(403).type("html").send("Contraseña incorrecta.");
 	}
 	const result = restoreBackup(name);
@@ -2927,6 +2950,7 @@ function shutdown() {
 	flushActivity();
 	flushAudit();
 	flushSessions();
+	flushAttempts();
 	flushChat();
 	flushFriends();
 	flushSecurity();
@@ -2936,6 +2960,7 @@ process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
 server.on("upgrade", (req, socket, head) => {
+	req.ip = clientIp(req);
 	if (!req.url || !req.url.startsWith("/wisp/")) {
 		socket.destroy();
 		return;

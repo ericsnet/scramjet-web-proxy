@@ -11,11 +11,7 @@ let bytesIn = 0;
 let bytesOut = 0;
 
 function clientIp(req) {
-	return String(
-		req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-			req.socket?.remoteAddress ||
-			"",
-	).slice(0, 64);
+	return String(req.ip || req.socket?.remoteAddress || "").slice(0, 64);
 }
 
 function hostEntry(host) {

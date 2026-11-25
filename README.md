@@ -248,6 +248,7 @@ usuario puede vaciar su propio historial.
 
 - `data/users.json`: usuarios, hashes y estado.
 - `data/sessions.json`: sesiones con tokens hasheados.
+- `data/login-attempts.json`: contadores persistentes de intentos de login por cuenta, IP y cuenta+IP.
 - `data/settings.json`: ajustes.
 - `data/activity.json`: historial de actividad.
 - `data/audit.json`: auditoría.
@@ -267,8 +268,11 @@ Medidas de seguridad incluidas:
 
 - nombres de usuario normalizados (Unicode NFKC, espacios y mayúsculas) antes de
   autenticar y aplicar políticas;
-- límite de 60 intentos por minuto y IP, 10 intentos por cuenta+IP cada 15 minutos y error de login genérico;
-- validación de `Origin`/`Referer` con HTTPS obligatorio y token CSRF en el login;
+- `trust proxy` limitado a loopback: la IP real se toma de `req.ip` y no se confía en `X-Forwarded-For` de conexiones directas;
+- verificación de contraseñas con `scrypt` asíncrono para no bloquear el event loop;
+- límite de 60 intentos por minuto y IP, 10 intentos por cuenta+IP cada 15 minutos, bloqueo por cuenta tras 8 fallos y error de login genérico;
+- los contadores de intentos se guardan en `data/login-attempts.json` y sobreviven a reinicios;
+- validación de `Origin`/`Referer` con HTTPS obligatorio y token CSRF en el login, con cookie `__Host-pw_csrf` bajo HTTPS;
 - `Host` restringido al dominio canónico (salvo `/healthz` local);
 - cookie de dispositivo firmada con HMAC, usada para diagnóstico y bloqueos opcionales;
 - `/api/navigate-check` bloquea loopback, RFC1918, CGNAT, link-local, ULA y

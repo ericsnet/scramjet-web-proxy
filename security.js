@@ -94,11 +94,7 @@ function load() {
 }
 
 function clientIp(req) {
-	return String(
-		req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-			req.socket?.remoteAddress ||
-			"",
-	).slice(0, 64);
+	return String(req.ip || req.socket?.remoteAddress || "").slice(0, 64);
 }
 
 function cookieValue(req, name) {

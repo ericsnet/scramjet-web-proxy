@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { getSettings } from "./settings.js";
 import { avatarInfo, deleteAvatar } from "./avatars.js";
 
@@ -9,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
+const ATTEMPTS_FILE = path.join(DATA_DIR, "login-attempts.json");
 const ABSOLUTE_SESSION_MS = 7 * 24 * 60 * 60 * 1000; // 7 días como máximo
 
 export const SESSION_COOKIE = "__Host-pw_session";
@@ -18,6 +20,7 @@ const sessions = new Map(); // tokenHash -> { id, username, createdAt, lastSeenA
 const loginAttempts = new Map(); // username -> { count, resetAt }
 const ipAttempts = new Map(); // ip -> { count, resetAt }
 const accountIpAttempts = new Map(); // ip:username -> { count, resetAt }
+const scryptAsync = promisify(crypto.scrypt);
 const ACCOUNT_IP_LIMIT = 10;
 const ACCOUNT_IP_WINDOW_MS = 15 * 60 * 1000;
 const lastSeenWrite = new Map(); // username -> timestamp
@@ -30,10 +33,10 @@ function hashPassword(password) {
 	return `scrypt:${salt}:${hash}`;
 }
 
-function checkPassword(password, stored) {
+async function checkPassword(password, stored) {
 	const [scheme, salt, hash] = String(stored || "").split(":");
 	if (scheme !== "scrypt" || !salt || !hash) return false;
-	const candidate = crypto.scryptSync(password, salt, 64);
+	const candidate = await scryptAsync(password, salt, 64);
 	const expected = Buffer.from(hash, "hex");
 	return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
@@ -475,13 +478,13 @@ export function setMustChangePassword(username, value) {
 	return { ok: true };
 }
 
-export function verifyLogin(username, password) {
+export async function verifyLogin(username, password) {
 	const user = getUser(username);
 	if (!user) {
-		checkPassword(password, DUMMY_HASH);
+		await checkPassword(password, DUMMY_HASH);
 		return null;
 	}
-	if (!checkPassword(password, user.password)) return null;
+	if (!(await checkPassword(password, user.password))) return null;
 	return {
 		username: user.username,
 		role: user.role,
@@ -492,9 +495,9 @@ export function verifyLogin(username, password) {
 	};
 }
 
-export function verifyUserPassword(username, password) {
+export async function verifyUserPassword(username, password) {
 	const user = getUser(username);
-	return !!user && checkPassword(password, user.password);
+	return !!user && (await checkPassword(password, user.password));
 }
 
 export function recordLoginSuccess(username, ip = "") {
@@ -771,11 +774,7 @@ export function getSession(req) {
 	const ttl = getSettings().sessionHours * 60 * 60 * 1000;
 	const extended = Math.min(now + ttl, session.absoluteExpires || now + ABSOLUTE_SESSION_MS);
 	if (extended > session.expires) session.expires = extended;
-	const ip = String(
-		req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-			req.socket?.remoteAddress ||
-			"",
-	).slice(0, 64);
+	const ip = String(req.ip || req.socket?.remoteAddress || "").slice(0, 64);
 	const ua = String(req.headers["user-agent"] || "").slice(0, 200);
 	if (ip) session.ip = ip;
 	if (ua) session.userAgent = ua;
@@ -819,6 +818,75 @@ export function flushSessions() {
 	saveSessionsNow();
 }
 
+/* --------------------- persistencia de intentos de login --------------------- */
+
+let attemptsDirty = false;
+let attemptsTimer = null;
+
+function saveAttemptsNow() {
+	if (!attemptsDirty) return;
+	try {
+		fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+		const tmp = `${ATTEMPTS_FILE}.tmp`;
+		fs.writeFileSync(
+			tmp,
+			JSON.stringify(
+				{
+					accounts: [...loginAttempts.entries()],
+					ips: [...ipAttempts.entries()],
+					accountIps: [...accountIpAttempts.entries()],
+				},
+				null,
+				2,
+			),
+			{ mode: 0o600 },
+		);
+		fs.renameSync(tmp, ATTEMPTS_FILE);
+		attemptsDirty = false;
+	} catch (error) {
+		console.error("No se pudo guardar login-attempts.json:", error.message);
+	}
+}
+
+function scheduleAttemptsSave() {
+	attemptsDirty = true;
+	if (attemptsTimer) return;
+	attemptsTimer = setTimeout(() => {
+		attemptsTimer = null;
+		saveAttemptsNow();
+	}, 500);
+	attemptsTimer.unref?.();
+}
+
+function loadAttempts() {
+	try {
+		if (!fs.existsSync(ATTEMPTS_FILE)) return;
+		const data = JSON.parse(fs.readFileSync(ATTEMPTS_FILE, "utf8"));
+		const now = Date.now();
+		const restore = (target, entries) => {
+			for (const [key, value] of Array.isArray(entries) ? entries : []) {
+				if (!key || !value || !Number.isFinite(Number(value.resetAt))) continue;
+				if (Number(value.resetAt) <= now) continue;
+				target.set(String(key), {
+					count: Math.max(1, Number(value.count) || 1),
+					resetAt: Number(value.resetAt),
+				});
+			}
+		};
+		restore(loginAttempts, data.accounts);
+		restore(ipAttempts, data.ips);
+		restore(accountIpAttempts, data.accountIps);
+	} catch (error) {
+		console.error("No se pudo cargar login-attempts.json:", error.message);
+	}
+}
+
+export function flushAttempts() {
+	saveAttemptsNow();
+}
+
+loadAttempts();
+
 /* ------------------------------ rate limiting ------------------------------ */
 
 export function isRateLimited(username) {
@@ -828,6 +896,7 @@ export function isRateLimited(username) {
 	if (!entry) return false;
 	if (entry.resetAt < Date.now()) {
 		loginAttempts.delete(key);
+		scheduleAttemptsSave();
 		return false;
 	}
 	return entry.count >= settings.maxLoginAttempts;
@@ -843,6 +912,7 @@ export function recordFailedLogin(username) {
 	} else {
 		entry.count += 1;
 	}
+	scheduleAttemptsSave();
 }
 
 export function isIpRateLimited(ip) {
@@ -852,6 +922,7 @@ export function isIpRateLimited(ip) {
 	if (!entry) return false;
 	if (entry.resetAt < Date.now()) {
 		ipAttempts.delete(ip);
+		scheduleAttemptsSave();
 		return false;
 	}
 	return entry.count >= Math.max(5, Number(settings.loginAttemptsPerMinute) || 60);
@@ -863,6 +934,7 @@ export function isAccountIpRateLimited(ip, username) {
 	if (!entry) return false;
 	if (entry.resetAt < Date.now()) {
 		accountIpAttempts.delete(key);
+		scheduleAttemptsSave();
 		return false;
 	}
 	return entry.count >= ACCOUNT_IP_LIMIT;
@@ -879,6 +951,7 @@ export function recordAccountIpFailure(ip, username) {
 	} else {
 		entry.count += 1;
 	}
+	scheduleAttemptsSave();
 }
 
 export function recordIpFailure(ip) {
@@ -891,14 +964,19 @@ export function recordIpFailure(ip) {
 	} else {
 		entry.count += 1;
 	}
+	scheduleAttemptsSave();
 }
 
 export function clearIpFailures(ip) {
-	if (ip) ipAttempts.delete(ip);
+	if (ip) {
+		ipAttempts.delete(ip);
+		scheduleAttemptsSave();
+	}
 }
 
 export function clearFailedLogins(username) {
 	loginAttempts.delete(String(username || "").toLowerCase());
+	scheduleAttemptsSave();
 }
 
 setInterval(() => {
@@ -910,7 +988,10 @@ setInterval(() => {
 			changed = true;
 		}
 	}
-	for (const [key, e] of loginAttempts) if (e.resetAt < now) loginAttempts.delete(key);
-	for (const [key, e] of ipAttempts) if (e.resetAt < now) ipAttempts.delete(key);
+	let attemptsChanged = false;
+	for (const [key, e] of loginAttempts) if (e.resetAt < now) { loginAttempts.delete(key); attemptsChanged = true; }
+	for (const [key, e] of ipAttempts) if (e.resetAt < now) { ipAttempts.delete(key); attemptsChanged = true; }
+	for (const [key, e] of accountIpAttempts) if (e.resetAt < now) { accountIpAttempts.delete(key); attemptsChanged = true; }
+	if (attemptsChanged) scheduleAttemptsSave();
 	if (changed) scheduleSessionsSave();
 }, 10 * 60 * 1000).unref();
