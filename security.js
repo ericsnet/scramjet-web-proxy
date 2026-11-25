@@ -573,6 +573,18 @@ function browserName(userAgent) {
 	return value ? "otro" : "";
 }
 
+export function loginSeenBefore(username, device = "", ip = "") {
+	const name = String(username || "").toLowerCase();
+	const address = normalizeIp(ip || "");
+	const cleanDevice = String(device || "");
+	return state.logins.some(
+		(entry) =>
+			String(entry.username || "").toLowerCase() === name &&
+			((cleanDevice && entry.device === cleanDevice) ||
+				(address && normalizeIp(entry.ip || "") === address)),
+	);
+}
+
 export function recordSuccessfulLogin(
 	username,
 	ip,

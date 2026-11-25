@@ -167,6 +167,7 @@ import {
 	isUserBanned,
 	isDeviceBannedFor,
 	dismissAlert,
+	loginSeenBefore,
 	recordSuccessfulLogin,
 	flushSecurity,
 } from "./security.js";
@@ -1504,6 +1505,16 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 		return res.redirect(303, "/mfa");
 	}
 
+	if (!loginSeenBefore(user.username, req._deviceId || "", ip)) {
+		addAudit({
+			actor: user.username,
+			action: "login.new_device",
+			detail: "dispositivo o IP nuevos",
+			ip,
+			userAgent: clientUa(req),
+		});
+	}
+
 	recordSuccessfulLogin(user.username, ip, {
 		exempt: user.role === "creator",
 		device: req._deviceId || "",
@@ -1617,6 +1628,15 @@ app.post("/api/login/mfa", sameOrigin, async (req, res) => {
 
 	destroyMfaPending(req);
 	const ip = clientIp(req);
+	if (!loginSeenBefore(user.username, req._deviceId || "", ip)) {
+		addAudit({
+			actor: user.username,
+			action: "login.new_device",
+			detail: "dispositivo o IP nuevos",
+			ip,
+			userAgent: clientUa(req),
+		});
+	}
 	recordSuccessfulLogin(user.username, ip, {
 		exempt: user.role === "creator",
 		device: req._deviceId || "",
