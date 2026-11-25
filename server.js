@@ -1160,7 +1160,7 @@ app.get("/page-i18n.js", (req, res) => {
 });
 
 app.get("/global-search.js", (req, res) => {
-	res.set("Cache-Control", "public, max-age=3600");
+	res.set("Cache-Control", "no-store, no-cache, must-revalidate");
 	res.type("application/javascript").sendFile(path.join(__dirname, "public/global-search.js"));
 });
 

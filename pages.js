@@ -925,7 +925,7 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false } = {}) 
 <title>Inici - Classroom</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <script src="/page-i18n.js" defer></script>
-<script src="/global-search.js" defer></script>
+<script src="/global-search.js?v=2" defer></script>
 <style>${CSS}</style>
 </head>
 <body>

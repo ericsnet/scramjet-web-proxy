@@ -5,6 +5,7 @@
 	const style = document.createElement("style");
 	style.textContent = `
 	.pw-search-backdrop{position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.62);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 24px}
+	.pw-search-backdrop[hidden]{display:none!important}
 	.pw-search-box{width:min(680px,100%);background:#0f172a;border:1px solid #243449;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden}
 	.pw-search-input{width:100%;box-sizing:border-box;border:0;border-bottom:1px solid #243449;background:#111c2e;color:#e5edf7;font:inherit;font-size:16px;padding:16px 18px;outline:none}
 	.pw-search-results{max-height:min(58vh,520px);overflow:auto;padding:8px}
@@ -41,6 +42,7 @@
 
 	function hide() {
 		backdrop.hidden = true;
+		backdrop.style.display = "none";
 		input.value = "";
 		results.replaceChildren();
 		items = [];
@@ -49,6 +51,7 @@
 
 	function show() {
 		backdrop.hidden = false;
+		backdrop.style.display = "flex";
 		input.focus();
 		input.select();
 		if (!input.value.trim()) render([], "Escribe al menos 2 caracteres.");
