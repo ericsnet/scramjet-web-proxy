@@ -8,7 +8,8 @@
 		"dev": "node server.js",
 		"start": "node server.js",
 		"security:unban": "node scripts/security-unban.mjs",
-		"postinstall": "node scripts/patch-wisp.mjs"
+		"postinstall": "node scripts/patch-wisp.mjs",
+		"mfa:reset": "node scripts/mfa-reset.mjs"
 	},
 	"keywords": [],
 	"author": "",

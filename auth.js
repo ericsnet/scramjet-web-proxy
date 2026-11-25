@@ -78,6 +78,7 @@ function migrateUsers() {
 			unblockOverrides: [],
 			lang: "",
 			schedule: null,
+			mfa: null,
 		};
 		for (const [key, value] of Object.entries(defaults)) {
 			if (user[key] === undefined) {
@@ -166,6 +167,7 @@ export function listUsers() {
 				unblockOverrides: Array.isArray(u.unblockOverrides) ? u.unblockOverrides : [],
 				lang: u.lang || "",
 				schedule: u.schedule || null,
+				mfaEnabled: !!u.mfa?.enabled,
 				mustChangePassword: !!u.mustChangePassword,
 				createdAt: u.createdAt,
 				lastLoginAt: u.lastLoginAt || null,
@@ -196,6 +198,25 @@ export function getUser(username) {
 		effectivelyBlocked: !!user.blocked || !!until,
 		icon: avatarInfo(name),
 	};
+}
+
+export function getMfa(username) {
+	const user = getUser(username);
+	return user?.mfa ? JSON.parse(JSON.stringify(user.mfa)) : null;
+}
+
+export function setMfa(username, value) {
+	const name = Object.keys(db.users).find(
+		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
+	);
+	if (!name) return { error: "notfound" };
+	db.users[name].mfa = value || null;
+	save();
+	return { ok: true };
+}
+
+export function clearMfa(username) {
+	return setMfa(username, null);
 }
 
 export function countAdmins() {

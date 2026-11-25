@@ -1089,6 +1089,58 @@ export function loginPage({ next = "/", error = "", maintenance = "", csrf = "" 
 	return shell("Inici - Classroom", body);
 }
 
+export function mfaPage({ next = "/", error = "", csrf = "" } = {}) {
+	const body = `<div class="card login-card">
+  <div class="login-logo">${LOGO}</div>
+  <h1>Verificación en dos pasos</h1>
+  <p class="muted">Introduce el código de 6 dígitos de tu app de autenticación o uno de tus códigos de recuperación.</p>
+  <form method="post" action="/api/login/mfa">
+    <input type="hidden" name="next" value="${esc(next)}">
+    <input type="hidden" name="csrf" value="${esc(csrf)}">
+    <label for="mfa-code">Código</label>
+    <input id="mfa-code" name="code" inputmode="text" autocomplete="one-time-code" placeholder="123456 o ABCD-EFGH" required autofocus>
+    <button class="primary" type="submit">Verificar</button>
+  </form>
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <p class="hint"><a href="/login">Volver a iniciar sesión</a></p>
+</div>`;
+	return shell("Verificación · Proxy Web", body);
+}
+
+export function mfaSetupPage({ user, secret = "", uri = "", error = "" } = {}) {
+	const body = `
+${topbar(user)}
+<div class="card" style="max-width:620px;margin:0 auto">
+  <h1>Activar MFA</h1>
+  <p class="muted">Añade esta cuenta a tu app de autenticación. Puedes escanear el enlace o introducir la clave manualmente.</p>
+  <label for="mfa-secret">Clave secreta</label>
+  <input id="mfa-secret" value="${esc(secret)}" readonly onclick="this.select()">
+  <p class="hint">En la app: “Añadir cuenta” → “Introducir clave de configuración”. Tipo: basado en tiempo. Dígitos: 6. Periodo: 30 s.</p>
+  <p class="hint"><a href="${esc(uri)}">Abrir en la app de autenticación</a></p>
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <form method="post" action="/api/account/mfa/enable">
+    <label for="mfa-confirm">Código de 6 dígitos que muestra la app</label>
+    <input id="mfa-confirm" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required>
+    <button class="primary" type="submit">Confirmar y activar</button>
+  </form>
+  <p class="hint"><a href="/account">Cancelar</a></p>
+</div>`;
+	return shell("Activar MFA · Proxy Web", body);
+}
+
+export function mfaRecoveryPage({ user, codes = [], title = "Códigos de recuperación", message = "" } = {}) {
+	const body = `
+${topbar(user)}
+<div class="card" style="max-width:620px;margin:0 auto">
+  <h1>${esc(title)}</h1>
+  <p class="muted">${esc(message)}</p>
+  <pre class="panel" style="font-size:16px;line-height:1.7">${esc(codes.join("\n"))}</pre>
+  <p class="hint">Cada código se puede usar una sola vez. Guárdalos en un lugar seguro y sin conexión.</p>
+  <a class="small primary-small" href="/account">He guardado los códigos</a>
+</div>`;
+	return shell("Códigos de recuperación · Proxy Web", body);
+}
+
 const HTTP_ERRORS = {
 	400: ["Solicitud no válida", "La petición no tiene el formato esperado.", "🧩"],
 	401: ["Necesitas iniciar sesión", "Tu sesión no es válida o ha caducado.", "🔐"],
@@ -1147,6 +1199,7 @@ export function accountPage({
 	sessions = [],
 	currentId = "",
 	allowPasswordChange = true,
+	mfa = {},
 	forced = false,
 	notice = "",
 	error = "",
@@ -1215,6 +1268,31 @@ ${
   </form>
   <p class="hint">Mínimo 8 caracteres. Al cambiarla se cierran las demás sesiones de tu usuario.</p>`
 			: '<p class="warn">El administrador ha desactivado el cambio de contraseña.</p>'
+	}
+  <h2>Verificación en dos pasos (MFA)</h2>
+  ${
+		mfa.enabled
+			? `<p class="msg ok">MFA activada. Códigos de recuperación disponibles: ${esc(mfa.recoveryRemaining ?? 0)}.</p>
+  <div class="grid">
+    <form method="post" action="/api/account/mfa/recovery">
+      <label for="mfa-recovery-current">Contraseña actual</label>
+      <input id="mfa-recovery-current" name="current" type="password" autocomplete="current-password" required>
+      <label for="mfa-recovery-code">Código actual de 6 dígitos</label>
+      <input id="mfa-recovery-code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required>
+      <button class="small" type="submit">Regenerar códigos de recuperación</button>
+    </form>
+    <form method="post" action="/api/account/mfa/disable" onsubmit="return confirm('¿Desactivar la verificación en dos pasos?')">
+      <label for="mfa-off-current">Contraseña actual</label>
+      <input id="mfa-off-current" name="current" type="password" autocomplete="current-password" required>
+      <label for="mfa-off-code">Código actual de 6 dígitos</label>
+      <input id="mfa-off-code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required>
+      <button class="small danger" type="submit">Desactivar MFA</button>
+    </form>
+  </div>`
+			: `<p class="muted">Añade un segundo factor con una app de autenticación (Google Authenticator, Aegis, 1Password, etc.). No depende de ningún servicio externo.</p>
+  <form method="post" action="/api/account/mfa/start">
+    <button class="primary" type="submit">Activar MFA</button>
+  </form>`
 	}
   <p class="hint">El administrador puede ver las direcciones y búsquedas que realices con el proxy.</p>
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
@@ -1948,6 +2026,7 @@ export function adminPage({
       </form>
       ${roleForm}
       ${mustChangeForm}
+      ${u.mfaEnabled ? `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/mfa-reset" onsubmit="return confirm('¿Resetear la MFA de este usuario?')"><button class="small danger" type="submit">Resetear MFA</button></form>` : ""}
       ${tempForm}
       ${deleteForm}
     </div>
@@ -2741,6 +2820,8 @@ ${adminTabs("settings")}
       </div>
     </div>
     <label class="check"><input type="checkbox" name="allowUserPasswordChange"${settings.allowUserPasswordChange ? " checked" : ""}> Permitir que los usuarios cambien su contraseña (los admins siempre pueden)</label>
+    <label class="check"><input type="checkbox" name="requireMfaForStaff"${settings.requireMfaForStaff ? " checked" : ""}> Exigir verificación en dos pasos (MFA) a administradores y moderadores</label>
+    <p class="hint">Actívalo después de configurar tu propia MFA. Si te quedas fuera, usa <code>npm run mfa:reset -- usuario</code>.</p>
   </div>
 
   <div class="section settings-block" id="settings-activity" data-settings-search="actividad historial navegación usuarios límites">

@@ -16,6 +16,7 @@ export const DEFAULTS = Object.freeze({
 	maxLoginAttempts: 8,
 	loginAttemptsPerMinute: 60,
 	lockoutMinutes: 10,
+	requireMfaForStaff: false,
 	chatEnabled: true,
 	chatTitle: "Chat de usuarios",
 	chatWelcome: "Escribe un mensaje. Sé respetuoso.",
@@ -219,6 +220,12 @@ function normalize(input, silent = false) {
 			input.proxyAllowStaffBrowsing === true ||
 			input.proxyAllowStaffBrowsing === "1" ||
 			input.proxyAllowStaffBrowsing === "on";
+	}
+	if (input.requireMfaForStaff !== undefined) {
+		next.requireMfaForStaff =
+			input.requireMfaForStaff === true ||
+			input.requireMfaForStaff === "1" ||
+			input.requireMfaForStaff === "on";
 	}
 
 	if (input.chatEnabled !== undefined) {

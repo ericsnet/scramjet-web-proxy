@@ -34,6 +34,7 @@ import {
 	setBlockMessage,
 	setNotes,
 	setMustChangePassword,
+	clearMfa,
 	setUserBlockedSites,
 	setUserSchedule,
 	isWithinSchedule,
@@ -57,6 +58,9 @@ import {
 } from "./auth.js";
 import {
 	loginPage,
+	mfaPage,
+	mfaSetupPage,
+	mfaRecoveryPage,
 	accountPage,
 	errorPage,
 	adminPage,
@@ -108,6 +112,16 @@ import {
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
 import { listTemplates, addTemplate, deleteTemplate } from "./templates.js";
 import { listSchedules, addSchedule, deleteSchedule, activeJob } from "./schedules.js";
+import {
+	mfaStatus,
+	enrollmentInfo,
+	startEnrollment,
+	confirmEnrollment,
+	disableMfa,
+	verifySecondFactor,
+	regenerateRecoveryCodes,
+	isMfaEnabled,
+} from "./mfa.js";
 import {
 	listBookmarks,
 	addBookmark,
@@ -794,6 +808,74 @@ function createBlockFlash(message) {
 	return token;
 }
 
+const MFA_COOKIE = "__Host-pw_mfa";
+const LEGACY_MFA_COOKIE = "pw_mfa";
+const MFA_PENDING_MS = 10 * 60 * 1000;
+const mfaPending = new Map();
+
+function hashMfaToken(token) {
+	return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+function mfaCookie(req, token, maxAge = MFA_PENDING_MS / 1000) {
+	const secure = !!req.secure;
+	const name = secure ? MFA_COOKIE : LEGACY_MFA_COOKIE;
+	return `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
+}
+
+function clearMfaCookie(req) {
+	const secure = !!req.secure;
+	const suffix = secure ? "; Secure" : "";
+	return [
+		`${MFA_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${suffix}`,
+		`${LEGACY_MFA_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${suffix}`,
+	];
+}
+
+function createMfaPending(req, username, next) {
+	const token = crypto.randomBytes(32).toString("hex");
+	mfaPending.set(hashMfaToken(token), {
+		username,
+		next: safeNext(next),
+		ip: clientIp(req),
+		userAgent: clientUa(req),
+		attempts: 0,
+		expires: Date.now() + MFA_PENDING_MS,
+	});
+	return token;
+}
+
+function readMfaPending(req) {
+	const cookies = {};
+	for (const part of String(req.headers.cookie || "").split(";")) {
+		const [key, ...rest] = part.trim().split("=");
+		if (key) cookies[key] = rest.join("=");
+	}
+	const token = cookies[MFA_COOKIE] || cookies[LEGACY_MFA_COOKIE];
+	if (!token) return null;
+	const key = hashMfaToken(token);
+	const entry = mfaPending.get(key);
+	if (!entry) return null;
+	if (entry.expires <= Date.now()) {
+		mfaPending.delete(key);
+		return null;
+	}
+	return { token, key, entry };
+}
+
+function destroyMfaPending(req) {
+	const pending = readMfaPending(req);
+	if (pending) mfaPending.delete(pending.key);
+	return pending;
+}
+
+setInterval(() => {
+	const now = Date.now();
+	for (const [key, entry] of mfaPending) {
+		if (entry.expires <= now) mfaPending.delete(key);
+	}
+}, 5 * 60 * 1000).unref();
+
 /* ------------------------- conexiones Wisp activas ------------------------- */
 
 const wispConnections = new Map(); // sessionId -> Set<{ username, socket }>
@@ -1035,6 +1117,7 @@ const LOGIN_ERRORS = {
 	blocked: "Esta cuenta está bloqueada. Contacta con el administrador.",
 	temporary: "Esta cuenta está bloqueada temporalmente. Contacta con el administrador.",
 	maintenance: "El proxy está en mantenimiento. Solo los administradores pueden entrar.",
+	mfa: "El código de verificación no es válido o ha caducado. Vuelve a iniciar sesión.",
 };
 
 const CSRF_COOKIE = "pw_csrf";
@@ -1086,6 +1169,9 @@ const ACCOUNT_ERRORS = {
 	same: "La nueva contraseña debe ser distinta de la actual.",
 	disabled: "El administrador ha desactivado el cambio de contraseña.",
 	notfound: "La sesión ya no existe.",
+	"mfa-code": "El código MFA no es válido.",
+	mfa: "No se pudo iniciar la activación de MFA.",
+	"mfa-enabled": "MFA ya está activada en esta cuenta.",
 };
 
 const ADMIN_ERRORS = {
@@ -1109,6 +1195,7 @@ const ADMIN_OK = {
 	created: "Usuario creado.",
 	deleted: "Usuario eliminado.",
 	reset: "Contraseña actualizada.",
+	"mfa-reset": "MFA restablecida.",
 	role: "Rol actualizado.",
 	blocked: "Cuenta bloqueada permanentemente.",
 	unblocked: "Cuenta desbloqueada.",
@@ -1404,6 +1491,18 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 		return res.redirect(303, "/denied?reason=schedule");
 	}
 
+	if (isMfaEnabled(user.username)) {
+		const token = createMfaPending(req, user.username, next);
+		addAudit({
+			actor: user.username,
+			action: "login.mfa.required",
+			ip,
+			userAgent: clientUa(req),
+		});
+		res.setHeader("Set-Cookie", mfaCookie(req, token));
+		return res.redirect(303, "/mfa");
+	}
+
 	recordSuccessfulLogin(user.username, ip, {
 		exempt: user.role === "creator",
 		device: req._deviceId || "",
@@ -1426,7 +1525,10 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 		ip,
 		userAgent: clientUa(req),
 	});
-	res.setHeader("Set-Cookie", sessionCookie(req, session.token, session.expires));
+	res.setHeader("Set-Cookie", [
+		sessionCookie(req, session.token, session.expires),
+		...clearMfaCookie(req),
+	]);
 	res.redirect(303, next);
 });
 
@@ -1446,14 +1548,128 @@ app.post("/logout", sameOrigin, (req, res) => {
 	res.redirect(303, "/login");
 });
 
+app.get("/mfa", (req, res) => {
+	const session = getSession(req);
+	if (session) return res.redirect(303, "/");
+	const pending = readMfaPending(req);
+	if (!pending) return res.redirect(303, "/login?error=mfa");
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		mfaPage({
+			next: pending.entry.next,
+			error: req.query.error === "1" ? LOGIN_ERRORS.mfa : "",
+			csrf: ensureCsrf(req, res),
+		}),
+	);
+});
+
+app.post("/api/login/mfa", sameOrigin, async (req, res) => {
+	if (!validCsrf(req)) {
+		return sendHttpError(req, res, 403, "Token de seguridad no válido", "Recarga la página e inténtalo de nuevo.");
+	}
+	const pending = readMfaPending(req);
+	if (!pending) return res.redirect(303, "/login?error=mfa");
+	const { entry } = pending;
+	if (entry.attempts >= 5) {
+		destroyMfaPending(req);
+		res.setHeader("Set-Cookie", clearMfaCookie(req));
+		return res.redirect(303, "/login?error=mfa");
+	}
+	const result = verifySecondFactor(entry.username, req.body.code);
+	if (result.error) {
+		entry.attempts += 1;
+		addAudit({
+			actor: entry.username,
+			action: "login.mfa.fail",
+			ip: clientIp(req),
+			userAgent: clientUa(req),
+		});
+		return res.redirect(303, "/mfa?error=1");
+	}
+	const user = getUser(entry.username);
+	if (!user) {
+		destroyMfaPending(req);
+		res.setHeader("Set-Cookie", clearMfaCookie(req));
+		return res.redirect(303, "/login?error=1");
+	}
+	if (isUserBanned(user.username) || user.blocked) {
+		destroyMfaPending(req);
+		res.setHeader("Set-Cookie", clearMfaCookie(req));
+		return res.redirect(303, "/login?error=blocked");
+	}
+	const settings = getSettings();
+	if (settings.quarantineMode && !isAdminRole(user.role)) {
+		destroyMfaPending(req);
+		res.setHeader("Set-Cookie", clearMfaCookie(req));
+		return res.redirect(303, "/quarantine");
+	}
+	if (settings.maintenanceMode && !isAdminRole(user.role)) {
+		destroyMfaPending(req);
+		res.setHeader("Set-Cookie", clearMfaCookie(req));
+		return res.redirect(303, `/login?error=maintenance&next=${encodeURIComponent(entry.next)}`);
+	}
+	if (!isAdminRole(user.role) && !isWithinSchedule(getUser(user.username), settings.timezone)) {
+		destroyMfaPending(req);
+		res.setHeader("Set-Cookie", clearMfaCookie(req));
+		return res.redirect(303, "/denied?reason=schedule");
+	}
+
+	destroyMfaPending(req);
+	const ip = clientIp(req);
+	recordSuccessfulLogin(user.username, ip, {
+		exempt: user.role === "creator",
+		device: req._deviceId || "",
+		userAgent: clientUa(req),
+	});
+	clearFailedLogins(user.username);
+	clearIpFailures(ip);
+	clearAccountIpFailures(ip, user.username);
+	const session = createSession(user.username, { ip, userAgent: clientUa(req) });
+	for (const revokedId of session.revoked || []) closeSessionConnections(revokedId);
+	recordLoginSuccess(user.username, ip);
+	addAudit({
+		actor: user.username,
+		action: "login.mfa.success",
+		detail: result.method,
+		ip,
+		userAgent: clientUa(req),
+	});
+	res.setHeader("Set-Cookie", [
+		sessionCookie(req, session.token, session.expires),
+		...clearMfaCookie(req),
+	]);
+	res.redirect(303, entry.next);
+});
+
 /* --------------------------- a partir de aquí, login --------------------------- */
 
 app.use(requireAuth);
+
+app.use((req, res, next) => {
+	const settings = getSettings();
+	if (!settings.requireMfaForStaff || !isStaffRole(req.user.role)) return next();
+	if (isMfaEnabled(req.user.username)) return next();
+	const allowed =
+		req.path === "/account" ||
+		req.path === "/account/mfa" ||
+		req.path.startsWith("/api/account/mfa/") ||
+		req.path === "/logout" ||
+		req.path === "/api/me" ||
+		req.path.startsWith("/api/account/password");
+	if (allowed) return next();
+	if (req.path.startsWith("/api/")) {
+		return res.status(403).json({ error: "mfa_required" });
+	}
+	return res.redirect(303, "/account?mfa=required");
+});
 
 app.param("username", (req, res, next, value) => {
 	if (!isStaffRole(req.user?.role)) return next();
 	const target = getUser(value);
 	if (!target) return next();
+	if (target.username.toLowerCase() === String(req.user.username).toLowerCase()) {
+		return next();
+	}
 	if (target.role === "creator") {
 		return res.redirect(303, "/admin?error=creator-protected");
 	}
@@ -2084,7 +2300,11 @@ app.get("/account", (req, res) => {
 					? "Icono actualizado correctamente."
 					: req.query.ok === "icon-removed"
 						? "Icono eliminado."
-						: "";
+						: req.query.ok === "mfa-off"
+							? "MFA desactivada."
+							: req.query.mfa === "required"
+								? "Debes activar la verificación en dos pasos para usar el panel de administración."
+								: "";
 	const error = ACCOUNT_ERRORS[req.query.error] || "";
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -2093,6 +2313,7 @@ app.get("/account", (req, res) => {
 			sessions,
 			currentId: req.user.id,
 			allowPasswordChange: settings.allowUserPasswordChange || isAdminRole(req.user.role),
+			mfa: mfaStatus(req.user.username),
 			forced: req.user.mustChangePassword || req.query.force === "1",
 			notice,
 			error,
@@ -2276,6 +2497,79 @@ app.post("/api/account/password", sameOrigin, async (req, res) => {
 	const revoked = destroyOtherSessions(req.user.username, req.user.token);
 	for (const id of revoked) closeSessionConnections(id);
 	res.redirect(303, "/account?ok=password");
+});
+
+app.post("/api/account/mfa/start", sameOrigin, (req, res) => {
+	const result = startEnrollment(req.user.username);
+	if (result.error) {
+		return res.redirect(303, `/account?error=${result.error === "enabled" ? "mfa-enabled" : "mfa"}`);
+	}
+	audit(req, "mfa.enrollment.start");
+	res.redirect(303, "/account/mfa");
+});
+
+app.get("/account/mfa", (req, res) => {
+	const info = enrollmentInfo(req.user.username);
+	if (!info) return res.redirect(303, "/account");
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		mfaSetupPage({
+			user: req.user,
+			secret: info.secret,
+			uri: info.uri,
+			error:
+				req.query.error === "invalid-code"
+					? "El código no es válido. Comprueba la hora del dispositivo e inténtalo de nuevo."
+					: "",
+		}),
+	);
+});
+
+app.post("/api/account/mfa/enable", sameOrigin, (req, res) => {
+	const result = confirmEnrollment(req.user.username, req.body.code);
+	if (result.error) {
+		return res.redirect(303, `/account/mfa?error=${result.error}`);
+	}
+	audit(req, "mfa.enable");
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		mfaRecoveryPage({
+			user: req.user,
+			codes: result.codes,
+			title: "MFA activada",
+			message: "Guarda estos códigos de recuperación. No se volverán a mostrar.",
+		}),
+	);
+});
+
+app.post("/api/account/mfa/disable", sameOrigin, async (req, res) => {
+	if (!(await verifyUserPassword(req.user.username, String(req.body.current || "")))) {
+		return res.redirect(303, "/account?error=current");
+	}
+	const result = verifySecondFactor(req.user.username, req.body.code);
+	if (result.error) return res.redirect(303, "/account?error=mfa-code");
+	disableMfa(req.user.username);
+	audit(req, "mfa.disable");
+	res.redirect(303, "/account?ok=mfa-off");
+});
+
+app.post("/api/account/mfa/recovery", sameOrigin, async (req, res) => {
+	if (!(await verifyUserPassword(req.user.username, String(req.body.current || "")))) {
+		return res.redirect(303, "/account?error=current");
+	}
+	const result = verifySecondFactor(req.user.username, req.body.code);
+	if (result.error) return res.redirect(303, "/account?error=mfa-code");
+	const regenerated = regenerateRecoveryCodes(req.user.username);
+	audit(req, "mfa.recovery.regenerate");
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		mfaRecoveryPage({
+			user: req.user,
+			codes: regenerated.codes,
+			title: "Nuevos códigos de recuperación",
+			message: "Los códigos anteriores ya no funcionan. Guarda estos.",
+		}),
+	);
 });
 
 app.post("/api/account/sessions/revoke-others", sameOrigin, (req, res) => {
@@ -3072,6 +3366,7 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		metricsToken: req.body.metricsToken,
 		allowUserHistoryClear: req.body.allowUserHistoryClear === "on",
 		proxyAllowStaffBrowsing: req.body.proxyAllowStaffBrowsing === "on",
+		requireMfaForStaff: req.body.requireMfaForStaff === "on",
 		revision: req.body.revision,
 	};
 	const result = saveSettings(payload);
@@ -3363,6 +3658,20 @@ app.post("/api/admin/users/import", requireAdmin, sameOrigin, (req, res) => {
 		});
 	}
 	res.json({ created, errors });
+});
+
+app.post("/api/admin/users/:username/mfa-reset", requireAdmin, sameOrigin, (req, res) => {
+	const target = getUser(req.params.username);
+	if (!target) return res.redirect(303, "/admin?error=notfound");
+	if (target.role === "creator" && req.user.role !== "creator") {
+		return res.redirect(303, "/admin?error=creator-protected");
+	}
+	if (!canManageRole(req.user.role, target.role) && target.username !== req.user.username) {
+		return res.redirect(303, "/admin?error=forbidden");
+	}
+	clearMfa(target.username);
+	audit(req, "mfa.reset", target.username);
+	res.redirect(303, "/admin?ok=mfa-reset");
 });
 
 app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, res) => {
