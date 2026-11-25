@@ -10,6 +10,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const FILE = path.join(DATA_DIR, "security.json");
 const MAX_ALERTS = 500;
 const DEVICE_COOKIE = "pw_device";
+const HOST_DEVICE_COOKIE = "__Host-pw_device";
 const DEVICE_KEY_FILE = path.join(DATA_DIR, "device.key");
 const WINDOW_MS = 10 * 60 * 1000;
 const ALERT_THRESHOLD = 8;
@@ -215,7 +216,9 @@ function validDeviceCookie(raw) {
 }
 
 function deviceId(req, res) {
-	const existing = validDeviceCookie(cookieValue(req, DEVICE_COOKIE));
+	const existing =
+		validDeviceCookie(cookieValue(req, HOST_DEVICE_COOKIE)) ||
+		validDeviceCookie(cookieValue(req, DEVICE_COOKIE));
 	if (existing) return existing;
 
 	const id = crypto
@@ -227,7 +230,8 @@ function deviceId(req, res) {
 		.slice(0, 32);
 	if (res) {
 		const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-		const cookie = `${DEVICE_COOKIE}=${id}.${signDevice(id)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
+		const name = secure ? HOST_DEVICE_COOKIE : DEVICE_COOKIE;
+		const cookie = `${name}=${id}.${signDevice(id)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
 		try {
 			res.append("Set-Cookie", cookie);
 		} catch {

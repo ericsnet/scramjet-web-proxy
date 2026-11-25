@@ -275,12 +275,12 @@ Medidas de seguridad incluidas:
 - validación de `Origin`/`Referer` con HTTPS obligatorio y token CSRF en el login, con cookie `__Host-pw_csrf` bajo HTTPS;
 - `Host` restringido al dominio canónico (salvo `/healthz` local);
 - IPv4 e IPv6 del mismo dispositivo se unifican en las alertas y se muestra la IPv4;
-- cookie de dispositivo firmada con HMAC, usada para diagnóstico y bloqueos opcionales;
+- cookie de dispositivo firmada con HMAC y `__Host-pw_device` bajo HTTPS, usada para diagnóstico y bloqueos opcionales;
 - `/api/navigate-check` bloquea loopback, RFC1918, CGNAT, link-local, ULA y
   direcciones IPv4 mapeadas en IPv6, resolviendo DNS;
-- Wisp aplica además su propia comprobación de IPs privadas antes de conectar;
+- Wisp aplica además su propia comprobación de IPs privadas, incluidas IPv4 embebidas en NAT64 (`64:ff9b::/96`, `64:ff9b:1::/48`) y RFC 6145 (`::ffff:0:0/96`);
 - chat interno con autenticación obligatoria, CSRF, límites por usuario, texto
-  plano sin HTML y autorización por rol para moderar;
+  plano sin HTML, canal explícito y autorización por rol para moderar;
 - `media-src` permite audio/vídeo propio, `blob:` (MSE) y `data:`;
 - tiempo de proxy ampliado para reproducciones largas;
 - audio y vídeo se sirven en streaming: no se cachea el archivo completo antes de

@@ -69,3 +69,15 @@ patch("filter.mjs", "connection.isHostBlocked", (text) =>
 		"  if (!isAdmin && connection && typeof connection.isHostBlocked === \"function\" && connection.isHostBlocked(hostname))\n    return close_reasons.HostBlocked;\n\n  //check if the port is blocked",
 	),
 );
+
+patch("filter.mjs", "embedded_ipv4", (text) =>
+	text
+		.replace(
+			"function check_ip_range(ip, range) {\n  return range.includes(ip.range());\n}",
+			"function check_ip_range(ip, range) {\n  return range.includes(ip.range());\n}\n\nfunction embedded_ipv4(ip) {\n  if (!ip || ip.kind() !== \"ipv6\") return null;\n  if (ip.range() !== \"rfc6052\" && ip.range() !== \"rfc6145\") return null;\n  const high = ip.parts[6] || 0;\n  const low = ip.parts[7] || 0;\n  return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;\n}",
+		)
+		.replace(
+			"  if (ip.range() === \"ipv4Mapped\") \n    ip = ip.toIPv4Address();",
+			"  if (ip.range() === \"ipv4Mapped\") \n    ip = ip.toIPv4Address();\n\n  const embedded = embedded_ipv4(ip);\n  if (embedded && is_ip_blocked(embedded)) return true;",
+		),
+);

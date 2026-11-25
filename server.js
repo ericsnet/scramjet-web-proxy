@@ -589,6 +589,8 @@ const CHAT_ERRORS = {
 	slow: "Espera unos segundos antes de enviar otro mensaje.",
 	rate: "Has enviado demasiados mensajes. Espera un minuto.",
 	forbidden: "No puedes borrar ese mensaje.",
+	channel: "No tienes acceso a ese canal.",
+	channel_required: "Indica el canal del mensaje.",
 	notfound: "Ese mensaje ya no existe.",
 };
 
@@ -1296,6 +1298,7 @@ app.post("/logout", sameOrigin, (req, res) => {
 app.use(requireAuth);
 
 app.param("username", (req, res, next, value) => {
+	if (!isStaffRole(req.user?.role)) return next();
 	const target = getUser(value);
 	if (!target) return next();
 	if (target.role === "creator") {
@@ -1435,7 +1438,7 @@ app.get("/chat", (req, res) => {
 	const onlineUsers = settings.chatShowOnline
 		? hideCreatorData(req, chatOnlineUsers(), (name) => name)
 		: [];
-	const allChatUsers = listUsers().filter(
+	const allChatUsers = hideCreatorData(req, listUsers(), (entry) => entry.username).filter(
 		(entry) =>
 			entry.username.toLowerCase() !== req.user.username.toLowerCase() &&
 			!entry.effectivelyBlocked,
@@ -1636,8 +1639,16 @@ app.get("/api/chat/messages", (req, res) => {
 
 app.post("/api/chat/messages", sameOrigin, (req, res) => {
 	const json = wantsChatJson(req);
+	const requestedChannel = String(req.body.channel || "").trim();
+	if (!requestedChannel) {
+		if (!json) return res.redirect(303, "/chat?error=channel_required");
+		return res.status(400).json({
+			error: "channel_required",
+			message: CHAT_ERRORS.channel_required,
+		});
+	}
 	const result = postChatMessage(req.user.username, req.body.text, {
-		channelId: chatChannelOf(req),
+		channelId: requestedChannel,
 		attachmentId: String(req.body.attachment || ""),
 	});
 	if (result.error) {

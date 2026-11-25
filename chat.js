@@ -283,7 +283,7 @@ export function postChatMessage(username, value, { channelId = GENERAL, attachme
 	const settings = getSettings();
 	if (!settings.chatEnabled) return { error: "disabled" };
 	const channel = channelFor(username, channelId);
-	if (!channel) return { error: "forbidden" };
+	if (!channel) return { error: "channel" };
 	const text = cleanText(value);
 	if (typeof value !== "string" && value) return { error: "empty" };
 	if (!text && !attachmentId) return { error: "empty" };
@@ -334,7 +334,7 @@ export function postChatPoll(username, { channelId = GENERAL, question, options 
 	const settings = getSettings();
 	if (!settings.chatEnabled) return { error: "disabled" };
 	const channel = channelFor(username, channelId);
-	if (!channel) return { error: "forbidden" };
+	if (!channel) return { error: "channel" };
 	const text = cleanText(question);
 	const choices = (Array.isArray(options) ? options : [])
 		.map((option) => cleanText(option).slice(0, 80))
