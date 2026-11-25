@@ -229,12 +229,28 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .readonly-user .user-summary:hover{background:transparent}
 .self-user{border-color:#2f4a6b;background:linear-gradient(90deg,rgba(59,130,246,.07),var(--soft) 60%)}
 .readonly-user .user-summary-meta .small{margin-right:8px}
+.users-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;align-items:stretch}
+.users-grid .admin-user{height:100%;display:flex;flex-direction:column;position:relative}
+.users-grid .admin-user[open]{grid-column:1/-1;display:block}
+.users-grid .user-summary{flex:1;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:9px;padding:14px;height:auto;min-height:168px;position:relative}
+.users-grid .user-summary-main{flex-direction:column;align-items:flex-start;gap:7px;width:100%}
+.users-grid .user-summary .user-avatar{width:38px;height:38px;border-radius:11px;font-size:13px}
+.users-grid .user-name{font-size:15px;line-height:1.2}
+.users-grid .user-summary-meta{margin-left:0;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:11.5px}
+.users-grid .user-summary-meta span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.users-grid .user-chevron{position:absolute;top:13px;right:13px;margin:0}
+.users-grid .admin-user[open]>.user-summary{min-height:0;flex-direction:row;flex-wrap:wrap;align-items:center}
+.users-grid .admin-user[open]>.user-summary .user-summary-main{flex-direction:row;align-items:center;width:auto}
+.users-grid .admin-user[open]>.user-summary .user-summary-meta{margin-left:auto;width:auto;display:flex;flex-wrap:wrap}
+.users-grid .admin-user[open]>.user-summary .user-chevron{position:static;margin-left:auto}
 .user-body{padding:0 14px 14px}
 .user-body .user-stats{margin-top:12px}
 .user-extra{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 @media(max-width:640px){
   .user-summary-meta{order:3;margin-left:0;width:100%;gap:10px}
   .user-chevron{order:2;margin-left:auto}
+  .users-grid{grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:9px}
+  .users-grid .user-summary{min-height:150px;padding:11px}
 }
 details.more{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
 details.more summary{cursor:pointer;color:var(--accent-2,#60a5fa);font-size:13px}
@@ -1606,8 +1622,8 @@ ${canManage
 
 <div class="card">
   <h2>Usuarios (${users.length})</h2>
-  <p class="muted">Vista compacta. Pulsa un usuario para desplegar toda su información y sus acciones.</p>
-  ${cards}
+  <p class="muted">Tarjetas de usuario. Pulsa una para desplegar toda su información y sus acciones.</p>
+  <div class="users-grid">${cards}</div>
 </div>
 <script>
 function genPass() {
@@ -1622,7 +1638,7 @@ function genPass() {
   input.select();
 }
 </script>`;
-	return shell("Usuarios · Administración", body, { topbar: topbar(user) });
+	return shell("Usuarios · Administración", body, { topbar: topbar(user), wide: true });
 }
 
 export function activityPage({
