@@ -71,6 +71,7 @@ import {
 	auditPage,
 	systemPage,
 	adminLogsPage,
+	templatesPage,
 	maintenancePage,
 	blockedPage,
 	quarantinePage,
@@ -104,6 +105,7 @@ import {
 	flushAudit,
 } from "./audit.js";
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
+import { listTemplates, addTemplate, deleteTemplate } from "./templates.js";
 import {
 	listBookmarks,
 	addBookmark,
@@ -2337,6 +2339,7 @@ app.get("/admin", requireStaff, (req, res) => {
 			users,
 			counts,
 			canManage: isAdminRole(req.user.role),
+			blockTemplates: listTemplates("block"),
 			error,
 			notice,
 		}),
@@ -2859,6 +2862,35 @@ app.get("/admin/stats", requireStaff, (req, res) => {
 	);
 });
 
+app.get("/admin/templates", requireAdmin, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		templatesPage({
+			user: req.user,
+			blockTemplates: listTemplates("block"),
+			notesTemplates: listTemplates("notes"),
+			notice: req.query.ok === "created" ? "Plantilla creada." : req.query.ok === "deleted" ? "Plantilla eliminada." : "",
+			error: req.query.error === "empty" ? "La etiqueta y el texto son obligatorios." : "",
+		}),
+	);
+});
+
+app.post("/api/admin/templates", requireAdmin, sameOrigin, (req, res) => {
+	const kind = req.body.kind === "notes" ? "notes" : "block";
+	const result = addTemplate(kind, { label: req.body.label, text: req.body.text });
+	if (result.error) return res.redirect(303, `/admin/templates?error=${result.error}`);
+	audit(req, "template.create", result.template.label, kind);
+	res.redirect(303, "/admin/templates?ok=created");
+});
+
+app.post("/api/admin/templates/:id/delete", requireAdmin, sameOrigin, (req, res) => {
+	const kind = req.body.kind === "notes" ? "notes" : "block";
+	const result = deleteTemplate(kind, req.params.id);
+	if (result.error) return res.redirect(303, `/admin/templates?error=${result.error}`);
+	audit(req, "template.delete", req.params.id, kind);
+	res.redirect(303, "/admin/templates?ok=deleted");
+});
+
 app.get("/admin/settings", requireAdmin, (req, res) => {
 	const notice = ADMIN_OK[req.query.ok] || "";
 	const error = req.query.error ? String(req.query.error) : "";
@@ -3202,6 +3234,38 @@ app.post("/api/admin/users", requireAdmin, sameOrigin, (req, res) => {
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
 	audit(req, "user.create", result.user.username, `rol: ${result.user.role}`);
 	res.redirect(303, "/admin?ok=created");
+});
+
+app.post("/api/admin/users/import", requireAdmin, sameOrigin, (req, res) => {
+	const rows = Array.isArray(req.body.users) ? req.body.users : [];
+	if (!rows.length) return res.status(400).json({ error: "empty" });
+	if (rows.length > 200) return res.status(400).json({ error: "limit" });
+	const created = [];
+	const errors = [];
+	for (const row of rows) {
+		const username = String(row?.username || "").trim();
+		const role = ["user", "moderator", "admin"].includes(String(row?.role || ""))
+			? String(row.role)
+			: "user";
+		if (req.user.role !== "creator" && !canAssignRole(req.user.role, role)) {
+			errors.push(`${username || "(sin nombre)"}: no puedes asignar el rol ${role}`);
+			continue;
+		}
+		const provided = String(row?.password || "").trim();
+		const password = provided || crypto.randomBytes(9).toString("base64url");
+		const result = createUser(username, password, role);
+		if (result.error) {
+			errors.push(`${username || "(sin nombre)"}: ${result.error}`);
+			continue;
+		}
+		audit(req, "user.create", result.user.username, `rol: ${result.user.role} (importación)`);
+		created.push({
+			username: result.user.username,
+			role: result.user.role,
+			password: provided ? "" : password,
+		});
+	}
+	res.json({ created, errors });
 });
 
 app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, res) => {

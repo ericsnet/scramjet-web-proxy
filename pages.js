@@ -1847,6 +1847,7 @@ export function adminPage({
 	users,
 	counts = {},
 	canManage = false,
+	blockTemplates = [],
 	notice = "",
 	error = "",
 } = {}) {
@@ -1952,8 +1953,15 @@ export function adminPage({
     </div>
     <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block-message" style="margin-top:12px">
       <label for="blockmsg-${esc(u.username)}">Mensaje de bloqueo</label>
+      ${blockTemplates.length ? `<select aria-label="Plantilla de bloqueo" onchange="document.getElementById('blockmsg-${esc(u.username)}').value=this.value;this.selectedIndex=0">
+        <option value="">Usar plantilla…</option>
+        ${blockTemplates.map((template) => `<option value="${esc(template.text)}">${esc(template.label)}</option>`).join("")}
+      </select>` : ""}
       <textarea id="blockmsg-${esc(u.username)}" name="message" maxlength="500" placeholder="Se mostrará al usuario cuando intente entrar bloqueado">${esc(u.blockMessage || "")}</textarea>
-      <button class="small" type="submit" style="margin-top:8px">Guardar mensaje</button>
+      <div class="actions" style="margin-top:8px">
+        <button class="small" type="submit">Guardar mensaje</button>
+        <a class="small" href="/admin/templates">Gestionar plantillas</a>
+      </div>
     </form>
     <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/sites" style="margin-top:12px">
       <label for="sites-${esc(u.username)}">Sitios prohibidos de este usuario</label>
@@ -2067,7 +2075,15 @@ ${adminTabs("users", user.role)}
     </select>
     <button class="primary" type="submit">Crear usuario</button>
   </form>
-  <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar.</p>`
+  <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar.</p>
+  <details class="card" style="margin-top:16px;background:rgba(255,255,255,.015)">
+    <summary class="muted" style="cursor:pointer">Importar usuarios desde CSV</summary>
+    <p class="hint">Columnas: usuario, rol, contraseña. El rol y la contraseña son opcionales; si faltan, se usa usuario y se genera una contraseña temporal.</p>
+    <input id="users-import-file" type="file" accept=".csv,text/csv">
+    <button id="users-import-run" class="small" type="button" style="margin-top:10px">Importar CSV</button>
+    <pre id="users-import-result" class="panel" style="display:none;white-space:pre-wrap;margin-top:12px"></pre>
+    <script src="/admin-users-import.js" defer></script>
+  </details>`
 			: ""
 	}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
@@ -3173,6 +3189,60 @@ ${adminTabs("system", user.role)}
   <pre class="panel" style="white-space:pre-wrap;max-height:70vh;overflow:auto">${esc(output || "Sin entradas.")}</pre>
 </div>`;
 	return shell("Logs · Administración", body, { topbar: topbar(user) });
+}
+
+export function templatesPage({
+	user,
+	blockTemplates = [],
+	notesTemplates = [],
+	notice = "",
+	error = "",
+} = {}) {
+	const rows = (list, kind) =>
+		list
+			.map(
+				(entry) => `<tr>
+      <td><strong>${esc(entry.label)}</strong></td>
+      <td>${esc(entry.text)}</td>
+      <td><form method="post" action="/api/admin/templates/${esc(entry.id)}/delete" onsubmit="return confirm('¿Eliminar esta plantilla?')">
+        <input type="hidden" name="kind" value="${kind}">
+        <button class="small danger" type="submit">Eliminar</button>
+      </form></td>
+    </tr>`,
+			)
+			.join("");
+	const body = `
+${adminTabs("settings", user.role)}
+<div class="card">
+  <h1>Plantillas de mensajes</h1>
+  <p class="muted">Mensajes reutilizables para bloqueos y notas internas.</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <h2>Bloqueos</h2>
+  ${blockTemplates.length ? `<div class="scroll"><table><thead><tr><th>Nombre</th><th>Texto</th><th></th></tr></thead><tbody>${rows(blockTemplates, "block")}</tbody></table></div>` : '<p class="empty">No hay plantillas de bloqueo.</p>'}
+  <h2 style="margin-top:24px">Notas internas</h2>
+  ${notesTemplates.length ? `<div class="scroll"><table><thead><tr><th>Nombre</th><th>Texto</th><th></th></tr></thead><tbody>${rows(notesTemplates, "notes")}</tbody></table></div>` : '<p class="empty">No hay plantillas de notas.</p>'}
+  <h2 style="margin-top:24px">Añadir plantilla</h2>
+  <form method="post" action="/api/admin/templates">
+    <div class="field-grid">
+      <div>
+        <label for="template-kind">Tipo</label>
+        <select id="template-kind" name="kind">
+          <option value="block">Bloqueo</option>
+          <option value="notes">Nota interna</option>
+        </select>
+      </div>
+      <div>
+        <label for="template-label">Nombre</label>
+        <input id="template-label" name="label" maxlength="60" required>
+      </div>
+    </div>
+    <label for="template-text">Texto</label>
+    <textarea id="template-text" name="text" maxlength="500" required></textarea>
+    <button class="primary" type="submit">Crear plantilla</button>
+  </form>
+</div>`;
+	return shell("Plantillas · Administración", body, { topbar: topbar(user) });
 }
 
 export function maintenancePage({ settings, user = null } = {}) {
