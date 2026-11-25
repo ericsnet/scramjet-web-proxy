@@ -26,12 +26,12 @@ let dirty = false;
 const trackers = new Map();
 
 const SKIP_PATH =
-	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|monitor\.js|avatar)/;
+	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|chat\.css|global-search\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|monitor\.js|avatar)/;
 
 // Endpoints que el propio panel consulta periódicamente. No son navegación
 // humana y no deben contar como ráfaga ni como intervalos automatizados.
 const ROUTINE_PATH =
-	/^\/(?:api\/(?:chat\/(?:unread|channels|read|messages|files|notifications)|me|lang|admin\/(?:traffic|monitor)))$/;
+	/^\/(?:api\/(?:chat\/(?:unread|channels|read|messages|files|notifications)|me|lang|config|admin\/(?:traffic|monitor)))$/;
 const ROUTINE_ANY_METHOD =
 	/^\/(?:api\/(?:chat\/(?:read|unread|channels)|me|lang|admin\/(?:traffic|monitor)))$/;
 

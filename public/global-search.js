@@ -203,8 +203,13 @@
 		if (event.key === "Escape" && !backdrop.hidden) hide();
 	});
 
-	fetch("/api/config", { cache: "no-store" })
-		.then((response) => (response.ok ? response.json() : null))
-		.then((data) => { config = data; })
-		.catch(() => {});
+	const authenticated = Boolean(
+		document.querySelector('form[action="/logout"], a[href="/logout"]'),
+	);
+	if (authenticated) {
+		fetch("/api/config", { cache: "no-store" })
+			.then((response) => (response.ok ? response.json() : null))
+			.then((data) => { config = data; })
+			.catch(() => {});
+	}
 })();

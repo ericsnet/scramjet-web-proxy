@@ -290,3 +290,16 @@
   .chat-header { flex-wrap: wrap; }
   .chat-header-actions { width: 100%; justify-content: flex-end; }
 }
+.chat-pinned-bar[hidden],
+.chat-context-bar[hidden],
+.chat-upload-progress[hidden],
+.chat-typing[hidden],
+.chat-load-older[hidden],
+.chat-mobile-channel[hidden] {
+  display: none !important;
+}
+@media (hover: none), (max-width: 860px) {
+  .chat-msg-tools { opacity: .72; transform: none; pointer-events: auto; }
+  .chat-tool { width: 28px; height: 26px; font-size: 13px; }
+  .chat-tool.danger { color: #fca5a5; }
+}
