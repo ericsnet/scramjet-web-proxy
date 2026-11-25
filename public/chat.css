@@ -322,3 +322,15 @@
 @media (max-width: 860px) {
   .wrap.full .chat-app { height: calc(100vh - 110px); border-radius: 0 !important; }
 }
+.chat-exit {
+  color: #fca5a5 !important;
+  font-size: 21px !important;
+  line-height: 1 !important;
+  padding: 5px 11px !important;
+  text-decoration: none !important;
+}
+.chat-exit:hover {
+  background: rgba(248, 113, 113, .14) !important;
+  border-color: rgba(248, 113, 113, .38) !important;
+  color: #fecaca !important;
+}
