@@ -273,7 +273,7 @@ dialog h2{margin-top:0}
 .chat-online::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(74,222,128,.12)}
 .chat-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;
   background:linear-gradient(180deg,rgba(21,30,41,.65),rgba(13,20,28,.65));overflow:hidden}
-.chat-messages{height:min(58vh,560px);min-height:220px;overflow-y:auto;padding:12px 14px;scroll-behavior:smooth;
+.chat-messages{height:min(58vh,560px);min-height:220px;overflow-y:auto;padding:12px 14px;scroll-behavior:auto;
   display:flex;flex-direction:column;gap:8px}
 .chat-message{display:flex;justify-content:flex-start;padding:0;border:0;background:none!important}
 .chat-message.own{justify-content:flex-end}
@@ -442,7 +442,7 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .chat-send:disabled{opacity:.45;cursor:not-allowed}
 .chat-send svg{width:17px;height:17px}
 .chat-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
-  min-height:100%;margin:auto;color:#71859b;font-size:12px}
+  flex:1 1 auto;min-height:0;margin:auto;padding:24px 18px;color:#71859b;font-size:12px}
 .chat-empty strong{color:#bfd0e3;font-size:14px}
 .chat-empty-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:15px;background:#142235;font-size:22px;margin-bottom:4px}
 .chat-dialog{max-width:440px}
@@ -1774,17 +1774,15 @@ export function securityPage({
 				),
 			);
 			const kind =
-				a.kind === "account_swap"
-					? "cuentas"
-					: a.kind === "bot"
-						? "bot"
-						: a.kind === "hack"
+				a.kind === "bot"
+					? "bot"
+					: a.kind === "hack"
+						? "hacking"
+						: attack
 							? "hacking"
-							: attack
-								? "hacking"
-								: a.bot
-									? "bot"
-									: "alerta";
+							: a.bot
+								? "bot"
+								: "alerta";
 			const badge = `<span class="badge ${kind === "bot" ? "bot" : "blocked"}">${kind}</span>`;
 			const botExtra = a.bot && kind === "hacking" ? ' <span class="badge bot">bot</span>' : "";
 			return `<tr>

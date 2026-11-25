@@ -15,7 +15,7 @@ administración.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas** y atajos de teclado.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
-- **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento, intercambio de cuentas y bloqueos manuales por dispositivo, usuario o IP.
+- **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados.
 - **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
@@ -205,7 +205,7 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - Observa todas las peticiones y llamadas a la API sin bloquearlas automáticamente.
 - Genera alertas con IP, usuario, motivos, puntuación y última petición.
 - Detecta bots por intervalos, user-agent y patrones de uso; no usa captcha.
-- Detecta **intercambio de cuentas** por varias cuentas en la misma IP o una cuenta desde varias IPs y bloquea temporalmente la cuenta implicada.
+- El bloqueo automático por intercambio de cuentas está desactivado; solo se generan alertas por patrones claros y nunca se bloquea una cuenta por compartir IP o dispositivo.
 - Desde `/admin/security` puedes banear o desbanear la IP (bot o hacking) y descartar alertas.
 - Emergencia si te bloqueas a ti mismo: `npm run security:unban -- 1.2.3.4` y reinicia `webproxy`.
 - El creador y los administradores ven el resumen en Administración.
@@ -254,7 +254,7 @@ usuario puede vaciar su propio historial.
 - `data/chat.json`: mensajes, canales y lecturas del chat interno.
 - `data/chat-uploads/`: adjuntos privados del chat.
 - `data/avatars/`: iconos de usuario validados por contenido y servidos solo con sesión iniciada.
-- `data/security.json`: alertas, bloqueos e historial reciente de logins para detección de intercambio de cuentas.
+- `data/security.json`: alertas, bloqueos e historial reciente de logins.
 - `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
 - Clave de cifrado: `BACKUP_KEY_FILE` (`/etc/webproxy/backup.key` en producción).
 
@@ -315,7 +315,7 @@ Archivos principales:
 | `metrics.js` | Contadores Prometheus |
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `chat.js` | Almacén, límites y retención del chat interno |
-| `security.js` | Detección pasiva, alertas, bloqueos y account-swapping |
+| `security.js` | Detección pasiva, alertas y bloqueos |
 | `traffic.js` | Búfer de tráfico HTTP y conexiones Wisp para el panel en vivo |
 | `public/traffic.js` | Actualización del panel de tráfico |
 | `roles.js` | Jerarquía y permisos de usuario/moderador/administrador/creador |

@@ -27,6 +27,7 @@
 	let selectedFile = null;
 	let cooldownUntil = 0;
 	let channelsCache = [];
+	let forceScroll = false;
 	const channelName = document.getElementById("chat-channel-name");
 	const channelMeta = document.getElementById("chat-channel-meta");
 
@@ -49,16 +50,17 @@
 		errorEl.hidden = true;
 		errorEl.textContent = "";
 	}
+	function removeEmpty() {
+		for (const empty of box.querySelectorAll(".chat-empty")) empty.remove();
+	}
 	function ensureEmpty() {
+		removeEmpty();
 		if (box.querySelector("[data-chat-message]")) return;
 		const empty = document.createElement("p");
 		empty.className = "chat-empty";
 		empty.id = "chat-empty";
 		empty.textContent = "Todavía no hay mensajes. Escribe el primero.";
 		box.appendChild(empty);
-	}
-	function removeEmpty() {
-		document.getElementById("chat-empty")?.remove();
 	}
 	function nearBottom() {
 		return box.scrollHeight - box.scrollTop - box.clientHeight < 90;
@@ -256,7 +258,9 @@
 	function replaceMessage(message) {
 		const old = box.querySelector(`[data-chat-id="${CSS.escape(String(message.id))}"]`);
 		if (!old) return;
+		const top = box.scrollTop;
 		old.replaceWith(makeMessage(message));
+		box.scrollTop = top;
 	}
 	function updateOnline(value, icons = null) {
 		if (value === null || value === undefined) return;
@@ -312,6 +316,10 @@
 	async function refresh() {
 		if (inFlight || stopped || document.hidden) return;
 		inFlight = true;
+		const stick = forceScroll || nearBottom();
+		forceScroll = false;
+		const previousTop = box.scrollTop;
+		let rebuilt = false;
 		try {
 			let data = await request(
 				`/api/chat/messages?channel=${encodeURIComponent(channelId)}&after=${lastSeq}`,
@@ -323,6 +331,7 @@
 				revision = String(data.revision || "0");
 				clearMessages();
 				appendMessages(data.messages);
+				rebuilt = true;
 			} else {
 				appendMessages(data.messages);
 			}
@@ -331,7 +340,8 @@
 			if (Number(data.maxLength) > 0) maxLength = Number(data.maxLength);
 			if (input && Number(input.maxLength) !== maxLength) input.maxLength = maxLength;
 			if (counter) counter.textContent = String((input?.value || "").length);
-			scrollBottom(false);
+			if (stick) scrollBottom(true);
+			else if (rebuilt) box.scrollTop = previousTop;
 			markRead();
 			clearError();
 		} catch (error) {
@@ -414,6 +424,7 @@
 		for (const el of box.querySelectorAll("[data-chat-message]")) el.remove();
 		ensureEmpty();
 		clearError();
+		forceScroll = true;
 		refresh();
 	}
 	async function uploadAndSend(text) {
@@ -469,6 +480,7 @@
 			event.preventDefault();
 			const text = input.value.trim();
 			if (!text && !selectedFile) return;
+			const stick = nearBottom();
 			clearError();
 			if (send) send.disabled = true;
 			try {
@@ -481,7 +493,7 @@
 				if (data.message) replaceMessage(data.message);
 				await refresh();
 				await refreshChannels();
-				scrollBottom(true);
+				if (stick) scrollBottom(true);
 			} catch (error) {
 				showError(error.message);
 				if (error.data?.retryAfter) {
@@ -510,8 +522,10 @@
 					body: JSON.stringify({ channel: channelId }),
 				});
 				const article = deleteButton.closest("[data-chat-message]");
+				const top = box.scrollTop;
 				seen.delete(String(deleteButton.dataset.chatDelete));
 				article?.remove();
+				box.scrollTop = top;
 				ensureEmpty();
 				await refreshChannels();
 			} catch (error) {

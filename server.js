@@ -1207,29 +1207,11 @@ app.post("/api/login", sameOrigin, (req, res) => {
 		return res.redirect(303, "/denied?reason=schedule");
 	}
 
-	const swap = recordSuccessfulLogin(user.username, ip, {
+	recordSuccessfulLogin(user.username, ip, {
 		exempt: user.role === "creator",
+		device: req._deviceId || "",
+		userAgent: clientUa(req),
 	});
-	if (swap.blocked) {
-		setBlockUntil(
-			user.username,
-			swap.until,
-			"Bloqueo temporal automático por posible intercambio de cuentas. Contacta con el administrador o espera a que expire.",
-		);
-		closeUserConnections(user.username);
-		addAudit({
-			actor: user.username,
-			action: "account.swap",
-			target: user.username,
-			detail: `${swap.reasons.join(", ")} · hasta ${swap.until}`,
-			ip,
-			userAgent: clientUa(req),
-		});
-		const token = createBlockFlash(
-			"Bloqueo temporal automático por posible intercambio de cuentas. Contacta con el administrador o espera a que expire.",
-		);
-		return res.redirect(303, `/blocked?t=${token}`);
-	}
 
 	clearFailedLogins(username);
 	metric("logins_success_total");
@@ -1275,7 +1257,16 @@ app.param("username", (req, res, next, value) => {
 	if (target.role === "creator") {
 		return res.redirect(303, "/admin?error=creator-protected");
 	}
+	if (req.user?.role === "creator") return next();
 	if (!canManageRole(req.user?.role, target.role)) {
+		addAudit({
+			actor: req.user?.username || "",
+			action: "admin.forbidden",
+			target: target.username,
+			detail: `${req.user?.role || "sin rol"} -> ${target.role}`,
+			ip: clientIp(req),
+			userAgent: clientUa(req),
+		});
 		return res.redirect(303, "/admin?error=forbidden");
 	}
 	next();
@@ -2540,7 +2531,7 @@ app.post("/api/admin/backup/restore", requireAdmin, sameOrigin, (req, res) => {
 
 app.post("/api/admin/users", requireAdmin, sameOrigin, (req, res) => {
 	const role = String(req.body.role || "");
-	if (!canAssignRole(req.user.role, role)) {
+	if (req.user.role !== "creator" && !canAssignRole(req.user.role, role)) {
 		return res.redirect(303, "/admin?error=forbidden");
 	}
 	const result = createUser(
@@ -2573,7 +2564,7 @@ app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, 
 app.post("/api/admin/users/:username/role", requireAdmin, sameOrigin, (req, res) => {
 	const target = req.params.username;
 	const role = String(req.body.role || "");
-	if (!canAssignRole(req.user.role, role)) {
+	if (req.user.role !== "creator" && !canAssignRole(req.user.role, role)) {
 		return res.redirect(303, "/admin?error=forbidden");
 	}
 	if (

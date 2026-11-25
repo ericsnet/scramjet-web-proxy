@@ -13,6 +13,8 @@ const DEVICE_KEY_FILE = path.join(DATA_DIR, "device.key");
 const WINDOW_MS = 10 * 60 * 1000;
 const ALERT_THRESHOLD = 8;
 const ALERT_COOLDOWN_MS = 2 * 60 * 1000;
+const DISMISS_COOLDOWN_MS = 15 * 60 * 1000;
+const dismissCooldowns = new Map();
 
 let state = { alerts: [], banned: {}, logins: [] };
 let saveTimer = null;
@@ -21,6 +23,13 @@ const trackers = new Map();
 
 const SKIP_PATH =
 	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|avatar)/;
+
+// Endpoints que el propio panel consulta periódicamente. No son navegación
+// humana y no deben contar como ráfaga ni como intervalos automatizados.
+const ROUTINE_PATH =
+	/^\/(?:api\/(?:chat\/(?:unread|channels|read|messages|files)|me|lang|admin\/traffic))$/;
+const ROUTINE_ANY_METHOD =
+	/^\/(?:api\/(?:chat\/(?:read|unread|channels)|me|lang|admin\/traffic))$/;
 
 const BOT_UA =
 	/curl|wget|python-requests|python-urllib|aiohttp|httpx|scrapy|headlesschrome|phantomjs|puppeteer|playwright|selenium|go-http-client|okhttp|java\/|node-fetch|axios|bot\b|spider|crawler/i;
@@ -331,6 +340,7 @@ function alertKind(reasons, bot) {
 
 function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 	const now = Date.now();
+	if ((dismissCooldowns.get(ip) || 0) > now) return null;
 	const open = state.alerts.find(
 		(alert) => alert.ip === ip && alert.status === "open",
 	);
@@ -383,6 +393,8 @@ function observe(req, res) {
 	const ip = clientIp(req);
 	if (!ip) return;
 	if (SKIP_PATH.test(req.path || "")) return;
+	if (ROUTINE_ANY_METHOD.test(req.path || "")) return;
+	if (["GET", "HEAD"].includes(req.method) && ROUTINE_PATH.test(req.path || "")) return;
 	const now = Date.now();
 	let tracker = trackers.get(ip);
 	if (!tracker) {
@@ -426,11 +438,22 @@ function observe(req, res) {
 	}
 }
 
-function uniqueRecent(values) {
-	return [...new Set(values)];
+function browserName(userAgent) {
+	const value = String(userAgent || "");
+	if (/SamsungBrowser\//i.test(value)) return "Samsung Internet";
+	if (/Edg\//i.test(value)) return "Edge";
+	if (/OPR\/|Opera/i.test(value)) return "Opera";
+	if (/Firefox\//i.test(value)) return "Firefox";
+	if (/CriOS\/|Chrome\//i.test(value)) return "Chrome";
+	if (/Safari\//i.test(value)) return "Safari";
+	return value ? "otro" : "";
 }
 
-export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
+export function recordSuccessfulLogin(
+	username,
+	ip,
+	{ exempt = false, device = "", userAgent = "" } = {},
+) {
 	const name = String(username || "").slice(0, 32);
 	const address = String(ip || "").trim();
 	if (!name || !net.isIP(address)) return { blocked: false };
@@ -438,6 +461,9 @@ export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
 	state.logins.push({
 		username: name,
 		ip: address,
+		device: String(device || "").slice(0, 64),
+		browser: browserName(userAgent),
+		userAgent: String(userAgent || "").slice(0, 200),
 		at: new Date(now).toISOString(),
 		exempt: !!exempt,
 	});
@@ -446,86 +472,8 @@ export function recordSuccessfulLogin(username, ip, { exempt = false } = {}) {
 		.slice(-3000);
 	dirty = true;
 	scheduleSave();
-
-	const recent = state.logins.filter(
-		(entry) =>
-			!entry.exempt &&
-			now - new Date(entry.at).getTime() <= 24 * 60 * 60 * 1000,
-	);
-	const last30 = recent.filter(
-		(entry) => now - new Date(entry.at).getTime() <= 30 * 60 * 1000,
-	);
-	const ipAccounts = uniqueRecent(
-		recent
-			.filter((entry) => entry.ip === address)
-			.map((entry) => entry.username.toLowerCase()),
-	);
-	const accountIps = uniqueRecent(
-		recent
-			.filter(
-				(entry) =>
-					entry.username.toLowerCase() === name.toLowerCase(),
-			)
-			.map((entry) => entry.ip),
-	);
-	const ipBurst = uniqueRecent(
-		last30
-			.filter((entry) => entry.ip === address)
-			.map((entry) => entry.username.toLowerCase()),
-	);
-	const accountBurst = uniqueRecent(
-		last30
-			.filter((entry) => entry.username.toLowerCase() === name.toLowerCase())
-			.map((entry) => entry.ip),
-	);
-	let reasons = [];
-	if (ipBurst.length >= 3 || ipAccounts.length >= 5) {
-		reasons.push("Varias cuentas desde la misma IP");
-	}
-	if (accountBurst.length >= 4 || accountIps.length >= 8) {
-		reasons.push("Misma cuenta desde varias IPs");
-	}
-	if (!reasons.length) return { blocked: false };
-
-	reasons = [...new Set(reasons)];
-	const until = new Date(now + 30 * 60 * 1000).toISOString();
-	const alert = upsertAlert(
-		{ alertId: "", lastAlertAt: 0 },
-		address,
-		20,
-		["Posible intercambio de cuentas", ...reasons],
-		{
-			originalUrl: "/api/login",
-			url: "/api/login",
-			path: "/api/login",
-			method: "POST",
-			headers: { "user-agent": "" },
-			user: { username: name },
-		},
-		{ statusCode: 303 },
-		false,
-	);
-	if (alert) {
-		alert.kind = "account_swap";
-		alert.blockedAccount = name;
-		alert.blockedUntil = until;
-		alert.accounts = ipAccounts.slice(0, 12);
-		alert.ips = accountIps.slice(0, 12);
-		alert.reasons = [
-			...new Set([
-				...(alert.reasons || []),
-				`Cuenta ${name} bloqueada temporalmente`,
-			]),
-		].slice(0, 12);
-		dirty = true;
-		saveNow();
-	}
-	return {
-		blocked: !exempt,
-		until,
-		alert,
-		reasons,
-	};
+	// El bloqueo automático por intercambio de cuentas está desactivado.
+	return { blocked: false };
 }
 
 export function securityMiddleware(req, res, next) {
@@ -644,6 +592,8 @@ export function dismissAlert(id) {
 	if (!alert) return { error: "notfound" };
 	alert.status = "dismissed";
 	alert.dismissedAt = new Date().toISOString();
+	dismissCooldowns.set(alert.ip, Date.now() + DISMISS_COOLDOWN_MS);
+	trackers.delete(alert.ip);
 	dirty = true;
 	saveNow();
 	return { ok: true };
