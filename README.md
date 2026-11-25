@@ -205,6 +205,7 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - Observa todas las peticiones y llamadas a la API sin bloquearlas automáticamente.
 - Genera alertas con IP, usuario, motivos, puntuación y última petición.
 - Detecta bots por intervalos, user-agent y patrones de uso; no usa captcha.
+- Cada alerta incluye **Ver movimientos**: método, ruta, estado, riesgo, motivos, navegador y dispositivo de cada petición registrada.
 - El bloqueo automático por intercambio de cuentas está desactivado; solo se generan alertas por patrones claros y nunca se bloquea una cuenta por compartir IP o dispositivo.
 - Desde `/admin/security` puedes banear o desbanear la IP (bot o hacking) y descartar alertas.
 - Emergencia si te bloqueas a ti mismo: `npm run security:unban -- 1.2.3.4` y reinicia `webproxy`.

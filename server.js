@@ -58,6 +58,7 @@ import {
 	activityPage,
 	sessionsPage,
 	securityPage,
+	securityAlertPage,
 	trafficPage,
 	settingsPage,
 	auditPage,
@@ -1926,6 +1927,15 @@ app.get("/admin/security", requireAdmin, (req, res) => {
 			error: errors[req.query.error] || "",
 		}),
 	);
+});
+
+app.get("/admin/security/alerts/:id", requireAdmin, (req, res) => {
+	const alert = listSecurityAlerts({ includeDismissed: true, limit: 1000 }).find(
+		(item) => item.id === req.params.id,
+	);
+	if (!alert) return res.redirect(303, "/admin/security?error=notfound");
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(securityAlertPage({ user: req.user, alert }));
 });
 
 app.post("/api/admin/security/ban", requireAdmin, sameOrigin, (req, res) => {

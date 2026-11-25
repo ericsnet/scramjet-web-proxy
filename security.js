@@ -15,6 +15,8 @@ const ALERT_THRESHOLD = 8;
 const ALERT_COOLDOWN_MS = 2 * 60 * 1000;
 const DISMISS_COOLDOWN_MS = 15 * 60 * 1000;
 const dismissCooldowns = new Map();
+const MAX_ALERT_EVENTS = 200;
+const MAX_TRACKER_EVENTS = 500;
 
 let state = { alerts: [], banned: {}, logins: [] };
 let saveTimer = null;
@@ -338,6 +340,34 @@ function alertKind(reasons, bot) {
 	return attack ? "hack" : bot ? "bot" : "";
 }
 
+function publicEvent(event) {
+	return {
+		at: event.atIso || new Date(event.at).toISOString(),
+		method: String(event.method || "").slice(0, 12),
+		path: String(event.path || "").slice(0, 300),
+		status: Number(event.status) || 0,
+		requestScore: Number(event.score) || 0,
+		totalScore: Number(event.total) || 0,
+		reasons: Array.isArray(event.reasons) ? event.reasons.slice(0, 10) : [],
+		userAgent: String(event.userAgent || "").slice(0, 200),
+		device: String(event.device || "").slice(0, 64),
+		username: String(event.username || "").slice(0, 32),
+	};
+}
+
+function appendAlertEvent(alert, event) {
+	if (event.staff && String(event.path || "").startsWith("/admin")) return;
+	const clean = publicEvent(event);
+	alert.events = [...(alert.events || []), clean].slice(-MAX_ALERT_EVENTS);
+	alert.lastSeen = clean.at;
+	alert.lastPath = clean.path;
+	alert.lastMethod = clean.method;
+	alert.statusCode = clean.status;
+	alert.reasons = [...new Set([...(alert.reasons || []), ...clean.reasons])].slice(0, 12);
+	dirty = true;
+	scheduleSave();
+}
+
 function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 	const now = Date.now();
 	if ((dismissCooldowns.get(ip) || 0) > now) return null;
@@ -376,6 +406,10 @@ function upsertAlert(tracker, ip, score, reasons, req, res, bot) {
 		lastMethod: String(req.method || "").slice(0, 10),
 		statusCode: Number(res.statusCode) || 0,
 		userAgent: String(req.headers["user-agent"] || "").slice(0, 200),
+		events: (tracker.events || [])
+			.filter((event) => !(event.staff && String(event.path || "").startsWith("/admin")))
+			.slice(-MAX_ALERT_EVENTS)
+			.map(publicEvent),
 		status: "open",
 	};
 	state.alerts.push(alert);
@@ -411,12 +445,23 @@ function observe(req, res) {
 	}
 	tracker.lastSeen = now;
 	const analysis = analyzeRequest(req, res);
-	tracker.events.push({
+	const event = {
 		at: now,
+		atIso: new Date(now).toISOString(),
+		method: String(req.method || "").slice(0, 12),
+		path: safePath(req),
 		status: Number(res.statusCode) || 0,
 		score: analysis.score,
-	});
-	tracker.events = tracker.events.filter((event) => now - event.at <= WINDOW_MS);
+		reasons: analysis.reasons.slice(0, 10),
+		userAgent: String(req.headers["user-agent"] || "").slice(0, 200),
+		device: req._deviceId || "",
+		username: req.user?.username || "",
+		staff: ["admin", "creator", "moderator"].includes(req.user?.role),
+	};
+	tracker.events.push(event);
+	tracker.events = tracker.events
+		.filter((entry) => now - entry.at <= WINDOW_MS)
+		.slice(-MAX_TRACKER_EVENTS);
 	if ((req.path || "").startsWith("/api/")) tracker.apiPaths.add(req.path);
 	const agent = String(req.headers["user-agent"] || "").slice(0, 200);
 	tracker.userAgents.set(agent, (tracker.userAgents.get(agent) || 0) + 1);
@@ -433,6 +478,13 @@ function observe(req, res) {
 	const bot = behavior.reasons.some((reason) =>
 		["Intervalos automatizados", "User-Agent de bot", "Navegador no convencional"].includes(reason),
 	);
+	event.total = score;
+	event.reasons = reasons.slice(0, 10);
+
+	const openAlert = state.alerts.find(
+		(alert) => alert.ip === ip && alert.status === "open",
+	);
+	if (openAlert) appendAlertEvent(openAlert, event);
 	if (score >= ALERT_THRESHOLD) {
 		upsertAlert(tracker, ip, score, reasons, req, res, bot);
 	}

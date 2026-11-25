@@ -1808,6 +1808,7 @@ export function securityPage({
   <td>${reasons || "—"}</td>
   <td class="mono">${esc(a.lastMethod || "")} ${esc(a.lastPath || "")}<br><span class="muted">${esc(a.userAgent || "sin user-agent")}</span></td>
   <td><div class="actions">
+    <a class="small" href="/admin/security/alerts/${encodeURIComponent(a.id)}">Ver movimientos${Array.isArray(a.events) && a.events.length ? ` (${a.events.length})` : ""}</a>
     ${
 			a.status === "open"
 				? `<form method="post" action="/api/admin/security/dismiss">
@@ -1912,6 +1913,59 @@ ${adminTabs("security", user.role)}
   ${banRows ? `<div class="scroll"><table><thead><tr><th>Objetivo</th><th>Tipo</th><th>Categoría</th><th>Por</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>${banRows}</tbody></table></div>` : '<p class="empty">No hay bloqueos activos.</p>'}
 </div>`;
 	return shell("Seguridad · Administración", body, { topbar: topbar(user) });
+}
+
+export function securityAlertPage({ user, alert } = {}) {
+	const events = Array.isArray(alert?.events) ? [...alert.events].reverse() : [];
+	const reasons = Array.isArray(alert?.reasons) ? alert.reasons : [];
+	const kind = alert?.kind === "bot" || alert?.bot
+		? "bot"
+		: alert?.kind === "hack"
+			? "hacking"
+			: "alerta";
+	const reasonCounts = new Map();
+	for (const event of events) {
+		for (const reason of event.reasons || []) {
+			reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
+		}
+	}
+	const reasonSummary = [...reasonCounts.entries()]
+		.sort((a, b) => b[1] - a[1])
+		.slice(0, 12)
+		.map(([reason, count]) => `<span class="badge">${esc(reason)} · ${count}</span>`)
+		.join(" ");
+	const rows = events
+		.map(
+			(event) => `<tr>
+  <td class="mono">${esc(fmtDate(event.at))}</td>
+  <td><span class="badge status-${Math.floor((Number(event.status) || 0) / 100)}xx">${esc(event.status)}</span></td>
+  <td class="mono"><strong>${esc(event.method || "")}</strong> ${esc(event.path || "")}</td>
+  <td><strong>${esc(event.totalScore || event.requestScore || 0)}</strong></td>
+  <td>${(event.reasons || []).map((reason) => `<span class="badge">${esc(reason)}</span>`).join(" ") || "—"}</td>
+  <td class="mono">${esc(event.userAgent || "sin user-agent")}${event.device ? `<br><span class="muted">${esc(event.device.slice(0, 12))}…</span>` : ""}${event.username ? `<br><span class="muted">${esc(event.username)}</span>` : ""}</td>
+</tr>`,
+		)
+		.join("");
+	const body = `
+${adminTabs("security", user.role)}
+<div class="card">
+  <div class="actions" style="justify-content:space-between;align-items:flex-start">
+    <div>
+      <h1>Movimientos de la alerta</h1>
+      <p class="muted">${esc(alert?.ip || "IP desconocida")} · ${esc(alert?.username || "sin sesión")} · ${esc(alert?.firstSeen ? fmtDate(alert.firstSeen) : "—")} → ${esc(alert?.lastSeen ? fmtDate(alert.lastSeen) : "—")}</p>
+    </div>
+    <a class="small" href="/admin/security">Volver al escáner</a>
+  </div>
+  <div class="filter" style="margin-top:12px"><span class="badge ${kind === "bot" ? "bot" : "blocked"}">${kind}</span><span class="badge">${esc(alert?.score || 0)} puntos</span><span class="badge">${events.length} movimientos</span>${alert?.status === "open" ? '<span class="badge blocked">abierta</span>' : '<span class="badge">descartada</span>'}</div>
+  ${reasonSummary ? `<p class="muted" style="margin-top:12px">Motivos más repetidos:</p><div class="actions">${reasonSummary}</div>` : ""}
+  ${alert?.status === "open" ? `<form method="post" action="/api/admin/security/dismiss" style="margin-top:14px"><input type="hidden" name="id" value="${esc(alert.id)}"><button class="small" type="submit">Descartar alerta</button></form>` : ""}
+</div>
+<div class="card">
+  <h2>Peticiones registradas (${events.length})</h2>
+  ${rows ? `<div class="scroll"><table><thead><tr><th>Hora</th><th>Estado</th><th>Petición</th><th>Riesgo</th><th>Motivos</th><th>Navegador / dispositivo</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Todavía no hay movimientos detallados para esta alerta.</p>'}
+  ${reasons.length ? `<p class="hint">Motivos agregados: ${reasons.map((reason) => `<span class="badge">${esc(reason)}</span>`).join(" ")}</p>` : ""}
+</div>`;
+	return shell("Movimientos · Seguridad", body, { topbar: topbar(user), wide: true });
 }
 
 export function trafficPage({
