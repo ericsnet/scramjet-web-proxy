@@ -280,6 +280,29 @@ dialog h2{margin-top:0}
 .section{margin-top:26px;padding-top:4px}
 .section h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
   margin:0 0 6px;font-weight:600}
+.settings-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;position:sticky;top:8px;z-index:6;
+  padding:9px;border:1px solid var(--border);border-radius:12px;background:rgba(17,24,33,.96);box-shadow:0 8px 24px rgba(0,0,0,.22)}
+.settings-search{display:flex;align-items:center;gap:7px;flex:1 1 260px;min-width:190px;margin:0;color:var(--muted)}
+.settings-search input{margin:0;padding:9px 11px;min-width:0}
+.settings-toolbar button.primary{width:auto;margin:0;padding:9px 16px;font-size:13px;flex:0 0 auto}
+.settings-dirty{font-size:12px;color:var(--ok);white-space:nowrap}
+.settings-dirty.dirty{color:#fbbf24}
+.settings-jump{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 0 2px}
+.settings-jump::-webkit-scrollbar{display:none}
+.settings-jump a{flex:0 0 auto;font-size:11.5px;color:var(--muted);border:1px solid var(--border);border-radius:999px;
+  padding:5px 9px;background:rgba(21,30,41,.5);text-decoration:none;white-space:nowrap}
+.settings-jump a:hover{color:var(--text);border-color:#3b5b7d;text-decoration:none}
+.settings-status{display:flex;gap:6px;flex-wrap:wrap;margin:3px 0 4px}
+.settings-block{margin-top:16px;padding:16px;border:1px solid var(--border);border-radius:13px;
+  background:linear-gradient(180deg,rgba(21,30,41,.62),rgba(13,20,28,.38));scroll-margin-top:72px}
+.settings-block h3{font-size:12px;letter-spacing:.08em;color:#a9bed7;margin:0 0 10px}
+.settings-block .check{padding:8px 10px;margin:8px 0;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.12)}
+.settings-block .check:hover{border-color:#3b5b7d}
+.settings-block .check input{width:18px;height:18px}
+.settings-block[hidden]{display:none}
+.settings-final-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:22px;padding-top:16px;border-top:1px solid var(--border)}
+.settings-final-actions .primary{margin:0}
+@media(max-width:640px){.settings-toolbar{position:static}.settings-toolbar button.primary{width:100%}.settings-block{padding:12px}.settings-jump{margin-right:-4px}}
 .chat-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .chat-channel-bar{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .chat-channel-bar select{width:auto;min-width:150px;padding:8px 10px;font-size:13px}
@@ -2279,10 +2302,36 @@ ${adminTabs("settings")}
 <div class="card">
   <h1>Ajustes</h1>
   <p class="muted">Los cambios se aplican sin reiniciar la aplicación.</p>
-  <p class="hint">Se guardan solo al pulsar “Guardar ajustes”. Si otra pestaña ha cambiado los ajustes, se mostrará un aviso en vez de sobrescribirlos.</p>
+  <p class="hint">Se guardan al pulsar “Guardar ajustes” o con <kbd>Ctrl</kbd> + <kbd>S</kbd>. Si otra pestaña ha cambiado los ajustes, se mostrará un aviso en vez de sobrescribirlos.</p>
 
-  <div class="section">
-    <h3>Seguridad y sesiones</h3>
+  <div class="settings-toolbar">
+    <label class="settings-search"><span>🔎</span><input id="settings-search" type="search" placeholder="Buscar ajuste: chat, sesiones, bloqueo…" aria-label="Buscar ajuste"></label>
+    <span class="settings-dirty" id="settings-dirty" aria-live="polite">Sin cambios</span>
+    <button class="primary" type="submit">Guardar ajustes</button>
+  </div>
+  <div class="settings-jump">
+    <a href="#settings-security">🛡 Seguridad</a>
+    <a href="#settings-activity">📊 Actividad</a>
+    <a href="#settings-chat">💬 Chat</a>
+    <a href="#settings-maintenance">🚧 Mantenimiento</a>
+    <a href="#settings-quarantine">🧪 Cuarentena</a>
+    <a href="#settings-sites">🌐 Sitios</a>
+    <a href="#settings-language">🌍 Idioma</a>
+    <a href="#settings-backups">💾 Copias</a>
+    <a href="#settings-landing">🏠 Portada</a>
+  </div>
+  <div class="settings-status">
+    <span class="badge">Sesión: ${esc(settings.sessionHours)} h</span>
+    <span class="badge">Inactividad: ${esc(settings.sessionIdleHours || 12)} h</span>
+    <span class="badge">${settings.chatEnabled ? "Chat activo" : "Chat desactivado"}</span>
+    <span class="badge">${settings.maintenanceMode ? "Mantenimiento activo" : "Sin mantenimiento"}</span>
+    <span class="badge">${settings.accessMode === "allowlist" ? "Lista blanca" : "Lista negra"}</span>
+    <span class="badge">${settings.backupEnabled ? "Copias activas" : "Copias desactivadas"}</span>
+  </div>
+  <p class="empty" id="settings-empty" hidden>No hay ajustes que coincidan con la búsqueda.</p>
+
+  <div class="section settings-block" id="settings-security" data-settings-search="seguridad sesiones login contraseña inactividad bloqueo zona horaria intentos">
+    <h3>🛡 Seguridad y sesiones</h3>
     <div class="field-grid">
       <div>
         <label for="sessionHours">Duración de sesión (horas)</label>
@@ -2316,8 +2365,8 @@ ${adminTabs("settings")}
     <label class="check"><input type="checkbox" name="allowUserPasswordChange"${settings.allowUserPasswordChange ? " checked" : ""}> Permitir que los usuarios cambien su contraseña (los admins siempre pueden)</label>
   </div>
 
-  <div class="section">
-    <h3>Actividad</h3>
+  <div class="section settings-block" id="settings-activity" data-settings-search="actividad historial navegación usuarios límites">
+    <h3>📊 Actividad</h3>
     <label class="check"><input type="checkbox" name="activityEnabled"${settings.activityEnabled ? " checked" : ""}> Registrar actividad de navegación</label>
     <label class="check"><input type="checkbox" name="allowUserHistoryClear"${settings.allowUserHistoryClear ? " checked" : ""}> Permitir que los usuarios vacíen su propio historial</label>
     <div class="field-grid">
@@ -2332,8 +2381,8 @@ ${adminTabs("settings")}
     </div>
   </div>
 
-  <div class="section">
-    <h3>Chat de usuarios</h3>
+  <div class="section settings-block" id="settings-chat" data-settings-search="chat mensajes usuarios grupos privados retención adjuntos">
+    <h3>💬 Chat de usuarios</h3>
     <label class="check"><input type="checkbox" name="chatEnabled"${settings.chatEnabled ? " checked" : ""}> Activar el chat entre usuarios</label>
     <label class="check"><input type="checkbox" name="chatShowOnline"${settings.chatShowOnline ? " checked" : ""}> Mostrar cuántos usuarios están conectados</label>
     <label class="check"><input type="checkbox" name="chatAllowUserDelete"${settings.chatAllowUserDelete ? " checked" : ""}> Permitir que cada usuario borre sus propios mensajes</label>
@@ -2369,23 +2418,23 @@ ${adminTabs("settings")}
     <button class="small danger" type="submit" formaction="/api/admin/chat/clear" formmethod="post" onclick="return confirm('¿Vaciar todo el chat? Esta acción no se puede deshacer.')">Vaciar chat</button>
   </div>
 
-  <div class="section">
-    <h3>Mantenimiento</h3>
+  <div class="section settings-block" id="settings-maintenance" data-settings-search="mantenimiento aviso acceso administradores">
+    <h3>🚧 Mantenimiento</h3>
     <label class="check"><input type="checkbox" name="maintenanceMode"${settings.maintenanceMode ? " checked" : ""}> Activar modo mantenimiento (solo administradores)</label>
     <label for="maintenanceMessage">Mensaje para los usuarios</label>
     <textarea id="maintenanceMessage" name="maintenanceMessage" maxlength="300" style="min-height:60px">${esc(settings.maintenanceMessage)}</textarea>
   </div>
 
-  <div class="section">
-    <h3>Cuarentena</h3>
+  <div class="section settings-block" id="settings-quarantine" data-settings-search="cuarentena seguridad bloqueo conexiones">
+    <h3>🧪 Cuarentena</h3>
     <label class="check"><input type="checkbox" name="quarantineMode"${settings.quarantineMode ? " checked" : ""}> Activar cuarentena (solo administradores)</label>
     <label for="quarantineMessage">Mensaje para los usuarios</label>
     <textarea id="quarantineMessage" name="quarantineMessage" maxlength="300" style="min-height:60px">${esc(settings.quarantineMessage || "")}</textarea>
     <p class="hint">Al activarla se rechazan nuevas peticiones de webs y se cierran las conexiones abiertas de usuarios.</p>
   </div>
 
-  <div class="section">
-    <h3>Sitios y modo de acceso</h3>
+  <div class="section settings-block" id="settings-sites" data-settings-search="sitios dominios permitidos prohibidos lista negra blanca categorías adultos apuestas social">
+    <h3>🌐 Sitios y modo de acceso</h3>
     <label for="accessMode">Modo</label>
     <select id="accessMode" name="accessMode">
       <option value="blacklist"${settings.accessMode === "blacklist" ? " selected" : ""}>Lista negra: se permite todo salvo los prohibidos</option>
@@ -2425,8 +2474,8 @@ ${adminTabs("settings")}
     <p class="hint">Se bloquea el dominio completo y sus subdominios. En modo lista blanca, la lista de prohibidos y las categorías se ignoran. Los administradores pueden acceder.</p>
   </div>
 
-  <div class="section">
-    <h3>Idioma de la interfaz</h3>
+  <div class="section settings-block" id="settings-language" data-settings-search="idioma español inglés catalán language">
+    <h3>🌍 Idioma de la interfaz</h3>
     <label for="language">Idioma por defecto</label>
     <select id="language" name="language">
       <option value="es"${settings.language === "es" ? " selected" : ""}>Español</option>
@@ -2435,8 +2484,8 @@ ${adminTabs("settings")}
     </select>
   </div>
 
-  <div class="section">
-    <h3>Copias y métricas</h3>
+  <div class="section settings-block" id="settings-backups" data-settings-search="copias backup métricas token retención">
+    <h3>💾 Copias y métricas</h3>
     <label class="check"><input type="checkbox" name="backupEnabled"${settings.backupEnabled ? " checked" : ""}> Copia automática diaria (sobre las 03:00)</label>
     <div class="field-grid">
       <div>
@@ -2450,8 +2499,8 @@ ${adminTabs("settings")}
     </div>
   </div>
 
-  <div class="section">
-    <h3>Portada y búsqueda</h3>
+  <div class="section settings-block" id="settings-landing" data-settings-search="portada título subtítulo buscador enlaces rápidos favoritos">
+    <h3>🏠 Portada y búsqueda</h3>
     <div class="field-grid">
       <div>
         <label for="landingTitle">Título</label>
@@ -2475,7 +2524,10 @@ ${adminTabs("settings")}
 
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
-  <button class="primary" type="submit">Guardar ajustes</button>
+  <div class="settings-final-actions">
+    <button class="primary" type="submit">Guardar ajustes</button>
+    <span class="settings-dirty" id="settings-dirty-bottom" aria-live="polite">Sin cambios</span>
+  </div>
 </div>
 </form>
 
@@ -2498,8 +2550,59 @@ function addLink() {
 }
 const settingsForm = document.querySelector('form[action="/api/admin/settings"]');
 if (settingsForm) settingsForm.reset();
+if (settingsForm) {
+  const search = document.getElementById("settings-search");
+  const blocks = [...document.querySelectorAll(".settings-block")];
+  const empty = document.getElementById("settings-empty");
+  const dirtyLabels = [
+    document.getElementById("settings-dirty"),
+    document.getElementById("settings-dirty-bottom"),
+  ].filter(Boolean);
+  let dirty = false;
+  const updateDirty = (value) => {
+    dirty = value;
+    for (const label of dirtyLabels) {
+      label.textContent = dirty ? "Cambios sin guardar" : "Sin cambios";
+      label.classList.toggle("dirty", dirty);
+    }
+  };
+  settingsForm.addEventListener("input", (event) => {
+    if (event.target.id !== "settings-search") updateDirty(true);
+  });
+  settingsForm.addEventListener("change", (event) => {
+    if (event.target.id !== "settings-search") updateDirty(true);
+  });
+  settingsForm.addEventListener("submit", () => updateDirty(false));
+  if (search) {
+    search.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") event.preventDefault();
+    });
+    search.addEventListener("input", () => {
+      const query = search.value.trim().toLowerCase();
+      let visible = 0;
+      for (const block of blocks) {
+        const haystack = ((block.dataset.settingsSearch || "") + " " + block.textContent).toLowerCase();
+        const matches = !query || haystack.includes(query);
+        block.hidden = !matches;
+        if (matches) visible += 1;
+      }
+      if (empty) empty.hidden = visible > 0;
+    });
+  }
+  window.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      settingsForm.requestSubmit();
+    }
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (!dirty) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+}
 </script>`;
-	return shell("Ajustes · Administración", body, { topbar: topbar(user) });
+	return shell("Ajustes · Administración", body, { topbar: topbar(user), wide: true });
 }
 
 export function auditPage({
