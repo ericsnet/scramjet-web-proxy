@@ -16,7 +16,7 @@ administración.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas** y atajos de teclado.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
-- **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados.
+- **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
 - **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.
 - **Avisos del chat**: pop-ups cuando alguien escribe y contador de mensajes nuevos al volver a entrar.
 - **Interfaz en español, inglés y catalán**.
@@ -254,6 +254,7 @@ usuario puede vaciar su propio historial.
 - `data/bookmarks.json`: favoritos por usuario.
 - `data/chat.json`: mensajes, canales y lecturas del chat interno.
 - `data/chat-uploads/`: adjuntos privados del chat.
+- `data/friends.json`: amistades y solicitudes pendientes; no se incluye en las copias.
 - `data/avatars/`: iconos de usuario validados por contenido y servidos solo con sesión iniciada.
 - `data/security.json`: alertas, bloqueos e historial reciente de logins.
 - `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
@@ -285,7 +286,7 @@ Medidas de seguridad incluidas:
 Las copias se guardan cifradas con AES-256-GCM fuera del web root
 (`/var/backups/proxy` en producción), con permisos `600`. Incluyen usuarios sin
 contraseñas, hashes, notas, IPs ni mensajes de bloqueo, y no incluyen actividad,
-auditoría, chat ni iconos de usuario. La clave se guarda en `BACKUP_KEY_FILE` (por defecto
+auditoría, chat, amistades ni iconos de usuario. La clave se guarda en `BACKUP_KEY_FILE` (por defecto
 `/etc/webproxy/backup.key`) y la ruta con `BACKUP_DIR`.
 
 La descarga exige contraseña y auditoría; la restauración también exige
@@ -316,6 +317,7 @@ Archivos principales:
 | `metrics.js` | Contadores Prometheus |
 | `net-guard.js` | Detección de destinos privados para `navigate-check` |
 | `chat.js` | Almacén, límites y retención del chat interno |
+| `friends.js` | Amistades, solicitudes y permisos de chat privado |
 | `security.js` | Detección pasiva, alertas y bloqueos |
 | `traffic.js` | Búfer de tráfico HTTP y conexiones Wisp para el panel en vivo |
 | `public/traffic.js` | Actualización del panel de tráfico |

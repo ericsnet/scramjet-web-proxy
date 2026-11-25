@@ -485,6 +485,19 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .dialog-x:hover{color:var(--text)}
 button.primary-small,a.primary-small{background:var(--accent);color:#fff;border-color:var(--accent)}
 button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color:#2f6fdd}
+.chat-action{position:relative}
+.friend-badge{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:#dc2626;color:#fff;font-size:10px;font-weight:700;line-height:18px;text-align:center}
+.friend-dialog{max-width:580px}
+.friend-dialog h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 5px}
+.friend-list{display:flex;flex-direction:column;gap:2px}
+.friend-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.friend-row:last-child{border-bottom:0}
+.friend-row .friend-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.friend-row .actions,.friend-row form{margin-left:auto}
+.friend-row .actions{display:flex;gap:6px;flex-wrap:wrap}
+.friend-add{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.friend-add select{flex:1 1 180px;width:auto;margin:0}
 @media(max-width:820px){
   .wrap.wide{width:calc(100% - 16px);margin-top:12px}
   .chat-app{grid-template-columns:1fr;height:auto;min-height:calc(100vh - 150px)}
@@ -547,6 +560,7 @@ button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color
 .chat-user-chip .chat-chip-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
 .topbar{flex-wrap:nowrap!important;justify-content:flex-start;overflow-x:auto;scrollbar-width:none;white-space:nowrap;padding-left:20px;padding-right:20px}
 .topbar::-webkit-scrollbar{display:none}
+
 `;
 
 function avatarColor(name) {
@@ -1004,6 +1018,10 @@ export function chatPage({
 	channels = [],
 	currentChannel = "general",
 	users = [],
+	friends = [],
+	incomingRequests = [],
+	outgoingRequests = [],
+	requestableUsers = [],
 	canModerate = false,
 	notice = "",
 	error = "",
@@ -1016,6 +1034,17 @@ export function chatPage({
 		userByName.set(String(entry.username).toLowerCase(), entry);
 	}
 	if (user) userByName.set(String(user.username).toLowerCase(), user);
+	const canAddAnyone = user?.role === "creator";
+	const dmCandidates = canAddAnyone ? users : friends;
+	const returnTo =
+		currentChannel === "general"
+			? "/chat"
+			: `/chat?channel=${encodeURIComponent(currentChannel)}`;
+	const entryFor = (name) =>
+		userByName.get(String(name).toLowerCase()) || { username: name };
+	const incomingEntries = incomingRequests.map(entryFor);
+	const outgoingEntries = outgoingRequests.map(entryFor);
+	const pendingCount = incomingEntries.length;
 	const channelIcon = (channel) =>
 		channel.type === "public" ? "#" : channel.type === "group" ? "◆" : channel.name.slice(0, 1).toUpperCase();
 	const channelItems = channels
@@ -1040,10 +1069,10 @@ export function chatPage({
 				`<option value="${esc(channel.id)}"${channel.id === currentChannel ? " selected" : ""}>${esc(channel.name)}${channel.unread ? ` (${channel.unread})` : ""}</option>`,
 		)
 		.join("");
-	const userOptions = users
+	const userOptions = dmCandidates
 		.map((entry) => `<option value="${esc(entry.username)}">${esc(entry.username)}</option>`)
 		.join("");
-	const memberOptions = users
+	const memberOptions = dmCandidates
 		.map(
 			(entry) => `<label class="chat-member-option" data-member-name="${esc(entry.username.toLowerCase())}">
       <input type="checkbox" name="members" value="${esc(entry.username)}">
@@ -1051,6 +1080,34 @@ export function chatPage({
       <span>${esc(entry.username)}</span>
     </label>`,
 		)
+		.join("");
+	const friendOptions = requestableUsers
+		.map((entry) => `<option value="${esc(entry.username)}">${esc(entry.username)}</option>`)
+		.join("");
+	const friendRows = friends
+		.map((entry) => `<div class="friend-row">
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      <span class="friend-name">${esc(entry.username)}</span>
+      <form method="post" action="/api/friends/remove"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small danger" type="submit">Quitar</button></form>
+    </div>`)
+		.join("");
+	const incomingRows = incomingEntries
+		.map((entry) => `<div class="friend-row">
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      <span class="friend-name">${esc(entry.username)}</span>
+      <div class="actions">
+        <form method="post" action="/api/friends/accept"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small primary-small" type="submit">Aceptar</button></form>
+        <form method="post" action="/api/friends/reject"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small danger" type="submit">Rechazar</button></form>
+      </div>
+    </div>`)
+		.join("");
+	const outgoingRows = outgoingEntries
+		.map((entry) => `<div class="friend-row">
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      <span class="friend-name">${esc(entry.username)}</span>
+      <span class="badge">pendiente</span>
+      <form method="post" action="/api/friends/cancel"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small" type="submit">Cancelar</button></form>
+    </div>`)
 		.join("");
 	const onlineChips = onlineUsers
 		.map((name) => {
@@ -1140,6 +1197,9 @@ export function chatPage({
         </div>
       </div>
       <div class="chat-header-actions">
+        <button class="chat-action" type="button" id="chat-friends" title="Amigos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Amigos</span>${pendingCount ? `<b class="friend-badge">${pendingCount}</b>` : ""}
+        </button>
         <button class="chat-action" type="button" id="chat-new-dm" title="Nuevo chat privado">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Privado</span>
         </button>
@@ -1184,9 +1244,9 @@ export function chatPage({
   <form method="dialog">
     <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
     <h2>Nuevo chat privado</h2>
-    <p class="muted">Solo vosotros podréis leer este canal.</p>
-    <label for="chat-dm-user">Usuario</label>
-    <select id="chat-dm-user">${userOptions}</select>
+    <p class="muted">Solo vosotros podréis leer este canal. Solo aparecen tus amigos.</p>
+    <label for="chat-dm-user">Amigo</label>
+    <select id="chat-dm-user">${userOptions || '<option value="">No tienes amigos todavía</option>'}</select>
     <div class="dialog-actions">
       <button class="small" type="button" data-close-dialog>Cancelar</button>
       <button class="small primary-small" type="button" id="chat-dm-create">Crear privado</button>
@@ -1202,7 +1262,7 @@ export function chatPage({
     <input id="chat-group-name" maxlength="40" placeholder="Equipo, amigos…">
     <label for="chat-group-search">Miembros</label>
     <input id="chat-group-search" class="chat-member-search" type="search" placeholder="Buscar usuario…" autocomplete="off">
-    <div id="chat-group-members" class="chat-member-picker">${memberOptions || '<span class="muted">No hay otros usuarios disponibles.</span>'}</div>
+    <div id="chat-group-members" class="chat-member-picker">${memberOptions || '<span class="muted">Añade amigos para crear un grupo.</span>'}</div>
     <p class="muted" id="chat-group-empty" hidden style="padding:8px 4px">No hay usuarios que coincidan.</p>
     <div class="dialog-actions">
       <button class="small" type="button" data-close-dialog>Cancelar</button>
@@ -1224,6 +1284,19 @@ export function chatPage({
       <button class="small primary-small" type="button" id="chat-poll-create">Crear encuesta</button>
     </div>
   </form>
+</dialog>
+<dialog id="chat-friends-dialog" class="chat-dialog friend-dialog">
+  <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
+    <h2>Amigos</h2>
+    <p class="muted">Para hablar en privado o crear grupos primero debes ser amigo.</p>
+    <h3>Solicitudes recibidas (${incomingEntries.length})</h3>
+    <div class="friend-list">${incomingRows || '<p class="muted">No tienes solicitudes pendientes.</p>'}</div>
+    <h3>Amigos (${friends.length})</h3>
+    <div class="friend-list">${friendRows || '<p class="muted">Todavía no tienes amigos.</p>'}</div>
+    <h3>Añadir amigo</h3>
+    ${friendOptions ? `<form method="post" action="/api/friends/request" class="friend-add"><input type="hidden" name="next" value="${esc(returnTo)}"><select name="username" required>${friendOptions}</select><button class="small primary-small" type="submit">Enviar solicitud</button></form>` : '<p class="muted">No hay usuarios disponibles para enviar solicitud.</p>'}
+    <h3>Solicitudes enviadas (${outgoingEntries.length})</h3>
+    <div class="friend-list">${outgoingRows || '<p class="muted">No tienes solicitudes enviadas.</p>'}</div>
 </dialog>
 <script src="/chat.js" defer></script>` : `
 <div class="card">

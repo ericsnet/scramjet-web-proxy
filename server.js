@@ -113,6 +113,16 @@ import {
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
+import {
+	areFriends,
+	acceptFriendRequest,
+	cancelFriendRequest,
+	getFriendState,
+	rejectFriendRequest,
+	removeFriend,
+	sendFriendRequest,
+	flushFriends,
+} from "./friends.js";
 import { isPrivateDestination } from "./net-guard.js";
 import { recordHttp, trafficSnapshot, wispOpen, wispClose, wispBytes } from "./traffic.js";
 import { isAdminRole, isStaffRole, canManageRole, canAssignRole } from "./roles.js";
@@ -562,6 +572,15 @@ const CHAT_ERRORS = {
 	rate: "Has enviado demasiados mensajes. Espera un minuto.",
 	forbidden: "No puedes borrar ese mensaje.",
 	notfound: "Ese mensaje ya no existe.",
+};
+
+const FRIEND_ERRORS = {
+	"invalid-user": "Usuario no válido.",
+	"already-friends": "Ya sois amigos.",
+	pending: "Ya hay una solicitud pendiente.",
+	limit: "Tienes demasiadas solicitudes pendientes.",
+	notfound: "La solicitud o amistad ya no existe.",
+	"not-friends": "Solo puedes hacer esto con amigos.",
 };
 
 function isChatModerator(user) {
@@ -1373,13 +1392,41 @@ function chatEnriched(messages, user, meta) {
 app.get("/chat", (req, res) => {
 	const settings = getSettings();
 	const canModerate = isChatModerator(req.user);
-	const notice = req.query.ok === "sent" ? "Mensaje enviado." : req.query.ok === "deleted" ? "Mensaje eliminado." : "";
-	const error = CHAT_ERRORS[req.query.error] || "";
+	const friendNotices = {
+		"friend-request": "Solicitud de amistad enviada.",
+		"friend-accepted": "Solicitud aceptada. Ya sois amigos.",
+		"friend-rejected": "Solicitud rechazada.",
+		"friend-cancelled": "Solicitud cancelada.",
+		"friend-removed": "Amistad eliminada.",
+	};
+	const notice =
+		req.query.ok === "sent"
+			? "Mensaje enviado."
+			: req.query.ok === "deleted"
+				? "Mensaje eliminado."
+				: friendNotices[req.query.ok] || "";
+	const error = CHAT_ERRORS[req.query.error] || FRIEND_ERRORS[req.query.error] || "";
 	const roles = chatUserMeta();
 	const channels = settings.chatEnabled ? listChatChannels(req.user.username) : [];
 	const onlineUsers = settings.chatShowOnline
 		? hideCreatorData(req, chatOnlineUsers(), (name) => name)
 		: [];
+	const allChatUsers = listUsers().filter(
+		(entry) =>
+			entry.username.toLowerCase() !== req.user.username.toLowerCase() &&
+			!entry.effectivelyBlocked,
+	);
+	const friendState = getFriendState(req.user.username);
+	const friendSet = new Set(friendState.friends.map((name) => name.toLowerCase()));
+	const incomingSet = new Set(friendState.incoming.map((name) => name.toLowerCase()));
+	const outgoingSet = new Set(friendState.outgoing.map((name) => name.toLowerCase()));
+	const friendEntries = allChatUsers.filter((entry) =>
+		friendSet.has(entry.username.toLowerCase()),
+	);
+	const requestableUsers = allChatUsers.filter((entry) => {
+		const name = entry.username.toLowerCase();
+		return !friendSet.has(name) && !incomingSet.has(name) && !outgoingSet.has(name);
+	});
 	let currentChannel = chatChannelOf(req);
 	if (!channels.some((channel) => channel.id === currentChannel)) {
 		currentChannel = channels[0]?.id || "general";
@@ -1412,11 +1459,11 @@ app.get("/chat", (req, res) => {
 			onlineUsers,
 			channels,
 			currentChannel,
-			users: listUsers().filter(
-				(entry) =>
-					entry.username.toLowerCase() !== req.user.username.toLowerCase() &&
-					!entry.effectivelyBlocked,
-			),
+			users: allChatUsers,
+			friends: friendEntries,
+			incomingRequests: friendState.incoming,
+			outgoingRequests: friendState.outgoing,
+			requestableUsers,
 			canModerate,
 			notice,
 			error,
@@ -1446,11 +1493,17 @@ app.get("/api/chat/channels", (req, res) => {
 });
 
 app.post("/api/chat/channels/dm", sameOrigin, (req, res) => {
-	const other = String(req.body.username || "").trim();
-	if (!getUser(other) || other.toLowerCase() === req.user.username.toLowerCase()) {
+	const target = getUser(req.body.username || "");
+	if (!target || target.username.toLowerCase() === req.user.username.toLowerCase()) {
 		return res.status(400).json({ error: "invalid-user" });
 	}
-	const result = getOrCreateDmChannel(req.user.username, other);
+	if (req.user.role !== "creator" && !areFriends(req.user.username, target.username)) {
+		return res.status(403).json({
+			error: "not_friends",
+			message: "Solo puedes abrir un chat privado con amigos.",
+		});
+	}
+	const result = getOrCreateDmChannel(req.user.username, target.username);
 	if (result.error) return res.status(400).json({ error: result.error });
 	res.status(201).json({ channel: result.channel });
 });
@@ -1460,10 +1513,69 @@ app.post("/api/chat/channels/group", sameOrigin, (req, res) => {
 	const members = (Array.isArray(req.body.members) ? req.body.members : [req.body.members])
 		.map((member) => String(member || "").trim())
 		.filter((member) => member && known.has(member.toLowerCase()));
+	if (req.user.role !== "creator") {
+		const nonFriend = members.find(
+			(member) =>
+				member.toLowerCase() !== req.user.username.toLowerCase() &&
+				!areFriends(req.user.username, member),
+		);
+		if (nonFriend) {
+			return res.status(400).json({
+				error: "not_friends",
+				message: `${nonFriend} no es tu amigo. Añádelo primero.`,
+			});
+		}
+	}
 	const result = createGroupChannel(req.user.username, req.body.name, members);
 	if (result.error) return res.status(400).json({ error: result.error });
 	audit(req, "chat.channel", result.channel.name, "grupo");
 	res.status(201).json({ channel: result.channel });
+});
+
+function friendRedirect(req, res, key, value) {
+	const next = safeNext(req.body.next || "/chat");
+	const parsed = new URL(next, "http://local.invalid");
+	parsed.searchParams.set(key, value);
+	return res.redirect(303, `${parsed.pathname}${parsed.search}`);
+}
+
+app.post("/api/friends/request", sameOrigin, (req, res) => {
+	const target = getUser(req.body.username || "");
+	if (!target || target.username.toLowerCase() === req.user.username.toLowerCase()) {
+		return friendRedirect(req, res, "error", "invalid-user");
+	}
+	const result = sendFriendRequest(req.user.username, target.username);
+	if (result.error) return friendRedirect(req, res, "error", result.error.replaceAll("_", "-"));
+	audit(req, result.accepted ? "friend.accept" : "friend.request", target.username);
+	return friendRedirect(req, res, "ok", result.accepted ? "friend-accepted" : "friend-request");
+});
+
+app.post("/api/friends/accept", sameOrigin, (req, res) => {
+	const result = acceptFriendRequest(req.user.username, req.body.username || "");
+	if (result.error) return friendRedirect(req, res, "error", result.error);
+	audit(req, "friend.accept", req.body.username || "");
+	return friendRedirect(req, res, "ok", "friend-accepted");
+});
+
+app.post("/api/friends/reject", sameOrigin, (req, res) => {
+	const result = rejectFriendRequest(req.user.username, req.body.username || "");
+	if (result.error) return friendRedirect(req, res, "error", result.error);
+	audit(req, "friend.reject", req.body.username || "");
+	return friendRedirect(req, res, "ok", "friend-rejected");
+});
+
+app.post("/api/friends/cancel", sameOrigin, (req, res) => {
+	const result = cancelFriendRequest(req.user.username, req.body.username || "");
+	if (result.error) return friendRedirect(req, res, "error", result.error);
+	audit(req, "friend.cancel", req.body.username || "");
+	return friendRedirect(req, res, "ok", "friend-cancelled");
+});
+
+app.post("/api/friends/remove", sameOrigin, (req, res) => {
+	const result = removeFriend(req.user.username, req.body.username || "");
+	if (result.error) return friendRedirect(req, res, "error", result.error);
+	audit(req, "friend.remove", req.body.username || "");
+	return friendRedirect(req, res, "ok", "friend-removed");
 });
 
 app.post("/api/chat/read", sameOrigin, (req, res) => {
@@ -2816,6 +2928,7 @@ function shutdown() {
 	flushAudit();
 	flushSessions();
 	flushChat();
+	flushFriends();
 	flushSecurity();
 	process.exit(0);
 }

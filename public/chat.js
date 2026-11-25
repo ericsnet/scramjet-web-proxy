@@ -585,6 +585,7 @@
 	bindDialog("chat-new-dm", "chat-dm-dialog");
 	bindDialog("chat-new-group", "chat-group-dialog");
 	bindDialog("chat-new-poll", "chat-poll-dialog");
+	bindDialog("chat-friends", "chat-friends-dialog");
 	document.querySelectorAll("[data-close-dialog]").forEach((button) => {
 		button.addEventListener("click", () => button.closest("dialog")?.close());
 	});
