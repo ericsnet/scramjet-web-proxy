@@ -15,6 +15,10 @@ ExecStart=/usr/bin/node /opt/web-proxy/server.js
 Environment=NODE_ENV=production
 Restart=always
 RestartSec=5
+Nice=-5
+CPUWeight=500
+IOWeight=500
+OOMScoreAdjust=-300
 
 [Install]
 WantedBy=multi-user.target

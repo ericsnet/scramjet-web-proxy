@@ -3029,6 +3029,7 @@ ${adminTabs("settings")}
   </div>
   <div class="settings-jump">
     <a href="#settings-security">🛡 Seguridad</a>
+    <a href="#settings-performance">⚡ Rendimiento</a>
     <a href="#settings-activity">📊 Actividad</a>
     <a href="#settings-chat">💬 Chat</a>
     <a href="#settings-maintenance">🚧 Mantenimiento</a>
@@ -3099,6 +3100,29 @@ ${adminTabs("settings")}
         <input id="activityTotal" name="activityTotal" type="number" min="100" max="10000" value="${settings.activityTotal}" required>
       </div>
     </div>
+  </div>
+
+  <div class="section settings-block" id="settings-performance" data-settings-search="rendimiento ancho banda wisp streams conexiones buffer latencia juegos">
+    <h3>⚡ Rendimiento del proxy</h3>
+    <div class="field-grid">
+      <div>
+        <label for="proxyBandwidthPerUserKbps">Ancho de banda por usuario (Kbps, 0 = sin límite)</label>
+        <input id="proxyBandwidthPerUserKbps" name="proxyBandwidthPerUserKbps" type="number" min="0" max="100000" step="250" value="${esc(settings.proxyBandwidthPerUserKbps ?? 8000)}" required>
+      </div>
+      <div>
+        <label for="proxyMaxStreamsPerUser">Máximo de streams por usuario</label>
+        <input id="proxyMaxStreamsPerUser" name="proxyMaxStreamsPerUser" type="number" min="8" max="128" value="${esc(settings.proxyMaxStreamsPerUser ?? 32)}" required>
+      </div>
+      <div>
+        <label for="proxyMaxConnectionsPerUser">Conexiones Wisp simultáneas por usuario</label>
+        <input id="proxyMaxConnectionsPerUser" name="proxyMaxConnectionsPerUser" type="number" min="1" max="10" value="${esc(settings.proxyMaxConnectionsPerUser ?? 6)}" required>
+      </div>
+      <div>
+        <label for="proxyWispBufferMB">Búfer de descarga por conexión (MB)</label>
+        <input id="proxyWispBufferMB" name="proxyWispBufferMB" type="number" min="1" max="32" value="${esc(settings.proxyWispBufferMB ?? 4)}" required>
+      </div>
+    </div>
+    <p class="hint">El límite de ancho de banda es por usuario y suma subida y bajada; 8000 Kbps ≈ 8 Mbps. Un stream es una conexión de red de la web (imágenes, vídeo, juegos…). Si hay muchos usuarios, baja el ancho de banda o los streams antes que el búfer.</p>
   </div>
 
   <div class="section settings-block" id="settings-chat" data-settings-search="chat mensajes usuarios grupos privados retención adjuntos">

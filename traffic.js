@@ -2,7 +2,7 @@ import { normalizeIp } from "./ip.js";
 
 const MAX_EVENTS = 300;
 const SKIP_PATH =
-	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|monitor\.js|avatar)/;
+	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|monitor\.js|session-guard\.js|password-manager\.(?:js|css)|error-503\.html|avatar)/;
 
 const events = [];
 const streams = new Map();

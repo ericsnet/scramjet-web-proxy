@@ -16,6 +16,7 @@ administración.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas** y atajos de teclado.
 - **Resumen de administración**: estado rápido de usuarios, sesiones, alertas, tráfico, copias y acciones rápidas.
 - **Vigilancia en vivo**: usuarios conectados, última web visitada, destinos Wisp y actividad reciente, con actualización automática y botón **“Echar ahora”** en cada usuario. La presencia usa actividad humana, no el polling de fondo.
+- **Límites de rendimiento por usuario**: ancho de banda (por defecto 8 Mbps), streams Wisp, conexiones simultáneas y búfer de descarga. Los logs internos de Wisp quedan silenciados salvo errores; se puede depurar con `WISP_LOG_LEVEL=debug` en systemd.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.

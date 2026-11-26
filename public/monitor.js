@@ -157,5 +157,5 @@
 		if (!document.hidden) refresh();
 	});
 	refresh();
-	setInterval(refresh, 2000);
+	setInterval(refresh, 3000);
 })();

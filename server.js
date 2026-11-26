@@ -8,7 +8,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import { server as wisp } from "@mercuryworkshop/wisp-js/server";
+import { server as wisp, logging as wispLogging, packet as wispPacket } from "@mercuryworkshop/wisp-js/server";
 
 import {
 	clearSessionCookie,
@@ -289,6 +289,11 @@ const VERSION = (() => {
 	}
 })();
 const nm = (pkg, sub) => path.join(__dirname, "node_modules/@mercuryworkshop", pkg, sub);
+
+const WISP_LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, none: 4 };
+wispLogging.set_level(
+	WISP_LOG_LEVELS[String(process.env.WISP_LOG_LEVEL || "error").toLowerCase()] ?? 3,
+);
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -341,26 +346,152 @@ function escapeRegExp(value) {
 	return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const wispUserConnections = new Map();
+const wispUserStreams = new Map();
+const wispBuckets = new Map();
+
+function wispUserKey(username) {
+	return String(username || "anónimo").toLowerCase().slice(0, 64);
+}
+
+function wispConnectionLimit(username) {
+	const max = Math.max(
+		1,
+		Math.min(10, Number(getSettings().proxyMaxConnectionsPerUser) || 6),
+	);
+	const key = wispUserKey(username);
+	return { allowed: (wispUserConnections.get(key) || 0) < max, key, max };
+}
+
+function wispStreamLimit(username) {
+	const max = Math.max(
+		8,
+		Math.min(128, Number(getSettings().proxyMaxStreamsPerUser) || 32),
+	);
+	const key = wispUserKey(username);
+	return { allowed: (wispUserStreams.get(key) || 0) < max, key, max };
+}
+
+function wispStreamAdd(key) {
+	wispUserStreams.set(key, (wispUserStreams.get(key) || 0) + 1);
+}
+
+function wispStreamRemove(key) {
+	const next = (wispUserStreams.get(key) || 0) - 1;
+	if (next > 0) wispUserStreams.set(key, next);
+	else wispUserStreams.delete(key);
+}
+
+async function throttleWisp(username, bytes) {
+	const kbps = Math.max(0, Number(getSettings().proxyBandwidthPerUserKbps) || 0);
+	const amount = Math.max(0, Number(bytes) || 0);
+	if (!kbps || !amount) return;
+	const rate = kbps * 125; // Kbps -> bytes/s
+	const burst = Math.max(64 * 1024, rate);
+	const key = wispUserKey(username);
+	let bucket = wispBuckets.get(key);
+	if (!bucket) {
+		bucket = { tokens: burst, last: Date.now(), chain: Promise.resolve() };
+		wispBuckets.set(key, bucket);
+	}
+	const task = bucket.chain.then(async () => {
+		const now = Date.now();
+		const elapsed = Math.max(0, now - bucket.last) / 1000;
+		bucket.tokens = Math.min(burst, bucket.tokens + elapsed * rate);
+		bucket.last = now;
+		if (bucket.tokens >= amount) {
+			bucket.tokens -= amount;
+			return;
+		}
+		const waitMs = Math.ceil(((amount - bucket.tokens) / rate) * 1000);
+		bucket.tokens = 0;
+		bucket.last = now + waitMs;
+		await new Promise((resolve) => setTimeout(resolve, waitMs));
+	});
+	bucket.chain = task.catch(() => {});
+	await task;
+}
+
+function patchWispStream(stream) {
+	const socket = stream?.socket;
+	if (!socket || socket.__wispRatePatched) return;
+	socket.__wispRatePatched = true;
+	const username = stream.conn?.username;
+	const recv = typeof socket.recv === "function" ? socket.recv.bind(socket) : null;
+	const send = typeof socket.send === "function" ? socket.send.bind(socket) : null;
+	if (recv) {
+		socket.recv = async (...args) => {
+			const data = await recv(...args);
+			const bytes = data?.length || data?.byteLength || 0;
+			if (bytes) await throttleWisp(username, bytes);
+			return data;
+		};
+	}
+	if (send) {
+		socket.send = async (data) => {
+			const bytes = data?.length || data?.byteLength || 0;
+			if (bytes) await throttleWisp(username, bytes);
+			return send(data);
+		};
+	}
+}
+
 function instrumentWispTraffic() {
 	if (!wisp.ServerConnection?.prototype || !wisp.ServerStream?.prototype) return;
 	const connection = wisp.ServerConnection.prototype;
 	const stream = wisp.ServerStream.prototype;
 	if (connection.__trafficPatched) return;
 	connection.__trafficPatched = true;
+	const setupConnection = connection.setup;
+	connection.setup = function (...args) {
+		if (this.ws) {
+			const mb = Math.max(
+				1,
+				Math.min(32, Number(getSettings().proxyWispBufferMB) || 4),
+			);
+			this.ws.send_buffer_size = mb * 1024 * 1024;
+		}
+		return setupConnection.apply(this, args);
+	};
 	const createStream = connection.create_stream;
 	connection.create_stream = function (streamId, type, hostname, port) {
-		const result = createStream.apply(this, arguments);
+		const limit = wispStreamLimit(this.username);
+		if (!limit.allowed) {
+			metric("wisp_streams_throttled_total");
+			try {
+				this.send_close_packet(streamId, wispPacket.close_reasons.ConnThrottled);
+			} catch {}
+			return;
+		}
+		wispStreamAdd(limit.key);
+		let result;
+		try {
+			result = createStream.apply(this, arguments);
+		} catch (error) {
+			wispStreamRemove(limit.key);
+			throw error;
+		}
+		if (!result) {
+			wispStreamRemove(limit.key);
+			return result;
+		}
 		try {
 			wispOpen(this, streamId, type, hostname, port);
 		} catch {}
+		patchWispStream(result);
 		return result;
 	};
 	const closeStream = connection.close_stream;
 	connection.close_stream = function (streamId) {
+		const key = wispUserKey(this.username);
+		const existed = !!this.streams[streamId];
 		const result = closeStream.apply(this, arguments);
-		try {
-			wispClose(this, streamId);
-		} catch {}
+		if (existed) {
+			try {
+				wispClose(this, streamId);
+			} catch {}
+			wispStreamRemove(key);
+		}
 		return result;
 	};
 	const putData = stream.put_data;
@@ -1046,9 +1177,14 @@ function trackWisp(sessionId, username, socket) {
 	}
 	const entry = { username, socket };
 	set.add(entry);
+	const key = wispUserKey(username);
+	wispUserConnections.set(key, (wispUserConnections.get(key) || 0) + 1);
 	socket.on("close", () => {
 		set.delete(entry);
 		if (!set.size) wispConnections.delete(sessionId);
+		const next = (wispUserConnections.get(key) || 0) - 1;
+		if (next > 0) wispUserConnections.set(key, next);
+		else wispUserConnections.delete(key);
 	});
 }
 
@@ -2602,32 +2738,53 @@ app.get("/api/bookmarks", (req, res) => {
 	res.json({ bookmarks: listBookmarks(req.user.username) });
 });
 
+function bookmarkWantsJson(req) {
+	return (
+		req.is("application/json") ||
+		String(req.get("accept") || "").includes("application/json")
+	);
+}
+
 app.post("/api/bookmarks", sameOrigin, (req, res) => {
+	const wantsJson = bookmarkWantsJson(req);
 	const result = addBookmark(req.user.username, {
 		label: String(req.body.label || ""),
 		url: String(req.body.url || ""),
 	});
-	if (result.error === "invalid-url") return res.status(400).json({ error: result.error });
-	if (result.error === "limit") return res.status(409).json({ error: result.error });
-	if (result.error === "exists") return res.status(409).json({ error: result.error });
+	if (result.error) {
+		if (!wantsJson) return res.redirect(303, `/bookmarks?error=${result.error}`);
+		const status = result.error === "invalid-url" ? 400 : 409;
+		return res.status(status).json({ error: result.error });
+	}
 	audit(req, "bookmark.create", result.bookmark.url);
+	if (!wantsJson) return res.redirect(303, "/bookmarks?ok=created");
 	res.status(201).json({ bookmark: result.bookmark });
 });
 
 app.post("/api/bookmarks/:id/update", sameOrigin, (req, res) => {
+	const wantsJson = bookmarkWantsJson(req);
 	const result = updateBookmark(req.user.username, req.params.id, {
 		label: req.body.label === undefined ? undefined : String(req.body.label),
 		url: req.body.url === undefined ? undefined : String(req.body.url),
 	});
-	if (result.error) return res.status(404).json({ error: result.error });
+	if (result.error) {
+		if (!wantsJson) return res.redirect(303, `/bookmarks?error=${result.error}`);
+		return res.status(404).json({ error: result.error });
+	}
 	audit(req, "bookmark.update", result.bookmark.url);
+	if (!wantsJson) return res.redirect(303, "/bookmarks?ok=updated");
 	res.json({ bookmark: result.bookmark });
 });
 
 app.post("/api/bookmarks/:id/delete", sameOrigin, (req, res) => {
+	const wantsJson = bookmarkWantsJson(req);
 	const result = deleteBookmark(req.user.username, req.params.id);
-	if (result.error) return res.status(404).json({ error: result.error });
+	if (result.error) {
+		if (!wantsJson) return res.redirect(303, `/bookmarks?error=${result.error}`);
+		return res.status(404).json({ error: result.error });
+	}
 	audit(req, "bookmark.delete", req.params.id);
+	if (!wantsJson) return res.redirect(303, "/bookmarks?ok=deleted");
 	res.status(204).end();
 });
 
@@ -2901,13 +3058,24 @@ app.post("/api/vault/reset", sameOrigin, async (req, res) => {
 });
 
 app.get("/bookmarks", (req, res) => {
+	const notices = {
+		created: "Favorito guardado.",
+		updated: "Favorito actualizado.",
+		deleted: "Favorito eliminado.",
+	};
+	const errors = {
+		"invalid-url": "La URL no es válida.",
+		exists: "Ese favorito ya existe.",
+		limit: "Has alcanzado el máximo de favoritos.",
+		notfound: "Ese favorito ya no existe.",
+	};
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		bookmarksPage({
 			user: req.user,
 			bookmarks: listBookmarks(req.user.username),
-			notice: req.query.ok === "created" ? "Favorito guardado." : "",
-			error: "",
+			notice: notices[String(req.query.ok || "")] || "",
+			error: errors[String(req.query.error || "")] || "",
 		}),
 	);
 });
@@ -4011,6 +4179,10 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		backupRetentionDays: req.body.backupRetentionDays,
 		metricsToken: req.body.metricsToken,
 		allowUserHistoryClear: req.body.allowUserHistoryClear === "on",
+		proxyBandwidthPerUserKbps: req.body.proxyBandwidthPerUserKbps,
+		proxyMaxStreamsPerUser: req.body.proxyMaxStreamsPerUser,
+		proxyMaxConnectionsPerUser: req.body.proxyMaxConnectionsPerUser,
+		proxyWispBufferMB: req.body.proxyWispBufferMB,
 		proxyAllowStaffBrowsing: req.body.proxyAllowStaffBrowsing === "on",
 		requireMfaForStaff: req.body.requireMfaForStaff === "on",
 		revision: req.body.revision,
@@ -4678,6 +4850,13 @@ server.on("upgrade", (req, socket, head) => {
 			}
 		}
 		socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+		socket.destroy();
+		return;
+	}
+	const connectionLimit = wispConnectionLimit(session.username);
+	if (!connectionLimit.allowed) {
+		metric("wisp_connections_throttled_total");
+		socket.write("HTTP/1.1 503 Service Unavailable\r\nRetry-After: 5\r\nConnection: close\r\n\r\n");
 		socket.destroy();
 		return;
 	}

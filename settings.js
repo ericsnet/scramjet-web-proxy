@@ -33,6 +33,10 @@ export const DEFAULTS = Object.freeze({
 	activityEnabled: true,
 	activityPerUser: 500,
 	activityTotal: 3000,
+	proxyBandwidthPerUserKbps: 8000,
+	proxyMaxStreamsPerUser: 32,
+	proxyMaxConnectionsPerUser: 6,
+	proxyWispBufferMB: 4,
 	maintenanceMode: false,
 	maintenanceMessage:
 		"El proxy está en mantenimiento. Vuelve a intentarlo más tarde.",
@@ -90,6 +94,10 @@ const LIMITS = {
 	chatUploadMaxPerUserMB: [8, 1024],
 	activityPerUser: [50, 2000],
 	activityTotal: [100, 10000],
+	proxyBandwidthPerUserKbps: [0, 100000],
+	proxyMaxStreamsPerUser: [8, 128],
+	proxyMaxConnectionsPerUser: [1, 10],
+	proxyWispBufferMB: [1, 32],
 };
 
 let settings = { ...DEFAULTS, quickLinks: DEFAULTS.quickLinks.map((l) => ({ ...l })) };

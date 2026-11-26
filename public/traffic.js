@@ -208,5 +208,5 @@
 		if (!document.hidden) refresh();
 	});
 	refresh();
-	setInterval(refresh, 1500);
+	setInterval(refresh, 2500);
 })();

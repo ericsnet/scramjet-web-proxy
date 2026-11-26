@@ -1261,7 +1261,7 @@
 			markRead();
 		}
 	});
-	setInterval(refresh, 4000);
+	setInterval(refresh, 5000);
 	setInterval(refreshChannels, 15000);
 	insertUnreadDivider();
 	markRead();

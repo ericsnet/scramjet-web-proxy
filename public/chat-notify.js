@@ -179,7 +179,7 @@
 				name: "Chat",
 			});
 		}
-		setInterval(poll, 3000);
+		setInterval(poll, 5000);
 	}
 
 	init();
