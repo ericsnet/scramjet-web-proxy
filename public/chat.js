@@ -16,7 +16,8 @@
 	const micButton = document.getElementById("chat-mic");
 	const recorderBar = document.getElementById("chat-recorder");
 	const recTimeEl = document.getElementById("chat-rec-time");
-	const recAudio = document.getElementById("chat-rec-audio");
+	const recWave = document.getElementById("chat-rec-wave");
+	const recPreview = document.getElementById("chat-rec-preview");
 	const recStop = document.getElementById("chat-rec-stop");
 	const recSend = document.getElementById("chat-rec-send");
 	const recCancel = document.getElementById("chat-rec-cancel");
@@ -475,7 +476,7 @@
 		});
 		paint();
 	}
-	function buildAudioPlayer(attachment) {
+	function buildAudioPlayer(attachment, src = "") {
 		const wrap = document.createElement("div");
 		wrap.className = "chat-audio";
 		wrap.dataset.audio = "";
@@ -521,7 +522,7 @@
 		const audio = document.createElement("audio");
 		audio.dataset.audioEl = "";
 		audio.preload = "metadata";
-		audio.src = `/api/chat/files/${encodeURIComponent(attachment.id)}`;
+		audio.src = src || `/api/chat/files/${encodeURIComponent(attachment.id)}`;
 		wrap.append(play, body, audio);
 		setupAudioPlayer(wrap);
 		return wrap;
@@ -1225,6 +1226,16 @@
 	let recCancelled = false;
 	let recBusy = false;
 	let recStarting = false;
+	let recLevels = [];
+	let recWaveform = [];
+	let recAudioCtx = null;
+	let recAnalyser = null;
+	let recSource = null;
+	let recFrame = null;
+	let recFreq = null;
+	let recTimeData = null;
+	let recLiveBars = [];
+	let recBarLevels = [];
 
 	function pickAudioType() {
 		if (!window.MediaRecorder) return "";
@@ -1242,7 +1253,97 @@
 		for (const track of recStream.getTracks()) track.stop();
 		recStream = null;
 	}
+	function stopLiveWave() {
+		if (recFrame) cancelAnimationFrame(recFrame);
+		recFrame = null;
+		if (recSource) {
+			try {
+				recSource.disconnect();
+			} catch {}
+			recSource = null;
+		}
+		if (recAudioCtx) {
+			const context = recAudioCtx;
+			recAudioCtx = null;
+			try {
+				context.close?.().catch?.(() => {});
+			} catch {}
+		}
+		recAnalyser = null;
+		recFreq = null;
+		recTimeData = null;
+		recLiveBars = [];
+		recBarLevels = [];
+	}
+	function startLiveWave(stream) {
+		stopLiveWave();
+		const AudioCtx = window.AudioContext || window.webkitAudioContext;
+		if (!AudioCtx || !recWave) return;
+		try {
+			recAudioCtx = new AudioCtx();
+			if (recAudioCtx.state === "suspended") recAudioCtx.resume().catch(() => {});
+			recAnalyser = recAudioCtx.createAnalyser();
+			recAnalyser.fftSize = 256;
+			recAnalyser.smoothingTimeConstant = 0.78;
+			recSource = recAudioCtx.createMediaStreamSource(stream);
+			recSource.connect(recAnalyser);
+			recFreq = new Uint8Array(recAnalyser.frequencyBinCount);
+			recTimeData = new Uint8Array(recAnalyser.fftSize);
+		} catch {
+			stopLiveWave();
+			return;
+		}
+		recWave.textContent = "";
+		recWave.hidden = false;
+		recLiveBars = [];
+		recBarLevels = new Array(32).fill(0);
+		for (let index = 0; index < 32; index += 1) {
+			const bar = document.createElement("span");
+			bar.className = "chat-rec-bar";
+			bar.style.height = "4px";
+			recWave.appendChild(bar);
+			recLiveBars.push(bar);
+		}
+		recLevels = [];
+		const draw = () => {
+			if (!recAnalyser || !recFreq || !recTimeData) return;
+			recAnalyser.getByteFrequencyData(recFreq);
+			recAnalyser.getByteTimeDomainData(recTimeData);
+			let sum = 0;
+			for (let index = 0; index < recTimeData.length; index += 1) {
+				const value = (recTimeData[index] - 128) / 128;
+				sum += value * value;
+			}
+			recLevels.push(Math.sqrt(sum / recTimeData.length));
+			for (let index = 0; index < recLiveBars.length; index += 1) {
+				const bin = Math.floor((index / recLiveBars.length) * recFreq.length * 0.72);
+				const level = recFreq[bin] / 255;
+				recBarLevels[index] = Math.max(level, recBarLevels[index] * 0.82);
+				recLiveBars[index].style.height = `${Math.max(4, Math.round(4 + recBarLevels[index] * 22))}px`;
+			}
+			recFrame = requestAnimationFrame(draw);
+		};
+		recFrame = requestAnimationFrame(draw);
+	}
+	function recordingWaveform(levels) {
+		if (!levels.length) return [];
+		const bars = 44;
+		const peaks = [];
+		for (let index = 0; index < bars; index += 1) {
+			const start = Math.floor((index / bars) * levels.length);
+			const end = Math.max(start + 1, Math.floor(((index + 1) / bars) * levels.length));
+			let peak = 0;
+			for (let sample = start; sample < end; sample += 1) {
+				peak = Math.max(peak, levels[sample] || 0);
+			}
+			peaks.push(peak);
+		}
+		const max = Math.max(...peaks, 0.0001);
+		return peaks.map((peak) => Math.max(8, Math.round((peak / max) * 100)));
+	}
 	function resetRecorder() {
+		pauseActiveAudio();
+		stopLiveWave();
 		clearInterval(recTimer);
 		recTimer = null;
 		stopRecStream();
@@ -1253,13 +1354,17 @@
 		recStartedAt = 0;
 		recCancelled = false;
 		recStarting = false;
+		recLevels = [];
+		recWaveform = [];
 		if (recUrl) URL.revokeObjectURL(recUrl);
 		recUrl = "";
-		if (recAudio) {
-			recAudio.pause();
-			recAudio.removeAttribute("src");
-			recAudio.load();
-			recAudio.hidden = true;
+		if (recWave) {
+			recWave.textContent = "";
+			recWave.hidden = false;
+		}
+		if (recPreview) {
+			recPreview.textContent = "";
+			recPreview.hidden = true;
 		}
 		if (recorderBar) {
 			recorderBar.hidden = true;
@@ -1326,8 +1431,13 @@
 		}
 		if (recStop) recStop.hidden = false;
 		if (recSend) recSend.hidden = true;
-		if (recAudio) recAudio.hidden = true;
+		if (recPreview) {
+			recPreview.textContent = "";
+			recPreview.hidden = true;
+		}
+		if (recWave) recWave.hidden = false;
 		if (recTimeEl) recTimeEl.textContent = "0:00";
+		startLiveWave(recStream);
 		micButton?.classList.add("recording");
 		recStarting = false;
 		recTimer = setInterval(() => {
@@ -1350,6 +1460,8 @@
 		recDuration = elapsed;
 		clearInterval(recTimer);
 		recTimer = null;
+		const levels = recLevels.slice();
+		stopLiveWave();
 		stopRecStream();
 		const type = recorder?.mimeType || pickAudioType() || "audio/webm";
 		recorder = null;
@@ -1366,11 +1478,25 @@
 			return;
 		}
 		recBlob = blob;
-		if (recAudio) {
-			if (recUrl) URL.revokeObjectURL(recUrl);
-			recUrl = URL.createObjectURL(blob);
-			recAudio.src = recUrl;
-			recAudio.hidden = false;
+		recWaveform = recordingWaveform(levels);
+		if (recUrl) URL.revokeObjectURL(recUrl);
+		recUrl = URL.createObjectURL(blob);
+		if (recWave) recWave.hidden = true;
+		if (recPreview) {
+			recPreview.textContent = "";
+			recPreview.appendChild(
+				buildAudioPlayer(
+					{
+						name: "Tu audio",
+						type,
+						size: blob.size,
+						duration: recDuration,
+						waveform: recWaveform,
+					},
+					recUrl,
+				),
+			);
+			recPreview.hidden = false;
 		}
 		if (recorderBar) {
 			recorderBar.hidden = false;
@@ -1417,14 +1543,13 @@
 				file = recBlob;
 				file.name = name;
 			}
-			const analysis = await analyzeAudio(recBlob);
 			const uploaded = await uploadFile(
 				file,
 				(percent) => {
 					if (uploadBar) uploadBar.style.width = `${percent}%`;
 				},
-				recDuration || analysis.duration,
-				analysis.waveform.length ? analysis.waveform.join(",") : "",
+				recDuration,
+				recWaveform.length ? recWaveform.join(",") : "",
 			);
 			const caption = (input?.value || "").trim();
 			const data = await request("/api/chat/messages", {
@@ -1459,10 +1584,7 @@
 	}
 	micButton?.addEventListener("click", () => {
 		if (recBlob) {
-			if (recAudio) {
-				if (recAudio.paused) recAudio.play().catch(() => {});
-				else recAudio.pause();
-			}
+			recPreview?.querySelector("[data-audio-play]")?.click();
 			return;
 		}
 		if (recorder) {

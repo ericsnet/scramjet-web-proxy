@@ -662,7 +662,16 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .chat-recorder.preview .chat-rec-dot{display:none}
 .chat-rec-time{font-size:12.5px;color:#fecaca;font-variant-numeric:tabular-nums;min-width:38px}
 .chat-recorder.preview .chat-rec-time{color:var(--muted)}
-.chat-recorder audio{flex:1;min-width:160px;height:34px}
+.chat-rec-wave{display:flex;align-items:center;gap:2px;flex:1;min-width:150px;height:30px}
+.chat-rec-wave[hidden]{display:none}
+.chat-recorder.preview .chat-rec-wave{display:none}
+.chat-rec-bar{flex:1 1 2px;min-width:2px;max-width:4px;height:4px;border-radius:999px;background:linear-gradient(180deg,#93c5fd,#3b82f6);transition:height .06s linear}
+.chat-rec-preview{flex:1;min-width:180px}
+.chat-rec-preview[hidden]{display:none}
+.chat-rec-preview .chat-audio{width:100%;max-width:none;min-width:0;margin:0;padding:0;border:0;background:transparent}
+.chat-rec-preview .chat-audio-play{flex:0 0 32px;width:32px;height:32px}
+.chat-rec-preview .chat-audio-wave{height:28px}
+.chat-rec-preview .chat-audio-meta{margin-top:2px}
 .chat-rec-btn{font-size:11.5px;padding:5px 9px;border-radius:8px;border:1px solid var(--border);background:#182635;color:var(--text);cursor:pointer}
 .chat-rec-btn:hover{border-color:#3d5672}
 .chat-rec-btn.primary{background:linear-gradient(145deg,#3b82f6,#2563eb);border-color:transparent;color:#fff}
@@ -2429,7 +2438,8 @@ export function chatPage({
     <div class="chat-recorder" id="chat-recorder" hidden>
       <span class="chat-rec-dot"></span>
       <span class="chat-rec-time" id="chat-rec-time">0:00</span>
-      <audio id="chat-rec-audio" controls preload="metadata" hidden></audio>
+      <div class="chat-rec-wave" id="chat-rec-wave" aria-hidden="true"></div>
+      <div class="chat-rec-preview" id="chat-rec-preview" hidden></div>
       <button type="button" class="chat-rec-btn" id="chat-rec-stop">Detener</button>
       <button type="button" class="chat-rec-btn primary" id="chat-rec-send" hidden>Enviar audio</button>
       <button type="button" class="chat-rec-btn danger" id="chat-rec-cancel">Descartar</button>
@@ -2531,7 +2541,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126j" defer></script>` : `
+<script src="/chat.js?v=20261126k" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
