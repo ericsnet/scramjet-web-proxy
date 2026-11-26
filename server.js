@@ -1061,6 +1061,66 @@ function closeSessionConnections(sessionId) {
 	wispConnections.delete(sessionId);
 }
 
+const sessionStreams = new Map();
+
+function registerSessionStream(username, sessionId, res) {
+	const key = String(username).toLowerCase();
+	let set = sessionStreams.get(key);
+	if (!set) {
+		set = new Set();
+		sessionStreams.set(key, set);
+	}
+	const entry = { key, sessionId, res };
+	set.add(entry);
+	return entry;
+}
+
+function removeSessionStream(entry) {
+	const set = sessionStreams.get(entry.key);
+	if (!set) return;
+	set.delete(entry);
+	if (!set.size) sessionStreams.delete(entry.key);
+}
+
+function sendSessionEnd(res, reason) {
+	try {
+		res.write(`event: session-end\ndata: ${JSON.stringify({ reason })}\n\n`);
+		res.end();
+		return true;
+	} catch {
+		try {
+			res.end();
+		} catch {}
+		return false;
+	}
+}
+
+function notifyUserLogout(username, reason = "forced") {
+	const key = String(username).toLowerCase();
+	const set = sessionStreams.get(key);
+	if (!set) return 0;
+	let count = 0;
+	for (const entry of [...set]) {
+		if (sendSessionEnd(entry.res, reason)) count++;
+		set.delete(entry);
+	}
+	sessionStreams.delete(key);
+	return count;
+}
+
+function notifySessionLogout(sessionId, reason = "revoked") {
+	let count = 0;
+	for (const [key, set] of [...sessionStreams]) {
+		for (const entry of [...set]) {
+			if (entry.sessionId !== sessionId) continue;
+			if (sendSessionEnd(entry.res, reason)) count++;
+			set.delete(entry);
+		}
+		if (!set.size) sessionStreams.delete(key);
+	}
+	return count;
+}
+
 function closeUserConnections(username, exceptSessionId = "") {
 	const wanted = String(username).toLowerCase();
 	for (const [id, set] of wispConnections) {
@@ -1256,6 +1316,16 @@ const LOGIN_ERRORS = {
 	mfa: "El código de verificación no es válido o ha caducado. Vuelve a iniciar sesión.",
 };
 
+const SESSION_END_NOTICES = {
+	forced: "Un administrador ha cerrado tu sesión.",
+	revoked: "Un administrador ha cerrado esta sesión.",
+	blocked: "Tu cuenta ha sido bloqueada. Contacta con un administrador.",
+	banned: "Tu cuenta ha sido bloqueada por seguridad. Contacta con un administrador.",
+	deleted: "Tu cuenta ya no está disponible.",
+	password: "Un administrador ha cambiado tu contraseña. Vuelve a iniciar sesión.",
+	expired: "Tu sesión ha caducado. Vuelve a iniciar sesión.",
+};
+
 const CSRF_COOKIE = "pw_csrf";
 const HOST_CSRF_COOKIE = "__Host-pw_csrf";
 
@@ -1338,7 +1408,7 @@ const ADMIN_OK = {
 	unblocked: "Cuenta desbloqueada.",
 	tempblocked: "Cuenta bloqueada temporalmente.",
 	tempcleared: "Bloqueo temporal retirado.",
-	logout: "Sesiones del usuario cerradas.",
+	logout: "Usuario expulsado: sesiones y pestañas cerradas al instante.",
 	notes: "Notas guardadas.",
 	blockmessage: "Mensaje de bloqueo guardado.",
 	sites: "Sitios del usuario actualizados.",
@@ -1462,11 +1532,16 @@ app.get("/login", (req, res) => {
 		return res.redirect(303, "/");
 	}
 	const error = LOGIN_ERRORS[req.query.error] || "";
+	const kicked = String(req.query.kicked || "");
+	const notice =
+		SESSION_END_NOTICES[kicked] ||
+		(kicked ? SESSION_END_NOTICES.forced : "");
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		loginPage({
 			next: safeNext(req.query.next),
 			error,
+			notice,
 			maintenance: settings.maintenanceMode ? settings.maintenanceMessage : "",
 			csrf: ensureCsrf(req, res),
 		}),
@@ -1811,6 +1886,7 @@ app.use((req, res, next) => {
 		req.path.startsWith("/api/account/mfa/") ||
 		req.path === "/logout" ||
 		req.path === "/api/me" ||
+		req.path === "/api/session/events" ||
 		req.path.startsWith("/api/account/password");
 	if (allowed) return next();
 	if (req.path.startsWith("/api/")) {
@@ -1867,6 +1943,31 @@ app.get("/api/me", (req, res) => {
 		blockedSites: user?.blockedSites || [],
 		schedule: user?.schedule || null,
 	});
+});
+
+app.get("/api/session/events", (req, res) => {
+	res.status(200).set({
+		"Content-Type": "text/event-stream; charset=utf-8",
+		"Cache-Control": "no-cache, no-store, must-revalidate",
+		Connection: "keep-alive",
+		"X-Accel-Buffering": "no",
+	});
+	if (typeof res.flushHeaders === "function") res.flushHeaders();
+	res.write("retry: 2000\n\n");
+	const entry = registerSessionStream(req.user.username, req.user.id, res);
+	res.write(`event: ready\ndata: ${JSON.stringify({ username: req.user.username })}\n\n`);
+	const heartbeat = setInterval(() => {
+		try {
+			res.write(": keep-alive\n\n");
+		} catch {}
+	}, 25_000);
+	if (heartbeat.unref) heartbeat.unref();
+	const cleanup = () => {
+		clearInterval(heartbeat);
+		removeSessionStream(entry);
+	};
+	req.on("close", cleanup);
+	res.on("close", cleanup);
 });
 
 app.get("/avatar/:user", (req, res) => {
@@ -3062,6 +3163,7 @@ app.post("/api/account/sessions/:id/revoke", sameOrigin, (req, res) => {
 	}
 	audit(req, "session.revoke", session.username, `sesión ${session.id}`);
 	closeSessionConnections(session.id);
+	if (req.params.id !== req.user.id) notifySessionLogout(session.id, "revoked");
 	if (req.params.id === req.user.id) {
 		res.setHeader("Set-Cookie", clearSessionCookie(req));
 		return res.redirect(303, "/login");
@@ -3268,6 +3370,7 @@ app.post("/api/admin/security/ban", requireAdmin, sameOrigin, (req, res) => {
 	if (type === "user") {
 		destroySessionsOf(target);
 		closeUserConnections(target);
+		notifyUserLogout(target, "banned");
 	}
 	audit(req, "security.ban", `${type}:${target}`, String(req.body.reason || "").slice(0, 200));
 	res.redirect(303, "/admin/security?ok=banned");
@@ -3477,7 +3580,7 @@ app.get("/admin/sessions", requireStaff, (req, res) => {
 		req.query.ok === "revoked"
 			? "Sesión cerrada."
 			: req.query.ok === "logout"
-				? "Sesiones del usuario cerradas."
+				? "Usuario expulsado: sesiones y pestañas cerradas al instante."
 				: "";
 	const error = ADMIN_ERRORS[req.query.error] || "";
 	res.set("Cache-Control", "no-store");
@@ -4173,10 +4276,14 @@ app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, 
 	audit(req, "user.password", targetUser.username);
 	if (targetUser.username.toLowerCase() === req.user.username.toLowerCase()) {
 		const revoked = destroyOtherSessions(req.user.username, req.user.token);
-		for (const id of revoked) closeSessionConnections(id);
+		for (const id of revoked) {
+			closeSessionConnections(id);
+			notifySessionLogout(id, "password");
+		}
 	} else {
 		destroySessionsOf(targetUser.username);
 		closeUserConnections(targetUser.username);
+		notifyUserLogout(targetUser.username, "password");
 	}
 	res.redirect(303, "/admin?ok=reset");
 });
@@ -4218,7 +4325,10 @@ app.post("/api/admin/users/:username/block", requireStaff, sameOrigin, (req, res
 		String(req.body.message || ""),
 	);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
-	if (blocked) closeUserConnections(target.username);
+	if (blocked) {
+		closeUserConnections(target.username);
+		notifyUserLogout(target.username, "blocked");
+	}
 	audit(
 		req,
 		"user.block",
@@ -4244,7 +4354,10 @@ app.post("/api/admin/users/:username/block-until", requireStaff, sameOrigin, (re
 		String(req.body.message || ""),
 	);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
-	if (until) closeUserConnections(target.username);
+	if (until) {
+		closeUserConnections(target.username);
+		notifyUserLogout(target.username, "blocked");
+	}
 	audit(req, "user.block_until", target.username, until || "retirado");
 	res.redirect(303, `/admin?ok=${until ? "tempblocked" : "tempcleared"}`);
 });
@@ -4312,6 +4425,9 @@ app.post("/api/admin/users/:username/must-change", requireAdmin, sameOrigin, (re
 app.post("/api/admin/users/:username/logout", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
+	if (target.role === "creator" && req.user.role !== "creator") {
+		return res.redirect(303, "/admin?error=forbidden");
+	}
 	if (target.role === "admin" && !isAdminRole(req.user.role)) {
 		return res.redirect(303, "/admin?error=forbidden");
 	}
@@ -4320,7 +4436,8 @@ app.post("/api/admin/users/:username/logout", requireStaff, sameOrigin, (req, re
 	}
 	const count = revokeUserSessions(target.username);
 	closeUserConnections(target.username);
-	audit(req, "user.logout", target.username, `${count} sesiones`);
+	const notified = notifyUserLogout(target.username, "forced");
+	audit(req, "user.logout", target.username, `${count} sesiones, ${notified} pestañas`);
 	res.redirect(303, "/admin?ok=logout");
 });
 
@@ -4335,6 +4452,7 @@ app.post("/api/admin/users/:username/delete", requireAdmin, sameOrigin, (req, re
 	deleteChatMessagesByUser(target);
 	deleteVault(target);
 	closeUserConnections(target);
+	notifyUserLogout(target, "deleted");
 	audit(req, "user.delete", target);
 	res.redirect(303, "/admin?ok=deleted");
 });

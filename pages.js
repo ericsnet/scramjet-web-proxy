@@ -1010,6 +1010,7 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false, full = 
 <title>Inici - Classroom</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <script src="/page-i18n.js" defer></script>
+${topbar ? '<script src="/session-guard.js" defer></script>' : ""}
 <script src="/global-search.js?v=2" defer></script>
 <style>${CSS}</style>
 ${head}
@@ -1220,11 +1221,12 @@ function toLocalInput(iso) {
 	}
 }
 
-export function loginPage({ next = "/", error = "", maintenance = "", csrf = "" } = {}) {
+export function loginPage({ next = "/", error = "", notice = "", maintenance = "", csrf = "" } = {}) {
 	const body = `<div class="card login-card">
   <div class="login-logo">${LOGO}</div>
   <h1>Proxy <span style="color:var(--accent)">Web</span></h1>
   <p class="muted">Acceso privado. Identifícate para usar el proxy.</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${maintenance ? `<p class="warn">${esc(maintenance)}</p>` : ""}
   <form method="post" action="/api/login">
     <input type="hidden" name="next" value="${esc(next)}">
@@ -2322,8 +2324,8 @@ export function adminPage({
     <a class="small" href="/admin/sessions?user=${encodeURIComponent(u.username)}">Ver sesiones</a>
     ${
 			u.sessionCount
-				? `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/logout" onsubmit="return confirm('¿Cerrar todas las sesiones de ${esc(u.username)}?')">
-      <button class="small" type="submit"${self ? " disabled title='Usa Salir para cerrar tu propia sesión'" : ""}>Forzar logout</button>
+				? `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/logout" onsubmit="return confirm('¿Echar a ${esc(u.username)} ahora? Se cerrarán todas sus sesiones y pestañas inmediatamente.')">
+      <button class="small danger" type="submit"${self ? " disabled title='Usa Salir para cerrar tu propia sesión'" : " title='Cierra sus sesiones y pestañas al instante'"}>Echar ahora</button>
     </form>`
 				: ""
 		}

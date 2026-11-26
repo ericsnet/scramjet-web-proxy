@@ -33,7 +33,7 @@ const SKIP_PATH =
 const ROUTINE_PATH =
 	/^(?:\/api\/(?:chat\/(?:unread|channels|read|messages|files|notifications)|me|lang|config|admin\/(?:traffic|monitor))|\/(?:design|pentest|qa|reports))$/;
 const ROUTINE_ANY_METHOD =
-	/^\/(?:api\/(?:chat\/(?:read|unread|channels)|me|lang|admin\/(?:traffic|monitor)))$/;
+	/^\/(?:api\/(?:chat\/(?:read|unread|channels)|me|lang|session\/events|admin\/(?:traffic|monitor)))$/;
 
 const BOT_UA =
 	/curl|wget|python-requests|python-urllib|aiohttp|httpx|scrapy|headlesschrome|phantomjs|puppeteer|playwright|selenium|go-http-client|okhttp|java\/|node-fetch|axios|bot\b|spider|crawler/i;

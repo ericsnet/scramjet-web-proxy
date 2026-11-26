@@ -33,7 +33,7 @@ administración.
 - Los administradores pueden:
   - crear usuarios y resetear contraseñas,
   - bloquear cuentas (permanente o temporal) **con mensaje personalizado**,
-  - forzar logout y revocar sesiones,
+  - **echar a un usuario al instante** (cierra sus sesiones y pestañas abiertas) y revocar sesiones,
   - ver actividad (URLs y búsquedas), auditoría, sesiones y **estadísticas**,
   - exigir cambio de contraseña y dejar notas internas,
   - configurar sesiones, actividad, mantenimiento, **cuarentena**, **chat interno**, buscador,
@@ -177,10 +177,11 @@ Requisitos importantes:
 Todo se gestiona desde `/admin`:
 
 - **Usuarios**: crear, rol (`admin`/`moderador`/`usuario`), contraseña, bloqueo
-  temporal/permanente con mensaje, forzar logout, notas, cambio obligatorio,
+  temporal/permanente con mensaje, **echar ahora**, notas, cambio obligatorio,
   sitios por usuario y horario de acceso.
-- **Sesiones**: IP, navegador, fechas, revocación individual, **cierre por
-  inactividad** configurable y botón **“cerrar todas las demás”**.
+- **Sesiones**: IP, navegador, fechas, revocación individual inmediata, **cierre por
+  inactividad** configurable y botón **“cerrar todas las demás”**. Al echar a un usuario,
+  todas sus pestañas abiertas reciben el cierre por SSE y vuelven al login al instante.
 - **Actividad**: URLs y búsquedas introducidas, exportación CSV.
 - **Auditoría**: logins, acciones de administración y exportación CSV.
 - **Ajustes**: sesión, actividad, mantenimiento, buscador, portada, enlaces
