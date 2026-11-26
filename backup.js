@@ -28,6 +28,15 @@ function usersMap() {
 	}
 }
 
+function groupsList() {
+	try {
+		const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "groups.json"), "utf8"));
+		return Array.isArray(data.groups) ? data.groups : [];
+	} catch {
+		return [];
+	}
+}
+
 function backupKey() {
 	if (!fs.existsSync(KEY_FILE)) {
 		fs.mkdirSync(path.dirname(KEY_FILE), { recursive: true, mode: 0o700 });
@@ -83,6 +92,7 @@ function sanitizedUsers() {
 			unblockOverrides: Array.isArray(user.unblockOverrides)
 				? user.unblockOverrides
 				: [],
+			group: user.group || "",
 		};
 	}
 	return out;
@@ -118,6 +128,7 @@ export function createBackup(reason = "manual") {
 		reason,
 		users: sanitizedUsers(),
 		settings: getSettings(),
+		groups: groupsList(),
 	};
 	const encrypted = encrypt(payload);
 	let name = `backup-${fileStamp()}.json.enc`;
@@ -217,6 +228,7 @@ export function restoreBackup(name) {
 	};
 	write("users.json", { users: restored });
 	write("settings.json", data.settings);
+	if (Array.isArray(data.groups)) write("groups.json", { groups: data.groups });
 	return { ok: true };
 }
 

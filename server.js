@@ -33,6 +33,8 @@ import {
 	setBlocked,
 	setBlockUntil,
 	setBlockMessage,
+	setUserGroup,
+	clearGroupAssignments,
 	setNotes,
 	setMustChangePassword,
 	clearMfa,
@@ -155,6 +157,7 @@ import {
 	deleteUserBookmarks,
 	exportBookmarks,
 } from "./bookmarks.js";
+import { listGroups, getGroup, createGroup, deleteGroup } from "./groups.js";
 import {
 	createBackup,
 	listBackups,
@@ -1531,6 +1534,11 @@ const ADMIN_ERRORS = {
 	"invalid-schedule": "Horario no válido: elige al menos un día y horas correctas.",
 	notfound: "Usuario no encontrado.",
 	"last-admin": "Debe quedar al menos un administrador activo.",
+	"group-invalid": "El nombre del grupo no es válido (máx. 40 caracteres).",
+	"group-exists": "Ya existe un grupo con ese nombre.",
+	"group-limit": "Has alcanzado el máximo de grupos.",
+	"group-notfound": "Ese grupo ya no existe.",
+	"group-forbidden": "No tienes permisos para gestionar ese grupo.",
 	"creator-protected": "La cuenta del creador está protegida y no puede modificarse.",
 	protected: "La cuenta del creador está protegida y no puede modificarse.",
 	forbidden: "No tienes permisos sobre un administrador.",
@@ -1547,6 +1555,9 @@ const ADMIN_OK = {
 	tempblocked: "Cuenta bloqueada temporalmente.",
 	tempcleared: "Bloqueo temporal retirado.",
 	logout: "Usuario expulsado: sesiones y pestañas cerradas al instante.",
+	"group-created": "Grupo creado.",
+	"group-deleted": "Grupo eliminado. Sus usuarios han quedado sin grupo.",
+	group: "Grupo del usuario actualizado.",
 	notes: "Notas guardadas.",
 	blockmessage: "Mensaje de bloqueo guardado.",
 	sites: "Sitios del usuario actualizados.",
@@ -3464,6 +3475,7 @@ app.get("/admin", requireStaff, (req, res) => {
 			counts,
 			canManage: isAdminRole(req.user.role),
 			blockTemplates: listTemplates("block"),
+			groups: listGroups(),
 			error,
 			notice,
 		}),
@@ -3900,7 +3912,7 @@ app.get("/admin/users.csv", requireAdmin, (req, res) => {
 	};
 	const users = hideCreatorData(req, listUsers(), (entry) => entry.username);
 	const lines = [
-		"usuario,roles,rol_principal,bloqueado,bloqueado_hasta,cambio_obligatorio,creado,ultimo_login,idioma",
+		"usuario,roles,rol_principal,grupo,bloqueado,bloqueado_hasta,cambio_obligatorio,creado,ultimo_login,idioma",
 	];
 	for (const entry of users) {
 		lines.push(
@@ -3908,6 +3920,7 @@ app.get("/admin/users.csv", requireAdmin, (req, res) => {
 				entry.username,
 				(entry.roles || [entry.role]).join(" "),
 				entry.role,
+				getGroup(entry.group)?.name || "",
 				entry.blocked ? "si" : "no",
 				entry.blockedUntil || "",
 				entry.mustChangePassword ? "si" : "no",
@@ -4515,6 +4528,38 @@ app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, 
 		notifyUserLogout(targetUser.username, "password");
 	}
 	res.redirect(303, "/admin?ok=reset");
+});
+
+app.post("/api/admin/groups", requireAdmin, sameOrigin, (req, res) => {
+	const result = createGroup(req.body.name, req.user.username);
+	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
+	audit(req, "group.create", result.group.name, result.group.id);
+	res.redirect(303, "/admin?ok=group-created");
+});
+
+app.post("/api/admin/groups/:id/delete", requireAdmin, sameOrigin, (req, res) => {
+	const group = getGroup(req.params.id);
+	if (!group) return res.redirect(303, "/admin?error=group-notfound");
+	const result = deleteGroup(group.id);
+	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
+	const cleared = clearGroupAssignments(group.id);
+	audit(req, "group.delete", group.name, `${cleared} usuarios sin grupo`);
+	res.redirect(303, "/admin?ok=group-deleted");
+});
+
+app.post("/api/admin/users/:username/group", requireStaff, sameOrigin, (req, res) => {
+	const target = getUser(req.params.username);
+	if (!target) return res.redirect(303, "/admin?error=notfound");
+	if (!canManageRole(req.user.role, target.role)) {
+		return res.redirect(303, "/admin?error=group-forbidden");
+	}
+	const groupId = String(req.body.group || "").trim();
+	const group = groupId ? getGroup(groupId) : null;
+	if (groupId && !group) return res.redirect(303, "/admin?error=group-notfound");
+	const result = setUserGroup(target.username, group?.id || "");
+	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
+	audit(req, "user.group", target.username, group ? group.name : "sin grupo");
+	res.redirect(303, "/admin?ok=group");
 });
 
 app.post("/api/admin/users/:username/role", requireAdmin, sameOrigin, (req, res) => {

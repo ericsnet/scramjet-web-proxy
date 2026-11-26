@@ -232,6 +232,14 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .role-form{flex:1 0 100%;width:100%;display:block!important}
 .role-form .role-picker{width:100%;margin:4px 0 0}
 .role-form .hint{margin:6px 0 8px}
+.badge.group{color:#c7d2fe;border-color:#4338ca;background:#171a3a}
+.group-list{display:flex;flex-direction:column;gap:7px;margin-top:12px}
+.group-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
+.group-row .muted{font-size:12px}
+.group-row form{margin-left:auto}
+.user-group-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.015)}
+.user-group-form label{margin:0;font-size:12px;color:var(--muted)}
+.user-group-form select{width:auto;min-width:190px}
 .tool-tabs{margin:0 0 16px}
 .report-status-open{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
 .report-status-triaged{color:#fde68a;border-color:#a16207;background:#2a1d05}
@@ -2161,9 +2169,28 @@ export function adminPage({
 	counts = {},
 	canManage = false,
 	blockTemplates = [],
+	groups = [],
 	notice = "",
 	error = "",
 } = {}) {
+	const groupMap = new Map(groups.map((group) => [group.id, group]));
+	const groupCounts = new Map();
+	for (const entry of users) {
+		if (entry.group && groupMap.has(entry.group)) {
+			groupCounts.set(entry.group, (groupCounts.get(entry.group) || 0) + 1);
+		}
+	}
+	const groupBadge = (id) => {
+		const group = groupMap.get(String(id || ""));
+		return group ? `<span class="badge group">${esc(group.name)}</span>` : "";
+	};
+	const groupOptions = (selected) =>
+		`<option value="">Sin grupo</option>${groups
+			.map(
+				(group) =>
+					`<option value="${esc(group.id)}"${selected === group.id ? " selected" : ""}>${esc(group.name)}</option>`,
+			)
+			.join("")}`;
 	const assignableRoles = ["user", "moderator", "designer", "pentester", "qa", "admin"].filter(
 		(role) => canAssignRole(user.role, role),
 	);
@@ -2198,6 +2225,7 @@ export function adminPage({
       ${userAvatar(u.username, u.icon, "user-avatar")}
       <strong class="user-name">${esc(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
+      ${groupBadge(u.group)}
       ${self ? '<span class="badge">tú</span>' : ""}
     </span>
     <span class="user-summary-meta">${self ? '<a class="small" href="/account">Mi cuenta</a>' : ""}${esc(reason)}</span>
@@ -2313,6 +2341,7 @@ export function adminPage({
       ${userAvatar(u.username, u.icon, "user-avatar")}
       <strong class="user-name">${esc(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
+      ${groupBadge(u.group)}
       ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
       ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
       ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
@@ -2332,6 +2361,11 @@ export function adminPage({
     <span>último login ${esc(u.lastLoginAt ? fmtDate(u.lastLoginAt) : "nunca")}</span>
     <span>última actividad ${esc(u.lastSeenAt ? fmtDate(u.lastSeenAt) : "—")}</span>
   </div>
+  <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/group" class="user-group-form">
+    <label for="group-${esc(u.username)}">Grupo de ${esc(u.username)}</label>
+    <select id="group-${esc(u.username)}" name="group">${groupOptions(u.group)}</select>
+    <button class="small" type="submit">Guardar grupo</button>
+  </form>
   <div class="actions">
     <a class="small" href="/admin/activity?user=${encodeURIComponent(u.username)}">Ver actividad</a>
     <a class="small" href="/admin/sessions?user=${encodeURIComponent(u.username)}">Ver sesiones</a>
@@ -2366,6 +2400,37 @@ ${adminTabs("users", user.role)}
     <li class="role-creator"><strong>Creador</strong><span>Acceso total y cuenta protegida. <b>Único</b> que puede crear, ascender, degradar, resetear o eliminar administradores.</span></li>
   </ol>
   <p class="hint">Tu rol actual: <strong>${esc(roleLabel(user.role))}</strong>.</p>
+</div>
+<div class="card" style="margin-bottom:22px">
+  <h2>Grupos (${groups.length})</h2>
+  <p class="muted">Organiza a los usuarios por clase o equipo. Los moderadores pueden asignar usuarios a grupos existentes; solo administradores y creador pueden crear o eliminar grupos.</p>
+  ${
+		canManage
+			? `<form method="post" action="/api/admin/groups" class="actions" style="margin-bottom:4px">
+    <input name="name" maxlength="40" placeholder="Nombre del grupo (ej. 1A)" aria-label="Nombre del grupo" required>
+    <button class="small primary-small" type="submit">Crear grupo</button>
+  </form>`
+			: '<p class="hint">Solo administradores y el creador pueden crear grupos.</p>'
+	}
+  ${
+		groups.length
+			? `<div class="group-list">${groups
+					.map(
+						(group) => `<div class="group-row">
+      <span class="badge group">${esc(group.name)}</span>
+      <span class="muted">${groupCounts.get(group.id) || 0} usuario${groupCounts.get(group.id) === 1 ? "" : "s"}</span>
+      ${
+				canManage
+					? `<form method="post" action="/api/admin/groups/${encodeURIComponent(group.id)}/delete" onsubmit="return confirm('¿Eliminar el grupo ${esc(group.name)}? Sus usuarios quedarán sin grupo.')">
+        <button class="small danger" type="submit">Eliminar</button>
+      </form>`
+					: ""
+			}
+    </div>`,
+					)
+					.join("")}</div>`
+			: '<p class="empty">Todavía no hay grupos.</p>'
+	}
 </div>
 <div class="card">
   <h1>Usuarios</h1>

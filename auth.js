@@ -88,6 +88,7 @@ function migrateUsers() {
 			unblockOverrides: [],
 			lang: "",
 			schedule: null,
+			group: "",
 			mfa: null,
 		};
 		for (const [key, value] of Object.entries(defaults)) {
@@ -186,6 +187,7 @@ export function listUsers() {
 				username,
 				role: u.role,
 				roles: Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role],
+				group: u.group || "",
 				blocked: !!u.blocked,
 				blockedUntil: until,
 				blockMessage: u.blockMessage || "",
@@ -294,9 +296,10 @@ export function createUser(username, password, role) {
 		unblockOverrides: [],
 		lang: "",
 		schedule: null,
+		group: "",
 	};
 	save();
-	return { user: { username: name, role: highestRole(roles), roles } };
+	return { user: { username: name, role: highestRole(roles), roles, group: "" } };
 }
 
 export function deleteUser(username) {
@@ -346,6 +349,30 @@ export function setRoles(username, input) {
 
 export function setRole(username, role) {
 	return setRoles(username, [role]);
+}
+
+export function setUserGroup(username, groupId) {
+	const name = Object.keys(db.users).find(
+		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
+	);
+	if (!name) return { error: "notfound" };
+	db.users[name].group = String(groupId || "").slice(0, 64);
+	save();
+	return { ok: true, group: db.users[name].group };
+}
+
+export function clearGroupAssignments(groupId) {
+	const wanted = String(groupId || "");
+	if (!wanted) return 0;
+	let count = 0;
+	for (const user of Object.values(db.users)) {
+		if (user.group === wanted) {
+			user.group = "";
+			count++;
+		}
+	}
+	if (count) save();
+	return count;
 }
 
 export function setBlocked(username, blocked, message = "") {
