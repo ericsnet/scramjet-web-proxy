@@ -46,7 +46,10 @@
 		const start = header[0] === "usuario" || header[0] === "username" ? 1 : 0;
 		const users = rows.slice(start, start + 200).map((row) => ({
 			username: row[0] || "",
-			role: (row[1] || "user").trim().toLowerCase(),
+			roles: String(row[1] || "user")
+				.split(/[|+,]/)
+				.map((value) => value.trim().toLowerCase())
+				.filter(Boolean),
 			password: row[2] || "",
 		}));
 		out.textContent = "Importando " + users.length + " usuarios…";

@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { getSettings } from "./settings.js";
+import { normalizeRoleList, highestRole } from "./roles.js";
 import { avatarInfo, deleteAvatar } from "./avatars.js";
 import { normalizeIp } from "./ip.js";
 
@@ -86,6 +87,15 @@ function migrateUsers() {
 				changed = true;
 			}
 		}
+		if (!Array.isArray(user.roles) || !user.roles.length) {
+			user.roles = normalizeRoleList(user.role || "user");
+			changed = true;
+		}
+		const highest = highestRole(user.roles);
+		if (user.role !== highest) {
+			user.role = highest;
+			changed = true;
+		}
 		if (user.blockedUntil && new Date(user.blockedUntil).getTime() <= Date.now()) {
 			user.blockedUntil = null;
 			changed = true;
@@ -111,12 +121,14 @@ function seedIfNeeded() {
 	const initial = JSON.parse(raw);
 	db = { users: {} };
 	for (const [name, data] of Object.entries(initial)) {
-		if (!["admin", "moderator", "user"].includes(data.role)) continue;
+		const roles = normalizeRoleList(data.roles || data.role);
+		if (!roles.length) continue;
 		if (!validatePassword(data.password)) {
 			throw new Error(`Contraseña inicial no válida para ${name}`);
 		}
 		db.users[name] = {
-			role: data.role,
+			role: highestRole(roles),
+			roles,
 			password: hashPassword(data.password),
 			blocked: false,
 			blockedUntil: null,
@@ -132,6 +144,7 @@ function seedIfNeeded() {
 			unblockOverrides: [],
 			lang: "",
 			schedule: null,
+			mfa: null,
 		};
 	}
 	save();
@@ -157,6 +170,7 @@ export function listUsers() {
 			return {
 				username,
 				role: u.role,
+				roles: Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role],
 				blocked: !!u.blocked,
 				blockedUntil: until,
 				blockMessage: u.blockMessage || "",
@@ -194,6 +208,8 @@ export function getUser(username) {
 	return {
 		username: name,
 		...user,
+		role: user.role,
+		roles: Array.isArray(user.roles) && user.roles.length ? user.roles : [user.role],
 		blockedUntil: until,
 		effectivelyBlocked: !!user.blocked || !!until,
 		icon: avatarInfo(name),
@@ -242,9 +258,11 @@ export function createUser(username, password, role) {
 	if (!validateUsername(name)) return { error: "invalid-user" };
 	if (!validatePassword(password)) return { error: "invalid-password" };
 	if (getUser(name)) return { error: "exists" };
-	if (!["admin", "moderator", "user"].includes(role)) return { error: "invalid-role" };
+	const roles = normalizeRoleList(role);
+	if (!roles.length || roles.includes("creator")) return { error: "invalid-role" };
 	db.users[name] = {
-		role,
+		role: highestRole(roles),
+		roles,
 		password: hashPassword(password),
 		blocked: false,
 		blockedUntil: null,
@@ -262,7 +280,7 @@ export function createUser(username, password, role) {
 		schedule: null,
 	};
 	save();
-	return { user: { username: name, role } };
+	return { user: { username: name, role: highestRole(roles), roles } };
 }
 
 export function deleteUser(username) {
@@ -288,22 +306,29 @@ export function setPassword(username, password) {
 	return { ok: true };
 }
 
-export function setRole(username, role) {
+export function setRoles(username, input) {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
 	if (user.role === "creator") return { error: "protected" };
-	if (!["admin", "moderator", "user"].includes(role)) return { error: "invalid-role" };
+	const roles = normalizeRoleList(input);
+	if (!roles.length || roles.includes("creator")) return { error: "invalid-role" };
+	const highest = highestRole(roles);
 	if (
 		user.role === "admin" &&
 		!isEffectivelyBlocked(user) &&
-		role !== "admin" &&
+		highest !== "admin" &&
 		countActiveAdmins() <= 1
 	) {
 		return { error: "last-admin" };
 	}
-	db.users[user.username].role = role;
+	db.users[user.username].roles = roles;
+	db.users[user.username].role = highest;
 	save();
-	return { ok: true };
+	return { ok: true, role: highest, roles };
+}
+
+export function setRole(username, role) {
+	return setRoles(username, [role]);
 }
 
 export function setBlocked(username, blocked, message = "") {
@@ -510,6 +535,7 @@ export async function verifyLogin(username, password) {
 	return {
 		username: user.username,
 		role: user.role,
+		roles: user.roles,
 		blocked: isEffectivelyBlocked(user),
 		blockedUntil: user.blockedUntil || null,
 		blockMessage: user.blockMessage || "",
@@ -807,6 +833,7 @@ export function getSession(req) {
 		id: session.id,
 		username: user.username,
 		role: user.role,
+		roles: user.roles,
 		icon: avatarInfo(user.username),
 		createdAt: session.createdAt,
 		lastSeenAt: session.lastSeenAt,

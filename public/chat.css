@@ -334,3 +334,4 @@
   border-color: rgba(248, 113, 113, .38) !important;
   color: #fecaca !important;
 }
+.chat-role-badges{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}

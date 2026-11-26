@@ -29,6 +29,7 @@ import {
 	deleteUser,
 	setPassword,
 	setRole,
+	setRoles,
 	setBlocked,
 	setBlockUntil,
 	setBlockMessage,
@@ -75,6 +76,9 @@ import {
 	auditPage,
 	systemPage,
 	adminLogsPage,
+	reportsPage,
+	adminReportsPage,
+	specialistWorkspacePage,
 	templatesPage,
 	schedulesPage,
 	maintenancePage,
@@ -113,6 +117,13 @@ import {
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
 import { listTemplates, addTemplate, deleteTemplate } from "./templates.js";
 import { listSchedules, addSchedule, deleteSchedule, activeJob } from "./schedules.js";
+import {
+	listReports,
+	createReport,
+	getReport,
+	updateReport,
+	countOpenReports,
+} from "./reports.js";
 import {
 	mfaStatus,
 	enrollmentInfo,
@@ -156,7 +167,18 @@ import {
 } from "./friends.js";
 import { isPrivateDestination } from "./net-guard.js";
 import { recordHttp, trafficSnapshot, wispOpen, wispClose, wispBytes } from "./traffic.js";
-import { isAdminRole, isStaffRole, canManageRole, canAssignRole } from "./roles.js";
+import {
+	isAdminRole,
+	isStaffRole,
+	isSpecialistRole,
+	isReportsRole,
+	hasAnyRole,
+	normalizeRoleList,
+	highestRole,
+	canManageRole,
+	canAssignRole,
+	SPECIALIST_ROLES,
+} from "./roles.js";
 import {
 	securityMiddleware,
 	securitySummary,
@@ -675,6 +697,26 @@ function requireStaff(req, res, next) {
 	next();
 }
 
+function hasToolAccess(user, tool) {
+	return !!user && (isAdminRole(user.role) || hasAnyRole(user.roles || user.role, [tool]));
+}
+
+function requireTool(tool) {
+	return (req, res, next) => {
+		if (!hasToolAccess(req.user, tool)) {
+			return sendHttpError(req, res, 403, "Acceso restringido", "No tienes acceso a esta herramienta.");
+		}
+		next();
+	};
+}
+
+function requireReportsAccess(req, res, next) {
+	if (!req.user || !isReportsRole(req.user.roles || req.user.role)) {
+		return sendHttpError(req, res, 403, "Acceso restringido", "Solo diseño, pentest, QA y administración pueden ver los informes.");
+	}
+	next();
+}
+
 const CHAT_ERRORS = {
 	disabled: "El chat está desactivado.",
 	empty: "Escribe un mensaje.",
@@ -686,7 +728,6 @@ const CHAT_ERRORS = {
 	channel_required: "Indica el canal del mensaje.",
 	notfound: "Ese mensaje ya no existe.",
 	edit_window: "Ya no puedes editar este mensaje. Pídelo a un moderador.",
-	empty: "El mensaje no puede estar vacío.",
 };
 
 const FRIEND_ERRORS = {
@@ -720,6 +761,7 @@ function chatUserMeta() {
 	for (const entry of listUsers()) {
 		map.set(String(entry.username).toLowerCase(), {
 			role: entry.role,
+			roles: entry.roles,
 			icon: entry.icon,
 		});
 	}
@@ -737,6 +779,7 @@ function enrichChatMessage(message, user, meta) {
 	return {
 		...message,
 		role: entry.role || "user",
+		roles: entry.roles || [entry.role || "user"],
 		icon: entry.icon || null,
 		canDelete: moderator || (!!getSettings().chatAllowUserDelete && own),
 		canEdit: moderator || ownAndRecent,
@@ -893,6 +936,20 @@ setInterval(() => {
 const wispConnections = new Map(); // sessionId -> Set<{ username, socket }>
 const chatUploadBuckets = new Map(); // username:ip -> [timestamps]
 const chatTyping = new Map(); // channelId -> Map(lowerUsername -> { name, at })
+const reportBuckets = new Map(); // username -> [timestamps]
+
+function allowReport(username) {
+	const key = String(username || "").toLowerCase();
+	const now = Date.now();
+	const bucket = (reportBuckets.get(key) || []).filter((at) => now - at < 60 * 60 * 1000);
+	if (bucket.length >= 10) {
+		reportBuckets.set(key, bucket);
+		return false;
+	}
+	bucket.push(now);
+	reportBuckets.set(key, bucket);
+	return true;
+}
 
 function noteChatTyping(channelId, username) {
 	const key = String(channelId || "general");
@@ -2494,6 +2551,110 @@ app.get("/account", (req, res) => {
 	);
 });
 
+app.get("/design", requireTool("designer"), (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		specialistWorkspacePage({
+			user: req.user,
+			tool: "designer",
+			reports: listReports({ username: req.user.username, limit: 5 }),
+			notice: req.query.ok === "created" ? "Informe enviado." : "",
+			error: req.query.error === "empty" ? "El título y la descripción son obligatorios." : "",
+		}),
+	);
+});
+
+app.get("/pentest", requireTool("pentester"), (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		specialistWorkspacePage({
+			user: req.user,
+			tool: "pentester",
+			reports: listReports({ username: req.user.username, limit: 5 }),
+			security: securitySummary(),
+			notice: req.query.ok === "created" ? "Informe enviado." : "",
+			error: req.query.error === "empty" ? "El título y la descripción son obligatorios." : "",
+		}),
+	);
+});
+
+app.get("/qa", requireTool("qa"), (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		specialistWorkspacePage({
+			user: req.user,
+			tool: "qa",
+			reports: listReports({ username: req.user.username, limit: 5 }),
+			notice: req.query.ok === "created" ? "Informe enviado." : "",
+			error: req.query.error === "empty" ? "El título y la descripción son obligatorios." : "",
+		}),
+	);
+});
+
+app.get("/reports", requireReportsAccess, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		reportsPage({
+			user: req.user,
+			reports: listReports({ username: req.user.username, limit: 100 }),
+			browser: String(req.headers["user-agent"] || "").slice(0, 200),
+			notice: req.query.ok === "created" ? "Informe enviado. Gracias." : "",
+			error:
+				req.query.error === "empty"
+					? "El título y la descripción son obligatorios."
+					: req.query.error === "rate"
+						? "Has enviado demasiados informes. Espera un poco."
+						: "",
+		}),
+	);
+});
+
+app.post("/api/reports", requireReportsAccess, sameOrigin, (req, res) => {
+	if (!allowReport(req.user.username)) {
+		return res.redirect(303, "/reports?error=rate");
+	}
+	const result = createReport(req.user.username, {
+		title: req.body.title,
+		type: req.body.type,
+		severity: req.body.severity,
+		area: req.body.area,
+		url: req.body.url,
+		description: req.body.description,
+		steps: req.body.steps,
+		expected: req.body.expected,
+		actual: req.body.actual,
+		browser: req.body.browser,
+	});
+	if (result.error) return res.redirect(303, `/reports?error=${result.error}`);
+	audit(req, "report.create", result.report.id, `${result.report.type}: ${result.report.title}`);
+	res.redirect(303, "/reports?ok=created");
+});
+
+app.get("/admin/reports", requireAdmin, (req, res) => {
+	const status = String(req.query.status || "");
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		adminReportsPage({
+			user: req.user,
+			reports: listReports({ status, limit: 500 }),
+			status,
+			notice: req.query.ok === "updated" ? "Informe actualizado." : "",
+			error: req.query.error === "notfound" ? "El informe ya no existe." : "",
+		}),
+	);
+});
+
+app.post("/api/admin/reports/:id", requireAdmin, sameOrigin, (req, res) => {
+	const result = updateReport(req.params.id, {
+		status: req.body.status,
+		adminNote: req.body.note,
+		by: req.user.username,
+	});
+	if (result.error) return res.redirect(303, `/admin/reports?error=${result.error}`);
+	audit(req, "report.update", result.report.id, `estado: ${result.report.status}`);
+	res.redirect(303, "/admin/reports?ok=updated");
+});
+
 app.get("/bookmarks", (req, res) => {
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -2812,6 +2973,7 @@ function adminOverviewData(req) {
 			alerts: security.open || 0,
 			requests: countPendingRequests(),
 			backups: backupCount(),
+			reports: countOpenReports(),
 			requestsPerMinute: traffic.http.lastMinute || 0,
 			streams: traffic.wisp.activeStreams || 0,
 		},
@@ -2819,6 +2981,7 @@ function adminOverviewData(req) {
 			{ label: "Vigilancia en vivo", detail: "Ver qué están haciendo ahora", href: "/admin/monitor", icon: "👁" },
 			{ label: "Gestionar usuarios", detail: "Roles, bloqueos y permisos", href: "/admin", icon: "👥" },
 			{ label: "Revisar seguridad", detail: `${security.open || 0} alertas abiertas`, href: "/admin/security", icon: "🛡" },
+			{ label: "Revisar informes", detail: `${countOpenReports()} informes abiertos`, href: "/admin/reports", icon: "📝" },
 			{ label: "Ajustes del proxy", detail: "Chat, acceso, portada y copias", href: "/admin/settings", icon: "⚙" },
 		],
 		recent,
@@ -3260,12 +3423,13 @@ app.get("/admin/users.csv", requireAdmin, (req, res) => {
 	};
 	const users = hideCreatorData(req, listUsers(), (entry) => entry.username);
 	const lines = [
-		"usuario,rol,bloqueado,bloqueado_hasta,cambio_obligatorio,creado,ultimo_login,idioma",
+		"usuario,roles,rol_principal,bloqueado,bloqueado_hasta,cambio_obligatorio,creado,ultimo_login,idioma",
 	];
 	for (const entry of users) {
 		lines.push(
 			[
 				entry.username,
+				(entry.roles || [entry.role]).join(" "),
 				entry.role,
 				entry.blocked ? "si" : "no",
 				entry.blockedUntil || "",
@@ -3788,17 +3952,20 @@ app.post("/api/admin/backup/restore", requireAdmin, sameOrigin, async (req, res)
 });
 
 app.post("/api/admin/users", requireAdmin, sameOrigin, (req, res) => {
-	const role = String(req.body.role || "");
-	if (req.user.role !== "creator" && !canAssignRole(req.user.role, role)) {
-		return res.redirect(303, "/admin?error=forbidden");
+	const roles = normalizeRoleList(req.body.roles ?? req.body.role);
+	if (!roles.length) return res.redirect(303, "/admin?error=invalid-role");
+	for (const role of roles) {
+		if (!canAssignRole(req.user.role, role)) {
+			return res.redirect(303, "/admin?error=forbidden");
+		}
 	}
 	const result = createUser(
 		req.body.username,
 		String(req.body.password || ""),
-		role,
+		roles,
 	);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
-	audit(req, "user.create", result.user.username, `rol: ${result.user.role}`);
+	audit(req, "user.create", result.user.username, `roles: ${roles.join(", ")}`);
 	res.redirect(303, "/admin?ok=created");
 });
 
@@ -3810,24 +3977,24 @@ app.post("/api/admin/users/import", requireAdmin, sameOrigin, (req, res) => {
 	const errors = [];
 	for (const row of rows) {
 		const username = String(row?.username || "").trim();
-		const role = ["user", "moderator", "admin"].includes(String(row?.role || ""))
-			? String(row.role)
-			: "user";
-		if (req.user.role !== "creator" && !canAssignRole(req.user.role, role)) {
-			errors.push(`${username || "(sin nombre)"}: no puedes asignar el rol ${role}`);
+		const roles = normalizeRoleList(row?.roles ?? row?.role ?? "user");
+		const allowed = roles.every((role) => canAssignRole(req.user.role, role));
+		if (!allowed) {
+			errors.push(`${username || "(sin nombre)"}: no puedes asignar esos roles`);
 			continue;
 		}
 		const provided = String(row?.password || "").trim();
 		const password = provided || crypto.randomBytes(9).toString("base64url");
-		const result = createUser(username, password, role);
+		const result = createUser(username, password, roles);
 		if (result.error) {
 			errors.push(`${username || "(sin nombre)"}: ${result.error}`);
 			continue;
 		}
-		audit(req, "user.create", result.user.username, `rol: ${result.user.role} (importación)`);
+		audit(req, "user.create", result.user.username, `roles: ${roles.join(", ")} (importación)`);
 		created.push({
 			username: result.user.username,
 			role: result.user.role,
+			roles,
 			password: provided ? "" : password,
 		});
 	}
@@ -3867,19 +4034,22 @@ app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, 
 
 app.post("/api/admin/users/:username/role", requireAdmin, sameOrigin, (req, res) => {
 	const target = req.params.username;
-	const role = String(req.body.role || "");
-	if (req.user.role !== "creator" && !canAssignRole(req.user.role, role)) {
-		return res.redirect(303, "/admin?error=forbidden");
+	const roles = normalizeRoleList(req.body.roles ?? req.body.role);
+	if (!roles.length) return res.redirect(303, "/admin?error=invalid-role");
+	for (const role of roles) {
+		if (!canAssignRole(req.user.role, role)) {
+			return res.redirect(303, "/admin?error=forbidden");
+		}
 	}
 	if (
 		target.toLowerCase() === req.user.username.toLowerCase() &&
-		!isAdminRole(role)
+		!isAdminRole(highestRole(roles))
 	) {
 		return res.redirect(303, "/admin?error=self");
 	}
-	const result = setRole(target, role);
+	const result = setRoles(target, roles);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
-	audit(req, "user.role", target, `rol: ${role}`);
+	audit(req, "user.role", target, `roles: ${roles.join(", ")}`);
 	res.redirect(303, "/admin?ok=role");
 });
 

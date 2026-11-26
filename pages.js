@@ -90,6 +90,9 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .badge.admin{color:#bfdbfe;border-color:#1e40af;background:#101c33}
 .badge.creator{color:#fde68a;border-color:#a16207;background:#271c06}
 .badge.role-user{color:#bfdbfe;border-color:#1d4ed8;background:#0d1b2e}
+.badge.role-designer{color:#fbcfe8;border-color:#9d174d;background:#2a0a1a}
+.badge.role-pentester{color:#fed7aa;border-color:#c2410c;background:#2a1306}
+.badge.role-qa{color:#bae6fd;border-color:#0369a1;background:#08202e}
 .badge.role-moderator{color:#bbf7d0;border-color:#166534;background:#0d2115}
 .badge.role-admin{color:#ddd6fe;border-color:#6d28d9;background:#1d1233}
 .badge.role-creator{color:#fde68a;border-color:#a16207;background:#2a1d05}
@@ -210,6 +213,31 @@ textarea{width:100%;background:linear-gradient(180deg,#141e29,#111923);border:1p
 textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.13)}
 .check{display:flex;align-items:center;gap:9px;margin:14px 0;color:var(--muted);font-size:14px}
 .check input{width:16px;height:16px;accent-color:var(--accent)}
+.role-picker{border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin:12px 0;display:flex;flex-wrap:wrap;gap:4px 16px}
+.role-picker legend{padding:0 6px;color:var(--muted);font-size:12px}
+.report-status-open{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
+.report-status-triaged{color:#fde68a;border-color:#a16207;background:#2a1d05}
+.report-status-in_progress{color:#bfdbfe;border-color:#1d4ed8;background:#0d1b2e}
+.report-status-fixed{color:#bbf7d0;border-color:#166534;background:#0d2115}
+.report-status-dismissed{color:#cbd5e1;border-color:#475569;background:#151e29}
+.report-type-bug{color:#bfdbfe;border-color:#1d4ed8;background:#0d1b2e}
+.report-type-security{color:#fed7aa;border-color:#c2410c;background:#2a1306}
+.report-type-design{color:#fbcfe8;border-color:#9d174d;background:#2a0a1a}
+.report-severity-low{color:#bbf7d0;border-color:#166534;background:#0d2115}
+.report-severity-medium{color:#fde68a;border-color:#a16207;background:#2a1d05}
+.report-severity-high{color:#fed7aa;border-color:#c2410c;background:#2a1306}
+.report-severity-critical{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
+.report-detail summary{cursor:pointer;color:#dbeafe;font-weight:600}
+.report-detail-body{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.55;max-width:760px}
+.report-detail-body p{margin:4px 0}
+.report-admin-form{display:flex;flex-direction:column;gap:5px;min-width:180px}
+.report-admin-form select,.report-admin-form input{font-size:12px;padding:6px 8px}
+.tool-checklist{margin:0;padding-left:20px;color:var(--muted);line-height:1.8;font-size:13.5px}
+.design-swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.design-swatch{border:1px solid var(--border);border-radius:10px;padding:8px;background:rgba(255,255,255,.02);display:flex;flex-direction:column;gap:4px}
+.design-swatch span{display:block;height:34px;border-radius:7px;border:1px solid rgba(255,255,255,.08)}
+.design-swatch strong{font-size:12px}
+.design-swatch small{color:var(--muted);font-size:10.5px}
 .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
 .mono{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#94a9c1}
 .warn{margin:14px 0;padding:11px 13px;border-radius:10px;border:1px solid rgba(251,191,36,.25);
@@ -369,6 +397,9 @@ dialog h2{margin-top:0}
 .role-scale li{margin-bottom:9px}
 .role-scale strong{display:block;color:var(--text);font-size:14px}
 .role-scale li.role-user strong{color:#93c5fd}
+.role-scale li.role-designer strong{color:#f9a8d4}
+.role-scale li.role-pentester strong{color:#fdba74}
+.role-scale li.role-qa strong{color:#7dd3fc}
 .role-scale li.role-moderator strong{color:#86efac}
 .role-scale li.role-admin strong{color:#c4b5fd}
 .role-scale li.role-creator strong{color:#fde68a}
@@ -976,12 +1007,24 @@ ${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" 
 }
 
 function topbar(user) {
-	const staff = ["admin", "creator", "moderator"].includes(user?.role);
+	const roles = Array.isArray(user?.roles) && user.roles.length ? user.roles : [user?.role];
+	const staff = roles.some((role) => ["admin", "creator", "moderator"].includes(role));
 	const admin = staff ? '<a href="/admin">Administración</a>' : "";
-	const alertCount = ["admin", "creator"].includes(user?.role) ? countOpenAlerts() : 0;
-	const security = ["admin", "creator"].includes(user?.role)
+	const alertCount = roles.some((role) => ["admin", "creator"].includes(role))
+		? countOpenAlerts()
+		: 0;
+	const security = roles.some((role) => ["admin", "creator"].includes(role))
 		? `<a href="/admin/security">Seguridad${alertCount ? ` <span class="alert-count">${alertCount}</span>` : ""}</a>`
 		: "";
+	const toolLinks = [];
+	if (roles.includes("designer")) toolLinks.push('<a href="/design">Diseño</a>');
+	if (roles.includes("pentester")) toolLinks.push('<a href="/pentest">Pentest</a>');
+	if (roles.includes("qa")) toolLinks.push('<a href="/qa">QA</a>');
+	if (roles.some((role) => ["designer", "pentester", "qa"].includes(role))) {
+		toolLinks.push('<a href="/reports">Informes</a>');
+	}
+	const roleNames = roles.map(roleLabel);
+	const roleText = `${roleNames.slice(0, 2).join(" + ")}${roleNames.length > 2 ? ` +${roleNames.length - 2}` : ""}`;
 	return `<header class="topbar">
   <div class="brand"><span class="brand-icon">${LOGO}</span>Proxy <span>Web</span></div>
   <a href="/">Proxy</a>
@@ -989,10 +1032,11 @@ function topbar(user) {
   <a href="/bookmarks">Favoritos</a>
   <a href="/history">Historial</a>
   <a href="/account">Mi cuenta</a>
+  ${toolLinks.join("")}
   ${security}
   ${admin}
   ${user ? userAvatar(user.username, user.icon, "topbar-avatar") : ""}
-  <span class="who">${esc(user?.username || "")} · ${roleLabel(user?.role)}</span>
+  <span class="who">${esc(user?.username || "")} · ${esc(roleText)}</span>
   <form method="post" action="/logout" class="inline"><button class="link" type="submit">Salir</button></form>
 </header>`;
 }
@@ -1001,7 +1045,17 @@ function roleLabel(role) {
 	if (role === "creator") return "creador";
 	if (role === "admin") return "administrador";
 	if (role === "moderator") return "moderador";
+	if (role === "designer") return "diseñador gráfico";
+	if (role === "pentester") return "pentester";
+	if (role === "qa") return "QA / bugs";
 	return "usuario";
+}
+
+function roleBadges(roles, fallback = "user") {
+	const list = Array.isArray(roles) && roles.length ? roles : [fallback];
+	return list
+		.map((role) => `<span class="badge role-${esc(role)}">${esc(roleLabel(role))}</span>`)
+		.join(" ");
 }
 
 const ADMIN_TABS = [
@@ -1014,6 +1068,7 @@ const ADMIN_TABS = [
 	["activity", "/admin/activity", "Actividad"],
 	["audit", "/admin/audit", "Auditoría"],
 	["requests", "/admin/requests", "Solicitudes"],
+	["reports", "/admin/reports", "Informes"],
 	["stats", "/admin/stats", "Estadísticas"],
 	["settings", "/admin/settings", "Ajustes"],
 	["system", "/admin/system", "Sistema"],
@@ -1022,7 +1077,7 @@ const ADMIN_TABS = [
 function adminTabs(active, role = "admin") {
 	const visible = ["admin", "creator"].includes(role)
 		? ADMIN_TABS
-		: ADMIN_TABS.filter(([key]) => !["overview", "settings", "system", "security", "traffic", "monitor"].includes(key));
+		: ADMIN_TABS.filter(([key]) => !["overview", "settings", "system", "security", "traffic", "monitor", "reports"].includes(key));
 	const separators = new Set(["security", "activity", "settings"]);
 	const links = visible
 		.map(
@@ -1627,10 +1682,14 @@ export function chatPage({
 			/@([A-Za-z0-9._-]{3,32})/g,
 			(_match, name) => `<span class="chat-mention">@${esc(name)}</span>`,
 		);
-	const roleBadge = (role) =>
-		role === "user"
-			? ""
-			: `<span class="badge role-${esc(role)}">${role === "creator" ? "creador" : role === "admin" ? "admin" : "moderador"}</span>`;
+	const roleBadge = (role, roles = []) => {
+		const list = (Array.isArray(roles) && roles.length ? roles : [role]).filter(
+			(value) => value && value !== "user",
+		);
+		return list
+			.map((value) => `<span class="badge role-${esc(value)}">${esc(roleLabel(value))}</span>`)
+			.join(" ");
+	};
 
 	const rows = messages
 		.map((m) => {
@@ -1683,7 +1742,7 @@ export function chatPage({
     ${replyQuote}
     <div class="chat-meta">
       ${own ? "" : `<span class="chat-author">${esc(m.username)}</span>`}
-      ${roleBadge(role)}
+      ${roleBadge(role, m.roles)}
       ${pinBadge}
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
       ${edited}
@@ -1995,8 +2054,8 @@ export function adminPage({
 	notice = "",
 	error = "",
 } = {}) {
-	const assignableRoles = ["user", "moderator"].concat(
-		user.role === "creator" ? ["admin"] : [],
+	const assignableRoles = ["user", "moderator", "designer", "pentester", "qa", "admin"].filter(
+		(role) => canAssignRole(user.role, role),
 	);
 	const dayLabels = [
 		[0, "D"],
@@ -2028,7 +2087,7 @@ export function adminPage({
     <span class="user-summary-main">
       ${userAvatar(u.username, u.icon, "user-avatar")}
       <strong class="user-name">${esc(u.username)}</strong>
-      <span class="badge role-${esc(u.role)}">${esc(roleLabel(u.role))}</span>
+      ${roleBadges(u.roles, u.role)}
       ${self ? '<span class="badge">tú</span>' : ""}
     </span>
     <span class="user-summary-meta">${self ? '<a class="small" href="/account">Mi cuenta</a>' : ""}${esc(reason)}</span>
@@ -2044,11 +2103,13 @@ export function adminPage({
 						}> ${label}</label>`,
 				)
 				.join("");
+			const currentRoles = Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role];
 			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role">
-        <select name="role" aria-label="Rol de ${esc(u.username)}">
-          ${assignableRoles.map((role) => `<option value="${role}"${u.role === role ? " selected" : ""}>${role === "user" ? "usuario" : role === "moderator" ? "moderador" : "admin"}</option>`).join("")}
-        </select>
-        <button class="small" type="submit">Guardar rol</button>
+        <fieldset class="role-picker">
+          <legend>Roles de ${esc(u.username)}</legend>
+          ${assignableRoles.map((role) => `<label class="check"><input type="checkbox" name="roles" value="${role}"${currentRoles.includes(role) ? " checked" : ""}> ${esc(roleLabel(role))}</label>`).join("")}
+        </fieldset>
+        <button class="small" type="submit">Guardar roles</button>
       </form>`;
 			const blockForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block">
         <input type="hidden" name="blocked" value="${u.blocked ? "0" : "1"}">
@@ -2140,7 +2201,7 @@ export function adminPage({
     <span class="user-summary-main">
       ${userAvatar(u.username, u.icon, "user-avatar")}
       <strong class="user-name">${esc(u.username)}</strong>
-      <span class="badge role-${esc(u.role)}">${esc(roleLabel(u.role))}</span>
+      ${roleBadges(u.roles, u.role)}
       ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
       ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
       ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
@@ -2184,6 +2245,9 @@ ${adminTabs("users", user.role)}
   <h2>Escala de privilegios</h2>
   <ol class="role-scale">
     <li class="role-user"><strong>Usuario</strong><span>Navegación, chat, favoritos, historial propio y cuenta.</span></li>
+    <li class="role-designer"><strong>Diseñador gráfico</strong><span>Herramientas de diseño, sistema visual, revisión de interfaz e informes de problemas visuales.</span></li>
+    <li class="role-pentester"><strong>Pentester</strong><span>Checklist de seguridad, resumen de exposición e informes de vulnerabilidades. Sin acceso a datos de administración.</span></li>
+    <li class="role-qa"><strong>QA / bugs</strong><span>Casos de prueba, entorno del navegador e informes de fallos con pasos para reproducirlos.</span></li>
     <li class="role-moderator"><strong>Moderador</strong><span>Consulta usuarios, actividad, sesiones, auditoría y solicitudes; puede bloquear o cerrar sesión solo a usuarios.</span></li>
     <li class="role-admin"><strong>Administrador</strong><span>Gestiona usuarios y moderadores, ajustes, seguridad y copias; no puede gestionar a otros administradores ni al creador.</span></li>
     <li class="role-creator"><strong>Creador</strong><span>Acceso total y cuenta protegida. <b>Único</b> que puede crear, ascender, degradar, resetear o eliminar administradores.</span></li>
@@ -2214,16 +2278,16 @@ ${adminTabs("users", user.role)}
         </div>
       </div>
     </div>
-    <label for="new-role">Rol</label>
-    <select id="new-role" name="role">
-      ${assignableRoles.map((role) => `<option value="${role}">${role === "user" ? "usuario normal" : role === "moderator" ? "moderador" : "administrador"}</option>`).join("")}
-    </select>
+    <fieldset class="role-picker">
+      <legend>Roles (puedes elegir varios)</legend>
+      ${assignableRoles.map((role) => `<label class="check"><input type="checkbox" name="roles" value="${role}"${role === "user" ? " checked" : ""}> ${esc(roleLabel(role))}</label>`).join("")}
+    </fieldset>
     <button class="primary" type="submit">Crear usuario</button>
   </form>
   <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar.</p>
   <details class="card" style="margin-top:16px;background:rgba(255,255,255,.015)">
     <summary class="muted" style="cursor:pointer">Importar usuarios desde CSV</summary>
-    <p class="hint">Columnas: usuario, rol, contraseña. El rol y la contraseña son opcionales; si faltan, se usa usuario y se genera una contraseña temporal.</p>
+    <p class="hint">Columnas: usuario, roles, contraseña. Los roles se separan con `|` (ej.: user|designer|pentester). Son opcionales; si faltan, se usa usuario y se genera una contraseña temporal.</p>
     <input id="users-import-file" type="file" accept=".csv,text/csv">
     <button id="users-import-run" class="small" type="button" style="margin-top:10px">Importar CSV</button>
     <pre id="users-import-result" class="panel" style="display:none;white-space:pre-wrap;margin-top:12px"></pre>
@@ -2685,6 +2749,7 @@ export function overviewPage({ user, data = {} } = {}) {
 		["Alertas abiertas", stats.alerts, "/admin/security"],
 		["Solicitudes", stats.requests, "/admin/requests?status=pending"],
 		["Copias", stats.backups, "/admin/system"],
+		["Informes", stats.reports, "/admin/reports"],
 		["Peticiones/min", stats.requestsPerMinute, "/admin/traffic"],
 		["Streams Wisp", stats.streams, "/admin/traffic"],
 	]
@@ -3317,6 +3382,287 @@ ${adminTabs("system")}
 	}
 </div>`;
 	return shell("Sistema · Administración", body, { topbar: topbar(user) });
+}
+
+
+const REPORT_TYPE_LABELS = {
+	bug: "Bug funcional",
+	security: "Seguridad",
+	design: "Diseño / interfaz",
+};
+const REPORT_SEVERITY_LABELS = {
+	low: "Baja",
+	medium: "Media",
+	high: "Alta",
+	critical: "Crítica",
+};
+const REPORT_STATUS_LABELS = {
+	open: "Abierto",
+	triaged: "Triado",
+	in_progress: "En curso",
+	fixed: "Corregido",
+	dismissed: "Descartado",
+};
+
+function reportStatusBadge(status) {
+	return `<span class="badge report-status-${esc(status)}">${esc(REPORT_STATUS_LABELS[status] || status)}</span>`;
+}
+
+function reportForm(user, browser = "") {
+	return `<div class="card report-form-card">
+  <h2>Nuevo informe</h2>
+  <p class="muted">Cuéntanos qué falla y dónde. Cuanto más concreto, más rápido se puede arreglar.</p>
+  <form method="post" action="/api/reports">
+    <div class="field-grid">
+      <div>
+        <label for="report-title">Título</label>
+        <input id="report-title" name="title" maxlength="140" required placeholder="Ej.: El botón de enviar no responde en móvil">
+      </div>
+      <div>
+        <label for="report-type">Tipo</label>
+        <select id="report-type" name="type">
+          <option value="bug">Bug funcional</option>
+          <option value="security">Seguridad</option>
+          <option value="design">Diseño / interfaz</option>
+        </select>
+      </div>
+      <div>
+        <label for="report-severity">Gravedad</label>
+        <select id="report-severity" name="severity">
+          <option value="low">Baja</option>
+          <option value="medium" selected>Media</option>
+          <option value="high">Alta</option>
+          <option value="critical">Crítica</option>
+        </select>
+      </div>
+      <div>
+        <label for="report-area">Zona o página</label>
+        <input id="report-area" name="area" maxlength="120" placeholder="Ej.: /chat, /admin/settings, /login">
+      </div>
+    </div>
+    <label for="report-url">URL exacta (opcional)</label>
+    <input id="report-url" name="url" maxlength="500" placeholder="https://…">
+    <label for="report-description">Qué falla</label>
+    <textarea id="report-description" name="description" maxlength="4000" required placeholder="Describe el problema…"></textarea>
+    <label for="report-steps">Pasos para reproducirlo</label>
+    <textarea id="report-steps" name="steps" maxlength="4000" placeholder="1. Entra en…&#10;2. Pulsa…&#10;3. Ocurre…"></textarea>
+    <div class="field-grid">
+      <div>
+        <label for="report-expected">Resultado esperado</label>
+        <textarea id="report-expected" name="expected" maxlength="1000"></textarea>
+      </div>
+      <div>
+        <label for="report-actual">Resultado real</label>
+        <textarea id="report-actual" name="actual" maxlength="1000"></textarea>
+      </div>
+    </div>
+    <label for="report-browser">Navegador / dispositivo</label>
+    <input id="report-browser" name="browser" maxlength="200" value="${esc(browser)}">
+    <button class="primary" type="submit">Enviar informe</button>
+  </form>
+</div>`;
+}
+
+function reportTable(reports, { admin = false } = {}) {
+	if (!reports.length) return '<p class="empty">Todavía no hay informes.</p>';
+	const rows = reports
+		.map(
+			(report) => `<tr>
+  <td class="mono">${esc(fmtDate(report.createdAt))}</td>
+  ${admin ? `<td><strong>${esc(report.createdBy)}</strong></td>` : ""}
+  <td><span class="badge report-type-${esc(report.type)}">${esc(REPORT_TYPE_LABELS[report.type] || report.type)}</span></td>
+  <td><span class="badge report-severity-${esc(report.severity)}">${esc(REPORT_SEVERITY_LABELS[report.severity] || report.severity)}</span></td>
+  <td>${esc(report.area || "—")}</td>
+  <td>
+    <details class="report-detail">
+      <summary>${esc(report.title)}</summary>
+      <div class="report-detail-body">
+        <p><strong>Qué falla:</strong> ${esc(report.description)}</p>
+        ${report.steps ? `<p><strong>Pasos:</strong> ${esc(report.steps)}</p>` : ""}
+        ${report.expected ? `<p><strong>Esperado:</strong> ${esc(report.expected)}</p>` : ""}
+        ${report.actual ? `<p><strong>Real:</strong> ${esc(report.actual)}</p>` : ""}
+        ${report.url ? `<p><strong>URL:</strong> <span class="mono">${esc(report.url)}</span></p>` : ""}
+        ${report.browser ? `<p><strong>Navegador:</strong> ${esc(report.browser)}</p>` : ""}
+        ${report.adminNote ? `<p><strong>Nota del equipo:</strong> ${esc(report.adminNote)}</p>` : ""}
+      </div>
+    </details>
+  </td>
+  <td>${reportStatusBadge(report.status)}</td>
+  ${
+		admin
+			? `<td><form method="post" action="/api/admin/reports/${encodeURIComponent(report.id)}" class="report-admin-form">
+      <select name="status" aria-label="Estado">
+        ${Object.entries(REPORT_STATUS_LABELS).map(([value, label]) => `<option value="${value}"${report.status === value ? " selected" : ""}>${label}</option>`).join("")}
+      </select>
+      <input name="note" maxlength="2000" value="${esc(report.adminNote || "")}" placeholder="Nota interna">
+      <button class="small" type="submit">Guardar</button>
+    </form></td>`
+			: ""
+	}
+</tr>`,
+		)
+		.join("");
+	return `<div class="scroll"><table>
+    <thead><tr><th>Fecha</th>${admin ? "<th>Reportero</th>" : ""}<th>Tipo</th><th>Gravedad</th><th>Zona</th><th>Informe</th><th>Estado</th>${admin ? "<th></th>" : ""}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+export function reportsPage({ user, reports = [], notice = "", error = "", browser = "" } = {}) {
+	const body = `
+${topbar(user)}
+<div class="card">
+  <h1>Informes de fallos</h1>
+  <p class="muted">Sección común para diseño, pentest y QA. Puedes enviar un informe y seguir su estado.</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+</div>
+${reportForm(user, browser)}
+<div class="card">
+  <h2>Mis informes</h2>
+  ${reportTable(reports)}
+</div>`;
+	return shell("Informes · Proxy Web", body, { topbar: topbar(user) });
+}
+
+export function adminReportsPage({ user, reports = [], status = "", notice = "", error = "" } = {}) {
+	const body = `
+${adminTabs("reports", user.role)}
+<div class="card">
+  <h1>Informes</h1>
+  <p class="muted">Informes enviados por diseño, pentest y QA. Revisa, comenta y cambia el estado.</p>
+  <div class="filter">
+    <a class="small${status === "" ? " active" : ""}" href="/admin/reports">Todos</a>
+    ${Object.entries(REPORT_STATUS_LABELS).map(([value, label]) => `<a class="small${status === value ? " active" : ""}" href="/admin/reports?status=${value}">${label}</a>`).join("")}
+  </div>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  ${reportTable(reports, { admin: true })}
+</div>`;
+	return shell("Informes · Administración", body, { topbar: topbar(user) });
+}
+
+const TOOL_CONFIG = {
+	designer: {
+		path: "/design",
+		title: "Diseño gráfico",
+		icon: "🎨",
+		intro: "Herramientas para revisar la interfaz, el sistema visual y reportar problemas de diseño.",
+		checklist: [
+			"Contraste legible en tema oscuro y en móvil.",
+			"Estados hover, focus, activo y deshabilitado en botones y enlaces.",
+			"Espaciados consistentes entre tarjetas, formularios y tablas.",
+			"Tipografía: jerarquía, tamaños y saltos de línea.",
+			"Responsive: 390 px, 768 px y 1440 px.",
+			"Iconos alineados y con texto alternativo.",
+			"Modales, diálogos y menús: apertura, cierre y foco.",
+		],
+	},
+	pentester: {
+		path: "/pentest",
+		title: "Pentest",
+		icon: "🛡",
+		intro: "Checklist y resumen de exposición. Sin acceso a datos sensibles de administración.",
+		checklist: [
+			"Autenticación: login, logout, MFA y recuperación.",
+			"Sesiones: expiración, revocación y cookies.",
+			"Roles: usuario, moderador, admin, creador y especialistas.",
+			"CSRF, Origin y Sec-Fetch-Site en formularios y APIs.",
+			"SSRF, IPs privadas, redirecciones y cabeceras Host.",
+			"Subidas: tipo real, tamaño, cuota y nombre de archivo.",
+			"Rate limits en login, chat, subidas e informes.",
+			"Cabeceras: CSP, HSTS, XFO, nosniff.",
+		],
+	},
+	qa: {
+		path: "/qa",
+		title: "QA / bugs",
+		icon: "🧪",
+		intro: "Casos de prueba y entorno para reproducir fallos con pasos claros.",
+		checklist: [
+			"Login, logout y cambio de contraseña.",
+			"Navegación por el proxy y webs con vídeo/audio.",
+			"Favoritos, historial, búsqueda y pestañas.",
+			"Chat: enviar, responder, editar, fijar, buscar y adjuntar.",
+			"Panel de administración: usuarios, ajustes, sesiones y copias.",
+			"Móvil: teclado, scroll, modales y botones.",
+			"Idiomas: español, inglés y catalán.",
+			"Errores esperados: 403, 404, 429 y mantenimiento.",
+		],
+	},
+};
+
+export function specialistWorkspacePage({
+	user,
+	tool = "qa",
+	reports = [],
+	security = {},
+	notice = "",
+	error = "",
+} = {}) {
+	const config = TOOL_CONFIG[tool] || TOOL_CONFIG.qa;
+	const checklist = config.checklist
+		.map((item) => `<li>${esc(item)}</li>`)
+		.join("");
+	const stats =
+		tool === "pentester"
+			? `<div class="stats">
+    <div class="stat"><div class="k">Alertas abiertas</div><div class="v">${esc(security.open || 0)}</div></div>
+    <div class="stat"><div class="k">Bots detectados</div><div class="v">${esc(security.bots || 0)}</div></div>
+    <div class="stat"><div class="k">Bloqueos activos</div><div class="v">${esc(security.banned || 0)}</div></div>
+    <div class="stat"><div class="k">Últimas 24 h</div><div class="v">${esc(security.last24h || 0)}</div></div>
+  </div>`
+			: "";
+	const designSwatches =
+		tool === "designer"
+			? `<div class="design-swatches">
+    ${[
+			["Fondo", "#0b1017"],
+			["Superficie", "#111c2e"],
+			["Borde", "#243449"],
+			["Texto", "#e5edf7"],
+			["Muted", "#8298af"],
+			["Azul", "#3b82f6"],
+			["Éxito", "#4ade80"],
+			["Error", "#f87171"],
+		]
+			.map(([name, color]) => `<div class="design-swatch"><span style="background:${color}"></span><strong>${esc(name)}</strong><small>${esc(color)}</small></div>`)
+			.join("")}
+  </div>
+  <h2 style="margin-top:22px">Componentes</h2>
+  <div class="actions" style="align-items:center">
+    <button class="small primary-small" type="button">Botón primario</button>
+    <button class="small" type="button">Botón secundario</button>
+    <span class="badge">Badge</span>
+    <span class="badge role-designer">Diseño</span>
+    <span class="badge report-status-open">Abierto</span>
+  </div>`
+			: "";
+	const body = `
+${topbar(user)}
+<div class="card">
+  <h1>${config.icon} ${esc(config.title)}</h1>
+  <p class="muted">${esc(config.intro)}</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <div class="actions">
+    <a class="small primary-small" href="/reports">Enviar informe</a>
+    <a class="small" href="/reports">Ver mis informes</a>
+  </div>
+</div>
+${stats}
+${designSwatches ? `<div class="card">${designSwatches}</div>` : ""}
+<div class="grid">
+  <div class="card">
+    <h2>Checklist</h2>
+    <ul class="tool-checklist">${checklist}</ul>
+  </div>
+  <div class="card">
+    <h2>Últimos informes</h2>
+    ${reportTable(reports.slice(0, 5))}
+  </div>
+</div>`;
+	return shell(`${config.title} · Herramientas`, body, { topbar: topbar(user), wide: true });
 }
 
 export function adminLogsPage({ user, unit = "webproxy", lines = 200, output = "", error = "" } = {}) {

@@ -102,12 +102,28 @@
 			return String(value || "");
 		}
 	}
-	function roleBadge(role) {
-		if (!["admin", "moderator", "creator"].includes(role)) return null;
-		const badge = document.createElement("span");
-		badge.className = `badge role-${role}`;
-		badge.textContent = role === "creator" ? "creador" : role === "admin" ? "admin" : "moderador";
-		return badge;
+	function roleBadge(role, roles = []) {
+		const labels = {
+			creator: "creador",
+			admin: "admin",
+			moderator: "moderador",
+			designer: "diseño",
+			pentester: "pentester",
+			qa: "QA",
+		};
+		const list = (Array.isArray(roles) && roles.length ? roles : [role]).filter(
+			(value) => value && value !== "user" && labels[value],
+		);
+		if (!list.length) return null;
+		const wrap = document.createElement("span");
+		wrap.className = "chat-role-badges";
+		for (const value of list) {
+			const badge = document.createElement("span");
+			badge.className = `badge role-${value}`;
+			badge.textContent = labels[value];
+			wrap.appendChild(badge);
+		}
+		return wrap;
 	}
 	function dayLabel(value) {
 		const date = new Date(value);
@@ -363,7 +379,7 @@
 			author.textContent = String(message.username);
 			meta.appendChild(author);
 		}
-		const badge = roleBadge(message.role);
+		const badge = roleBadge(message.role, message.roles);
 		if (badge) meta.appendChild(badge);
 		if (message.pinned) {
 			const pin = document.createElement("span");
