@@ -481,6 +481,8 @@ dialog h2{margin-top:0}
 .chat-message.own .chat-poll-option{background:rgba(0,0,0,.12);border-color:rgba(255,255,255,.2);color:#fff}
 .chat-poll-option b{color:#93c5fd;font-size:11.5px}
 .chat-message.own .chat-poll-option b{color:#bfdbfe}
+.chat-poll-option.mine{border-color:#60a5fa;background:rgba(59,130,246,.18)}
+.chat-message.own .chat-poll-option.mine{border-color:rgba(255,255,255,.55);background:rgba(0,0,0,.24)}
 .chat-reactions{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:7px;position:relative}
 .chat-reaction{background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:999px;color:var(--text);font-size:11.5px;padding:2px 7px;cursor:pointer}
 .chat-message.own .chat-reaction{background:rgba(0,0,0,.14);border-color:rgba(255,255,255,.2);color:#fff}
@@ -2302,10 +2304,12 @@ export function chatPage({
 				: "";
 			const poll = m.poll
 				? `<div class="chat-poll">${(m.poll.options || [])
-						.map(
-							(option, index) =>
-								`<button type="button" class="chat-poll-option" data-chat-vote="${index}"><span>${esc(option.text)}</span><b>${option.votes?.length || 0}</b></button>`,
-						)
+						.map((option, index) => {
+							const mine = option.votes?.some(
+								(vote) => String(vote).toLowerCase() === current.toLowerCase(),
+							);
+							return `<button type="button" class="chat-poll-option${mine ? " mine" : ""}" data-chat-vote="${index}"><span>${esc(option.text)}</span><b>${option.votes?.length || 0}</b></button>`;
+						})
 						.join("")}</div>`
 				: "";
 			const reactions =
@@ -2541,7 +2545,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126l" defer></script>` : `
+<script src="/chat.js?v=20261126m" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>

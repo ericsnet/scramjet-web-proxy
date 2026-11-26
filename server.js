@@ -2850,7 +2850,26 @@ app.post("/api/chat/polls", sameOrigin, (req, res) => {
 		question: req.body.question,
 		options: Array.isArray(req.body.options) ? req.body.options : String(req.body.options || "").split("\n"),
 	});
-	if (result.error) return res.status(400).json({ error: result.error, message: "Encuesta no válida." });
+	if (result.error) {
+		const messages = {
+			disabled: "El chat está desactivado.",
+			channel: "No tienes acceso a este canal.",
+			slow: `Espera ${result.retryAfter || 1} s antes de crear otra encuesta.`,
+			rate: "Has creado demasiadas encuestas. Espera un minuto.",
+			"invalid-poll": "Pon una pregunta y entre 2 y 6 opciones.",
+		};
+		const status =
+			result.error === "disabled"
+				? 403
+				: result.error === "slow" || result.error === "rate"
+					? 429
+					: 400;
+		return res.status(status).json({
+			error: result.error,
+			message: messages[result.error] || "No se pudo crear la encuesta.",
+			retryAfter: result.retryAfter || 0,
+		});
+	}
 	res.status(201).json({ message: enrichChatMessage(result.message, req.user, chatUserMeta()) });
 });
 

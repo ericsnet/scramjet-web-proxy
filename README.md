@@ -240,7 +240,9 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - Contador de no leídos sobre el icono flotante.
 - Al volver a abrir el proxy: “Tienes X mensajes nuevos…”.
 - El puntero de lectura se guarda por usuario en `data/chat.json`.
-- Sala general, chats privados 1:1 y grupos con miembros.
+- Sala general, chats privados 1:1 y grupos con miembros. Los canales largos
+  cargan siempre los últimos 200 mensajes y permiten recuperar los anteriores
+  con el botón correspondiente, sin perder los mensajes nuevos ni las encuestas.
 - Adjuntos de hasta 5 MB (imágenes, PDF, texto y audio) y notas de voz de hasta
   2 minutos, servidos con comprobación de pertenencia al canal, nunca desde una
   carpeta pública. El contenido real se valida por cabeceras, no solo por la

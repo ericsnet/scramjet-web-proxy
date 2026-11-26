@@ -762,7 +762,9 @@ export function listChat({
 	const oldestSeq = all.length ? all[0].seq : nextSeq;
 	const selected = beforeSeq
 		? all.filter((message) => message.seq < beforeSeq).slice(-max)
-		: all.filter((message) => message.seq > afterSeq).slice(0, max);
+		: afterSeq > 0
+			? all.filter((message) => message.seq > afterSeq).slice(0, max)
+			: all.slice(-max);
 	const lower = String(username || "").toLowerCase();
 	const pinned = all.filter((message) => message.pinned);
 	return {
@@ -775,13 +777,9 @@ export function listChat({
 		latestSeq: all.length ? all[all.length - 1].seq : nextSeq - 1,
 		oldestSeq: selected.length ? selected[0].seq : oldestSeq,
 		readSeq: Number(reads[lower]?.[channel.id]) || 0,
-		hasMore: beforeSeq
-			? selected.length === max && all.some((message) => message.seq < selected[0].seq)
-			: all.some(
-					(message) =>
-						message.seq >
-						(selected.length ? selected[selected.length - 1].seq : afterSeq),
-				),
+		hasMore: selected.length
+			? all.some((message) => message.seq < selected[0].seq)
+			: all.length > 0,
 		generation,
 		revision,
 		reset: !beforeSeq && afterSeq > 0 && afterSeq < oldestSeq - 1,

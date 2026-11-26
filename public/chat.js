@@ -609,6 +609,13 @@
 			const button = document.createElement("button");
 			button.type = "button";
 			button.className = "chat-poll-option";
+			if (
+				option.votes?.some(
+					(vote) => String(vote).toLowerCase() === currentUser.toLowerCase(),
+				)
+			) {
+				button.classList.add("mine");
+			}
 			button.dataset.chatVote = String(index);
 			const label = document.createElement("span");
 			label.textContent = option.text;
@@ -979,11 +986,16 @@
 			} else {
 				appendMessages(data.messages);
 			}
-			lastSeq = Math.max(lastSeq, Number(data.latestSeq) || 0);
+			const lastReturned =
+				Array.isArray(data.messages) && data.messages.length
+					? Number(data.messages[data.messages.length - 1].seq) || 0
+					: 0;
+			lastSeq = Math.max(lastSeq, lastReturned || Number(data.latestSeq) || 0);
 			if (data.readSeq !== undefined && !readSeq) readSeq = Number(data.readSeq) || 0;
 			renderPinned(data.pinned);
 			renderTyping(data.typing);
-			hasMore = !!data.hasMore;
+			if (rebuilt) hasMore = !!data.hasMore;
+			else if (data.hasMore) hasMore = true;
 			if (loadOlderButton) loadOlderButton.hidden = !hasMore;
 			updateOnline(data.online, data.onlineIcons);
 			if (data.readSeqs) {
@@ -1611,7 +1623,7 @@
 			clearContext();
 			if (input) input.value = "";
 			if (counter) counter.textContent = "0";
-			if (data.message) replaceMessage(data.message);
+			if (data.message) appendMessages([data.message]);
 			await refresh();
 			await refreshChannels();
 			scrollBottom(true);
@@ -1706,7 +1718,7 @@
 				if (fileInput) fileInput.value = "";
 				if (fileName) fileName.textContent = "";
 				if (counter) counter.textContent = "0";
-				if (data.message) replaceMessage(data.message);
+				if (data.message) appendMessages([data.message]);
 				await refresh();
 				await refreshChannels();
 				scrollBottom(true);
@@ -2067,7 +2079,8 @@
 				body: JSON.stringify({ channel: channelId, question: question?.value || "", options: values }),
 			});
 			document.getElementById("chat-poll-dialog")?.close();
-			if (data.message) replaceMessage(data.message);
+			if (data.message) appendMessages([data.message]);
+			scrollBottom(true);
 			await refresh();
 		} catch (error) {
 			showError(error.message);
