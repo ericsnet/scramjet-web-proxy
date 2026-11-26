@@ -248,6 +248,16 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .group-choice input{width:16px;height:16px;accent-color:var(--accent);flex:0 0 16px}
 .group-choice strong{font-size:13px;color:var(--text)}
 .group-choice small{display:block;color:var(--muted);font-size:10.5px;margin-top:2px}
+.groups-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:14px}
+.group-card{display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;min-width:0;padding:15px 12px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(21,30,41,.72),rgba(15,23,42,.55))}
+.group-card strong{font-size:14px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.group-card small{font-size:11px;color:var(--muted)}
+.group-avatar{display:grid;place-items:center;width:58px;height:58px;margin-bottom:3px;border-radius:16px;overflow:hidden;color:#fff;font-size:18px;font-weight:800;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 8px 20px rgba(0,0,0,.25)}
+.group-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.group-card-actions{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:7px}
+.group-card-actions form{margin:0}
+.group-choice-avatar{flex:0 0 40px;width:40px;height:40px;margin:0;border-radius:11px;font-size:13px}
+.group-panel-avatar{flex:0 0 64px;width:64px;height:64px;border-radius:19px;font-size:22px}
 .tool-tabs{margin:0 0 16px}
 .report-status-open{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
 .report-status-triaged{color:#fde68a;border-color:#a16207;background:#2a1d05}
@@ -1017,6 +1027,18 @@ function userAvatar(name, icon, className = "user-avatar") {
 	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${image}</span>`;
 }
 
+function groupAvatar(name, className = "group-avatar") {
+	const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
+	const initial = esc(
+		(
+			parts.length > 1
+				? parts.slice(0, 2).map((part) => part[0]).join("")
+				: String(name || "?").slice(0, 2)
+		).toUpperCase(),
+	);
+	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${initial}</span>`;
+}
+
 function shell(title, body, { topbar = "", chatFab = true, wide = false, full = false, head = "" } = {}) {
 	return `<!doctype html>
 <html lang="es">
@@ -1460,9 +1482,12 @@ export function groupPanelPage({
 ${adminTabs("users", user.role)}
 <div class="card" style="margin-bottom:22px">
   <div class="section-title-row">
-    <div>
-      <h1>${esc(group.name)}</h1>
-      <p class="muted">Panel del grupo de clase. Revisa sus reglas, miembros y actividad.</p>
+    <div class="account-head" style="margin:0">
+      ${groupAvatar(group.name, "group-avatar group-panel-avatar")}
+      <div>
+        <h1>${esc(group.name)}</h1>
+        <p class="muted">Panel del grupo de clase. Revisa sus reglas, miembros y actividad.</p>
+      </div>
     </div>
     <a class="small" href="/admin">Volver a usuarios</a>
   </div>
@@ -1589,6 +1614,7 @@ export function groupOnboardingPage({
 		.map(
 			(group) => `<label class="group-choice">
   <input type="radio" name="group" value="${esc(group.id)}" required>
+  ${groupAvatar(group.name, "group-avatar group-choice-avatar")}
   <span><strong>${esc(group.name)}</strong><small>Grupo de clase</small></span>
 </label>`,
 		)
@@ -2692,22 +2718,23 @@ ${adminTabs("users", user.role)}
 	}
   ${
 		groups.length
-			? `<div class="group-list">${groups
+			? `<div class="groups-grid">${groups
 					.map(
-						(group) => `<div class="group-row">
-      <span class="badge group">${esc(group.name)}</span>
-      <span class="muted">${groupCounts.get(group.id) || 0} usuario${groupCounts.get(group.id) === 1 ? "" : "s"}</span>
-      <span class="group-actions">
+						(group) => `<div class="group-card">
+      ${groupAvatar(group.name)}
+      <strong>${esc(group.name)}</strong>
+      <small>${groupCounts.get(group.id) || 0} usuario${groupCounts.get(group.id) === 1 ? "" : "s"}</small>
+      <div class="group-card-actions">
         <a class="small" href="/admin/groups/${encodeURIComponent(group.id)}">Abrir panel</a>
         ${canManage ? `<a class="small" href="/admin/groups/${encodeURIComponent(group.id)}#rules">Reglas</a>` : ""}
-      </span>
-      ${
+        ${
 				canManage
 					? `<form method="post" action="/api/admin/groups/${encodeURIComponent(group.id)}/delete" onsubmit="return confirm('¿Eliminar el grupo ${esc(group.name)}? Sus usuarios quedarán sin grupo.')">
         <button class="small danger" type="submit">Eliminar</button>
       </form>`
 					: ""
 			}
+      </div>
     </div>`,
 					)
 					.join("")}</div>`
