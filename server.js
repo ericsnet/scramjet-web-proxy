@@ -923,7 +923,8 @@ const CHAT_ERRORS = {
 	channel: "No tienes acceso a ese canal.",
 	channel_required: "Indica el canal del mensaje.",
 	notfound: "Ese mensaje ya no existe.",
-	edit_window: "Ya no puedes editar este mensaje. Pídelo a un moderador.",
+	edit_window: "Ya no puedes editar este mensaje.",
+	edit_forbidden: "No puedes editar el mensaje de otra persona.",
 };
 
 const FRIEND_ERRORS = {
@@ -982,7 +983,7 @@ function enrichChatMessage(message, user, meta) {
 			(!isStaffRole(user?.role) &&
 				!!getSettings().chatAllowUserDelete &&
 				own),
-		canEdit: moderator || ownAndRecent,
+		canEdit: ownAndRecent,
 		canPin: moderator,
 	};
 }
@@ -2753,13 +2754,15 @@ app.post("/api/chat/messages/:id/edit", sameOrigin, (req, res) => {
 	}
 	const result = editChatMessage(req.user.username, req.params.id, req.body.text, {
 		channelId: message.channelId,
-		moderator: isChatModerator(req.user),
 	});
 	if (result.error) {
 		const status = result.error === "forbidden" ? 403 : result.error === "notfound" ? 404 : 400;
 		return res.status(status).json({
 			error: result.error,
-			message: CHAT_ERRORS[result.error] || "No se pudo editar el mensaje.",
+			message:
+				result.error === "forbidden"
+					? CHAT_ERRORS.edit_forbidden
+					: CHAT_ERRORS[result.error] || "No se pudo editar el mensaje.",
 		});
 	}
 	audit(req, "chat.edit", result.message.id);

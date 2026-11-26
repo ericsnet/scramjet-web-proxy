@@ -528,7 +528,7 @@ export function editChatMessage(
 	username,
 	messageId,
 	value,
-	{ channelId = GENERAL, moderator = false } = {},
+	{ channelId = GENERAL } = {},
 ) {
 	const settings = getSettings();
 	if (!settings.chatEnabled) return { error: "disabled" };
@@ -538,8 +538,8 @@ export function editChatMessage(
 	if (!message) return { error: "notfound" };
 	if (!channelFor(username, channelId)) return { error: "forbidden" };
 	const own = String(message.username).toLowerCase() === String(username).toLowerCase();
-	if (!own && !moderator) return { error: "forbidden" };
-	if (own && !moderator && Date.now() - new Date(message.at).getTime() > EDIT_WINDOW_MS) {
+	if (!own) return { error: "forbidden" };
+	if (Date.now() - new Date(message.at).getTime() > EDIT_WINDOW_MS) {
 		return { error: "edit_window" };
 	}
 	const text = cleanText(value);

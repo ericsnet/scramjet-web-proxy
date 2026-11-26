@@ -2540,6 +2540,18 @@ export function adminPage({
 						: u.role === "admin"
 							? "Solo el creador puede gestionar administradores"
 							: "Sin permisos para gestionar esta cuenta";
+				const creatorGroupForm =
+					isCreator && self
+						? `<div class="user-body" style="padding-top:0">
+  <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/group" class="user-group-form" style="margin-bottom:0">
+    <label for="group-${esc(u.username)}">Grupo de clase</label>
+    <select id="group-${esc(u.username)}" name="group">${groupOptions(u.group)}</select>
+    <input type="hidden" name="groupRulesPresent" value="1">
+    <label class="check" style="margin:0"><input type="checkbox" name="groupRules" value="1"${u.groupRules === false ? "" : " checked"}> Aplicar reglas del grupo</label>
+    <button class="small" type="submit">Guardar grupo</button>
+  </form>
+</div>`
+						: "";
 				return `<div class="${wrapper}">
   <div class="user-summary">
     <span class="user-summary-main">
@@ -2552,6 +2564,7 @@ export function adminPage({
     </span>
     <span class="user-summary-meta">${self ? '<a class="small" href="/account">Mi cuenta</a>' : ""}${esc(reason)}</span>
   </div>
+  ${creatorGroupForm}
 </div>`;
 			}
 			const schedule = u.schedule || { enabled: false, days: [1, 2, 3, 4, 5], start: "08:00", end: "20:00" };
