@@ -21,7 +21,7 @@ administración.
 - **Carga diferida en Poki y TikTok**: las imágenes fuera de pantalla se marcan como `lazy` y `async` dentro del proxy, para que no se saturen los streams al abrir la página.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
-- **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y presencia por conversación. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
+- **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto/audio), notas de voz grabadas, reacciones, encuestas, menciones y presencia por conversación. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
 - **Chat de clase automático**: cada grupo de usuarios tiene su propio canal interno, visible solo para sus miembros y sincronizado cuando alguien entra o sale del grupo.
 - **Acuses de lectura en el chat**: los mensajes propios muestran **Visto / No visto** en privados y **Visto por N** en grupos; se actualiza cuando el otro miembro lee el canal.
 - **Escala de privilegios con personas**: en Administración, cada rol muestra de forma compacta los usuarios que lo tienen (Usuario, Diseñador gráfico, Pentester, QA, Moderador, Administrador y Creador).
@@ -241,8 +241,10 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - Al volver a abrir el proxy: “Tienes X mensajes nuevos…”.
 - El puntero de lectura se guarda por usuario en `data/chat.json`.
 - Sala general, chats privados 1:1 y grupos con miembros.
-- Adjuntos de hasta 5 MB (imágenes, PDF y texto) servidos con comprobación de
-  pertenencia al canal, nunca desde una carpeta pública.
+- Adjuntos de hasta 5 MB (imágenes, PDF, texto y audio) y notas de voz de hasta
+  2 minutos, servidos con comprobación de pertenencia al canal, nunca desde una
+  carpeta pública. El contenido real se valida por cabeceras, no solo por la
+  extensión o el tipo que envía el navegador.
 - Reacciones, encuestas con voto y menciones.
 - Texto plano: no se interpreta HTML ni Markdown; todo se escapa en servidor y
   se pinta con `textContent` en el navegador.

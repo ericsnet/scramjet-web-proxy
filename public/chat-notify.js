@@ -172,9 +172,13 @@
 		for (const message of incoming.slice(-3)) {
 			const mentioned = Array.isArray(message.mentions) &&
 				message.mentions.some((name) => String(name).toLowerCase() === currentUser.toLowerCase());
+			const audio = String(message.attachment?.type || "").startsWith("audio/");
 			showToast({
 				title: mentioned ? `${message.username} te mencionó` : message.username,
-				text: String(message.text || (message.attachment ? "Archivo adjunto" : "")).slice(0, 180),
+				text: String(
+					message.text ||
+						(audio ? "🎤 Audio" : message.attachment ? "Archivo adjunto" : ""),
+				).slice(0, 180),
 				tone: mentioned ? "mention" : "",
 				icon: message.icon?.url || "",
 				name: message.username,

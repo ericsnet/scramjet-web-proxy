@@ -2886,6 +2886,7 @@ app.post(
 	const result = saveChatUpload(req.user.username, req.body, {
 		name: fileName,
 		type: req.headers["x-file-type"],
+		duration: req.headers["x-duration"],
 	});
 	if (result.error) {
 		const status =

@@ -22,6 +22,12 @@ const MIME_EXT = {
 	"image/webp": ".webp",
 	"application/pdf": ".pdf",
 	"text/plain": ".txt",
+	"audio/webm": ".webm",
+	"audio/ogg": ".ogg",
+	"audio/mp4": ".m4a",
+	"audio/mpeg": ".mp3",
+	"audio/wav": ".wav",
+	"audio/x-wav": ".wav",
 };
 
 let messages = [];
@@ -430,6 +436,7 @@ export function postChatMessage(
 			return { error: "invalid-attachment" };
 		}
 		attachment = { id: upload.id, name: upload.name, type: upload.type, size: upload.size };
+		if (upload.duration) attachment.duration = upload.duration;
 		delete uploads[String(attachmentId)];
 	}
 	let reply = null;
@@ -442,6 +449,9 @@ export function postChatMessage(
 				id: original.id,
 				username: original.username,
 				text: String(original.text || "").slice(0, 140),
+				attachment: original.attachment
+					? { type: original.attachment.type, name: original.attachment.name }
+					: null,
 			};
 		}
 	}
@@ -651,10 +661,14 @@ export function searchChat(
 	return { messages: found.map((message) => ({ ...message })) };
 }
 
-export function saveChatUpload(username, buffer, { name = "archivo", type = "" } = {}) {
+export function saveChatUpload(
+	username,
+	buffer,
+	{ name = "archivo", type = "", duration = 0 } = {},
+) {
 	if (!Buffer.isBuffer(buffer) || !buffer.length) return { error: "empty" };
 	if (buffer.length > MAX_FILE) return { error: "too_large" };
-	const mime = String(type || "").toLowerCase();
+	const mime = String(type || "").toLowerCase().split(";")[0].trim();
 	if (!MIME_EXT[mime]) return { error: "invalid-type" };
 	if (mime.startsWith("image/")) {
 		const png = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
@@ -662,6 +676,17 @@ export function saveChatUpload(username, buffer, { name = "archivo", type = "" }
 		const gif = buffer.subarray(0, 6).toString() === "GIF89a" || buffer.subarray(0, 6).toString() === "GIF87a";
 		const webp = buffer.subarray(0, 4).toString() === "RIFF" && buffer.subarray(8, 12).toString() === "WEBP";
 		if (!png && !jpg && !gif && !webp) return { error: "invalid-type" };
+	}
+	if (mime.startsWith("audio/")) {
+		const head = buffer.subarray(0, 12);
+		const webm = head.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+		const ogg = head.subarray(0, 4).toString() === "OggS";
+		const mp4 = head.subarray(4, 8).toString() === "ftyp";
+		const mp3 =
+			head.subarray(0, 3).toString() === "ID3" ||
+			(buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0);
+		const wav = head.subarray(0, 4).toString() === "RIFF" && head.subarray(8, 12).toString() === "WAVE";
+		if (!webm && !ogg && !mp4 && !mp3 && !wav) return { error: "invalid-type" };
 	}
 	if (mime === "application/pdf" && buffer.subarray(0, 4).toString() !== "%PDF") return { error: "invalid-type" };
 	const settings = getSettings();
@@ -683,6 +708,7 @@ export function saveChatUpload(username, buffer, { name = "archivo", type = "" }
 	const id = crypto.randomBytes(16).toString("hex");
 	fs.mkdirSync(UPLOAD_DIR, { recursive: true, mode: 0o700 });
 	fs.writeFileSync(path.join(UPLOAD_DIR, `${id}.bin`), buffer, { mode: 0o600 });
+	const seconds = Math.max(0, Math.min(300, Math.round(Number(duration) || 0)));
 	const upload = {
 		id,
 		owner: String(username).slice(0, 32),
@@ -691,6 +717,7 @@ export function saveChatUpload(username, buffer, { name = "archivo", type = "" }
 		size: buffer.length,
 		createdAt: new Date().toISOString(),
 	};
+	if (mime.startsWith("audio/") && seconds) upload.duration = seconds;
 	uploads[id] = upload;
 	dirty = true;
 	scheduleSave();

@@ -452,6 +452,13 @@ dialog h2{margin-top:0}
 .chat-attachment{display:block;margin-top:8px;border-radius:9px;overflow:hidden;max-width:360px}
 .chat-attachment img{display:block;max-width:100%;max-height:280px;object-fit:contain}
 .chat-attachment.file{font-size:12px;color:#93c5fd;padding:8px 9px;border:1px solid var(--border);background:rgba(0,0,0,.12)}
+.chat-audio{display:flex;align-items:center;gap:9px;margin-top:8px;padding:7px 9px;border:1px solid var(--border);border-radius:11px;background:rgba(0,0,0,.16);max-width:330px;min-width:230px}
+.chat-message.own .chat-audio{border-color:rgba(255,255,255,.22);background:rgba(0,0,0,.14)}
+.chat-audio-icon{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:rgba(59,130,246,.22);font-size:14px}
+.chat-audio-body{flex:1;min-width:0}
+.chat-audio audio{display:block;width:100%;height:34px}
+.chat-audio-meta{display:block;margin-top:3px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-message.own .chat-audio-meta{color:rgba(255,255,255,.72)}
 .chat-poll{display:flex;flex-direction:column;gap:5px;margin-top:9px;min-width:190px}
 .chat-poll-option{display:flex;justify-content:space-between;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 8px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
 .chat-message.own .chat-poll-option{background:rgba(0,0,0,.12);border-color:rgba(255,255,255,.2);color:#fff}
@@ -626,6 +633,23 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .chat-send:hover{background:#2f6fdd}
 .chat-send:disabled{opacity:.45;cursor:not-allowed}
 .chat-send svg{width:17px;height:17px}
+.chat-mic{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border:0;border-radius:10px;background:none;cursor:pointer;color:#8fa4bc}
+.chat-mic:hover{background:#1a2839;color:#dbeafe}
+.chat-mic svg{width:17px;height:17px}
+.chat-mic.recording{color:#fecaca;background:rgba(239,68,68,.18)}
+.chat-mic.recording svg{animation:chatMicPulse 1.1s ease-in-out infinite}
+@keyframes chatMicPulse{50%{opacity:.45;transform:scale(.92)}}
+.chat-recorder{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 16px 6px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:#111b26}
+.chat-recorder[hidden]{display:none}
+.chat-rec-dot{width:9px;height:9px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 4px rgba(239,68,68,.14);animation:chatMicPulse 1.1s ease-in-out infinite}
+.chat-recorder.preview .chat-rec-dot{display:none}
+.chat-rec-time{font-size:12.5px;color:#fecaca;font-variant-numeric:tabular-nums;min-width:38px}
+.chat-recorder.preview .chat-rec-time{color:var(--muted)}
+.chat-recorder audio{flex:1;min-width:160px;height:34px}
+.chat-rec-btn{font-size:11.5px;padding:5px 9px;border-radius:8px;border:1px solid var(--border);background:#182635;color:var(--text);cursor:pointer}
+.chat-rec-btn:hover{border-color:#3d5672}
+.chat-rec-btn.primary{background:linear-gradient(145deg,#3b82f6,#2563eb);border-color:transparent;color:#fff}
+.chat-rec-btn.danger{color:#fca5a5}
 .chat-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
   flex:1 1 auto;min-height:0;margin:auto;padding:24px 18px;color:#71859b;font-size:12px}
 .chat-empty strong{color:#bfd0e3;font-size:14px}
@@ -700,6 +724,7 @@ button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color
   .chat-app .chat-messages{padding:12px 12px 6px}
   .chat-app .chat-bubble{max-width:86%}
   .chat-composer{margin:5px 10px 10px}
+  .chat-recorder{margin:0 10px 5px}
 }
 
 @media(max-width:640px){.chat-fab{right:14px;width:50px;height:50px}
@@ -1091,7 +1116,7 @@ ${topbar}
 <main class="wrap${wide ? " wide" : ""}${full ? " full" : ""}">${body}</main>
 <footer>Proxy Web</footer>
 ${topbar ? `<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">⚠ Pánico</button></form>` : ""}
-${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js?v=20261126d" defer></script>' : ""}
+${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js?v=20261126e" defer></script>' : ""}
 <script>
 (() => {
   const bar = document.getElementById("page-progress");
@@ -1252,6 +1277,21 @@ function adminTabs(active, role = "admin") {
 		)
 		.join("");
 	return `<nav class="tabs">${links}</nav>`;
+}
+
+function fmtAudioTime(seconds) {
+	const total = Math.max(0, Math.round(Number(seconds) || 0));
+	const minutes = Math.floor(total / 60);
+	const rest = total % 60;
+	return `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+function attachmentLabel(attachment) {
+	const type = String(attachment?.type || "");
+	if (type.startsWith("audio/")) return "🎤 Audio";
+	if (type.startsWith("image/")) return "🖼 Imagen";
+	if (attachment) return "📎 Archivo";
+	return "Adjunto";
 }
 
 function fmtBytes(bytes) {
@@ -2210,10 +2250,21 @@ export function chatPage({
 			const canDeleteMessage =
 				enabled &&
 				(canDelete || (!isStaffRole(user?.role) && allowDelete && own));
+			const audioMeta = m.attachment
+				? [
+						m.attachment.duration ? fmtAudioTime(m.attachment.duration) : "",
+						m.attachment.name,
+						fmtBytes(m.attachment.size),
+					]
+						.filter(Boolean)
+						.join(" · ")
+				: "";
 			const attachment = m.attachment
 				? m.attachment.type?.startsWith("image/")
 					? `<a class="chat-attachment" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener"><img src="/api/chat/files/${esc(m.attachment.id)}" alt="${esc(m.attachment.name)}" loading="lazy"></a>`
-					: `<a class="chat-attachment file" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener">${esc(m.attachment.name)} · ${esc(fmtBytes(m.attachment.size))}</a>`
+					: m.attachment.type?.startsWith("audio/")
+						? `<div class="chat-audio"><span class="chat-audio-icon">🎤</span><div class="chat-audio-body"><audio controls preload="metadata" src="/api/chat/files/${esc(m.attachment.id)}"></audio><span class="chat-audio-meta">${esc(audioMeta)}</span></div></div>`
+						: `<a class="chat-attachment file" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener">${esc(m.attachment.name)} · ${esc(fmtBytes(m.attachment.size))}</a>`
 				: "";
 			const poll = m.poll
 				? `<div class="chat-poll">${(m.poll.options || [])
@@ -2238,7 +2289,7 @@ export function chatPage({
 				)
 				.join("")}</div></details>`;
 			const replyQuote = m.replyTo
-				? `<div class="chat-reply-quote"><strong>@${profileLink(m.replyTo.username)}</strong><span>${esc((m.replyTo.text || "").slice(0, 140) || "Adjunto")}</span></div>`
+				? `<div class="chat-reply-quote"><strong>@${profileLink(m.replyTo.username)}</strong><span>${esc((m.replyTo.text || "").slice(0, 140) || attachmentLabel(m.replyTo.attachment))}</span></div>`
 				: "";
 			const edited = m.editedAt
 				? `<span class="chat-edited" title="Editado ${esc(fmtDate(m.editedAt))}">editado</span>`
@@ -2280,7 +2331,7 @@ export function chatPage({
 				.slice(0, 3)
 				.map(
 					(message) =>
-						`<button type="button" class="chat-pin-chip" data-chat-jump="${esc(message.id)}" title="${esc(message.text || "")}"><span>📌</span><strong>${esc(message.username)}</strong><small>${esc((message.text || "").slice(0, 80) || "Adjunto")}</small></button>`,
+						`<button type="button" class="chat-pin-chip" data-chat-jump="${esc(message.id)}" title="${esc(message.text || "")}"><span>📌</span><strong>${esc(message.username)}</strong><small>${esc((message.text || "").slice(0, 80) || attachmentLabel(message.attachment))}</small></button>`,
 				)
 				.join("")
 		: "";
@@ -2350,12 +2401,23 @@ export function chatPage({
       <button type="button" class="chat-context-cancel" id="chat-context-cancel" aria-label="Cancelar">×</button>
     </div>
     <div class="chat-upload-progress" id="chat-upload-progress" hidden><span id="chat-upload-bar"></span></div>
+    <div class="chat-recorder" id="chat-recorder" hidden>
+      <span class="chat-rec-dot"></span>
+      <span class="chat-rec-time" id="chat-rec-time">0:00</span>
+      <audio id="chat-rec-audio" controls preload="metadata" hidden></audio>
+      <button type="button" class="chat-rec-btn" id="chat-rec-stop">Detener</button>
+      <button type="button" class="chat-rec-btn primary" id="chat-rec-send" hidden>Enviar audio</button>
+      <button type="button" class="chat-rec-btn danger" id="chat-rec-cancel">Descartar</button>
+    </div>
     <form method="post" action="/api/chat/messages" class="chat-composer" id="chat-form" autocomplete="off">
       <input type="hidden" name="channel" id="chat-channel-hidden" value="${esc(currentChannel)}">
       <label class="chat-attach" for="chat-file" title="Adjuntar archivo" aria-label="Adjuntar archivo">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
       </label>
-      <input id="chat-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" hidden>
+      <input id="chat-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,audio/*" hidden>
+      <button type="button" class="chat-mic" id="chat-mic" title="Grabar audio" aria-label="Grabar audio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/></svg>
+      </button>
       <div class="chat-compose-input">
         <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje"></textarea>
         <div class="chat-compose-meta"><span id="chat-file-name" class="muted"></span><span class="chat-counter"><span id="chat-counter">0</span>/${esc(settings.chatMaxLength)}</span></div>
@@ -2444,7 +2506,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126h" defer></script>` : `
+<script src="/chat.js?v=20261126i" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>

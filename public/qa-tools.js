@@ -17,7 +17,7 @@
 		{ id: "proxy-block", group: "Proxy", title: "Sitio bloqueado y solicitud de desbloqueo" },
 		{ id: "user-data", group: "Usuario", title: "Favoritos, historial, bóveda y cuenta" },
 		{ id: "chat-basic", group: "Chat", title: "Enviar, responder, editar y borrar mensaje" },
-		{ id: "chat-files", group: "Chat", title: "Adjuntar imagen/PDF, pegar y arrastrar" },
+		{ id: "chat-files", group: "Chat", title: "Adjuntar imagen/PDF/audio, grabar voz, pegar y arrastrar" },
 		{ id: "chat-mod", group: "Chat", title: "Fijar, buscar y moderar mensajes" },
 		{ id: "admin-users", group: "Administración", title: "Crear usuario, roles múltiples y bloquear" },
 		{ id: "admin-settings", group: "Administración", title: "Ajustes, mantenimiento y cuarentena" },

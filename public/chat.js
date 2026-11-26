@@ -13,6 +13,13 @@
 	const errorEl = document.getElementById("chat-error");
 	const fileInput = document.getElementById("chat-file");
 	const fileName = document.getElementById("chat-file-name");
+	const micButton = document.getElementById("chat-mic");
+	const recorderBar = document.getElementById("chat-recorder");
+	const recTimeEl = document.getElementById("chat-rec-time");
+	const recAudio = document.getElementById("chat-rec-audio");
+	const recStop = document.getElementById("chat-rec-stop");
+	const recSend = document.getElementById("chat-rec-send");
+	const recCancel = document.getElementById("chat-rec-cancel");
 	const typingEl = document.getElementById("chat-typing");
 	const pinnedBar = document.getElementById("chat-pinned-bar");
 	const pinnedList = document.getElementById("chat-pinned-list");
@@ -170,7 +177,9 @@
 		const author = document.createElement("strong");
 		author.textContent = `@${message.replyTo.username}`;
 		const text = document.createElement("span");
-		text.textContent = String(message.replyTo.text || "").slice(0, 140) || "Adjunto";
+		text.textContent =
+			String(message.replyTo.text || "").slice(0, 140) ||
+			attachmentLabel(message.replyTo.attachment);
 		quote.append(author, text);
 		quote.addEventListener("click", () => jumpToMessage(message.replyTo.id));
 		return quote;
@@ -217,7 +226,9 @@
 			const author = document.createElement("strong");
 			author.textContent = message.username;
 			const text = document.createElement("small");
-			text.textContent = String(message.text || "Adjunto").slice(0, 80);
+			text.textContent = String(
+				message.text || attachmentLabel(message.attachment),
+			).slice(0, 80);
 			button.append(icon, author, text);
 			pinnedList.appendChild(button);
 		}
@@ -240,10 +251,17 @@
 	}
 	function setContext(mode, message) {
 		if (mode === "reply") {
-			replyTarget = { id: message.id, username: message.username, text: message.text || "" };
+			replyTarget = {
+				id: message.id,
+				username: message.username,
+				text: message.text || "",
+				attachment: message.attachment || null,
+			};
 			editTarget = null;
 			contextLabel.textContent = `Respondiendo a ${message.username}`;
-			contextText.textContent = String(message.text || "Adjunto").slice(0, 120);
+			contextText.textContent = String(
+				message.text || attachmentLabel(message.attachment),
+			).slice(0, 120);
 		} else if (mode === "edit") {
 			editTarget = { id: message.id, text: message.text || "" };
 			replyTarget = null;
@@ -274,6 +292,17 @@
 		target.classList.add("flash");
 		setTimeout(() => target.classList.remove("flash"), 1200);
 	}
+	function audioTime(seconds) {
+		const total = Math.max(0, Math.round(Number(seconds) || 0));
+		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+	}
+	function attachmentLabel(attachment) {
+		const type = String(attachment?.type || "");
+		if (type.startsWith("audio/")) return "🎤 Audio";
+		if (type.startsWith("image/")) return "🖼 Imagen";
+		if (attachment) return "📎 Archivo";
+		return "Adjunto";
+	}
 	function makeAttachment(attachment) {
 		if (!attachment) return null;
 		const url = `/api/chat/files/${encodeURIComponent(attachment.id)}`;
@@ -289,6 +318,31 @@
 			image.loading = "lazy";
 			link.appendChild(image);
 			return link;
+		}
+		if (String(attachment.type || "").startsWith("audio/")) {
+			const wrap = document.createElement("div");
+			wrap.className = "chat-audio";
+			const icon = document.createElement("span");
+			icon.className = "chat-audio-icon";
+			icon.textContent = "🎤";
+			const body = document.createElement("div");
+			body.className = "chat-audio-body";
+			const audio = document.createElement("audio");
+			audio.controls = true;
+			audio.preload = "metadata";
+			audio.src = url;
+			const meta = document.createElement("span");
+			meta.className = "chat-audio-meta";
+			meta.textContent = [
+				attachment.duration ? audioTime(attachment.duration) : "",
+				attachment.name || "audio",
+				`${Math.ceil((attachment.size || 0) / 1024)} KB`,
+			]
+				.filter(Boolean)
+				.join(" · ");
+			body.append(audio, meta);
+			wrap.append(icon, body);
+			return wrap;
 		}
 		const link = document.createElement("a");
 		link.className = "chat-attachment file";
@@ -801,6 +855,7 @@
 		updateSeenLabels();
 	}
 	function switchChannel(value) {
+		cancelRecording();
 		channelId = value || "general";
 		clearContext();
 		messageStore.clear();
@@ -824,13 +879,14 @@
 		forceScroll = true;
 		refresh();
 	}
-	function uploadFile(file, onProgress) {
+	function uploadFile(file, onProgress, duration = 0) {
 		return new Promise((resolve, reject) => {
 			const xhr = new XMLHttpRequest();
 			xhr.open("POST", "/api/chat/upload");
 			xhr.setRequestHeader("Content-Type", "application/octet-stream");
 			xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
 			xhr.setRequestHeader("X-File-Type", file.type || "application/octet-stream");
+			if (duration) xhr.setRequestHeader("X-Duration", String(Math.round(duration)));
 			xhr.setRequestHeader("Accept", "application/json");
 			xhr.upload.onprogress = (event) => {
 				if (event.lengthComputable && onProgress) {
@@ -931,6 +987,7 @@
 	}
 	function selectFile(file) {
 		if (!file) return;
+		cancelRecording();
 		if (file.size > 5 * 1024 * 1024) {
 			showError("El archivo supera 5 MB.");
 			return;
@@ -938,6 +995,265 @@
 		selectedFile = file;
 		if (fileName) fileName.textContent = `${file.name} · ${Math.ceil(file.size / 1024)} KB`;
 	}
+	const MAX_AUDIO_SECONDS = 120;
+	let recorder = null;
+	let recChunks = [];
+	let recStream = null;
+	let recTimer = null;
+	let recStartedAt = 0;
+	let recBlob = null;
+	let recDuration = 0;
+	let recUrl = "";
+	let recCancelled = false;
+	let recBusy = false;
+	let recStarting = false;
+
+	function pickAudioType() {
+		if (!window.MediaRecorder) return "";
+		const types = [
+			"audio/webm;codecs=opus",
+			"audio/webm",
+			"audio/ogg;codecs=opus",
+			"audio/ogg",
+			"audio/mp4",
+		];
+		return types.find((type) => MediaRecorder.isTypeSupported?.(type)) || "";
+	}
+	function stopRecStream() {
+		if (!recStream) return;
+		for (const track of recStream.getTracks()) track.stop();
+		recStream = null;
+	}
+	function resetRecorder() {
+		clearInterval(recTimer);
+		recTimer = null;
+		stopRecStream();
+		recorder = null;
+		recChunks = [];
+		recBlob = null;
+		recDuration = 0;
+		recStartedAt = 0;
+		recCancelled = false;
+		recStarting = false;
+		if (recUrl) URL.revokeObjectURL(recUrl);
+		recUrl = "";
+		if (recAudio) {
+			recAudio.pause();
+			recAudio.removeAttribute("src");
+			recAudio.load();
+			recAudio.hidden = true;
+		}
+		if (recorderBar) {
+			recorderBar.hidden = true;
+			recorderBar.classList.remove("preview");
+		}
+		if (recStop) recStop.hidden = false;
+		if (recSend) {
+			recSend.hidden = true;
+			recSend.disabled = false;
+			recSend.textContent = "Enviar audio";
+		}
+		if (recTimeEl) recTimeEl.textContent = "0:00";
+		micButton?.classList.remove("recording");
+	}
+	async function startRecording() {
+		if (recorder || recStarting) return;
+		if (selectedFile) {
+			selectedFile = null;
+			if (fileInput) fileInput.value = "";
+			if (fileName) fileName.textContent = "";
+		}
+		if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+			showError("Tu navegador no permite grabar audio. Adjunta un archivo de audio.");
+			return;
+		}
+		clearError();
+		recStarting = true;
+		try {
+			recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+		} catch (error) {
+			recStarting = false;
+			showError(
+				error?.name === "NotAllowedError" || error?.name === "SecurityError"
+					? "Permiso de micrófono denegado. Actívalo en el navegador o adjunta un audio."
+					: "No se pudo acceder al micrófono.",
+			);
+			return;
+		}
+		if (!recStarting) {
+			stopRecStream();
+			return;
+		}
+		recCancelled = false;
+		recChunks = [];
+		recBlob = null;
+		recDuration = 0;
+		recStartedAt = Date.now();
+		const mimeType = pickAudioType();
+		try {
+			recorder = new MediaRecorder(recStream, mimeType ? { mimeType } : undefined);
+		} catch {
+			resetRecorder();
+			showError("No se pudo iniciar la grabación.");
+			return;
+		}
+		recorder.addEventListener("dataavailable", (event) => {
+			if (event.data?.size) recChunks.push(event.data);
+		});
+		recorder.addEventListener("stop", finishRecording);
+		recorder.start();
+		if (recorderBar) {
+			recorderBar.hidden = false;
+			recorderBar.classList.remove("preview");
+		}
+		if (recStop) recStop.hidden = false;
+		if (recSend) recSend.hidden = true;
+		if (recAudio) recAudio.hidden = true;
+		if (recTimeEl) recTimeEl.textContent = "0:00";
+		micButton?.classList.add("recording");
+		recStarting = false;
+		recTimer = setInterval(() => {
+			const elapsed = Math.min(
+				MAX_AUDIO_SECONDS,
+				Math.floor((Date.now() - recStartedAt) / 1000),
+			);
+			if (recTimeEl) recTimeEl.textContent = audioTime(elapsed);
+			if (elapsed >= MAX_AUDIO_SECONDS) stopRecording();
+		}, 250);
+	}
+	function stopRecording() {
+		if (recorder && recorder.state !== "inactive") recorder.stop();
+	}
+	function finishRecording() {
+		const elapsed = Math.min(
+			MAX_AUDIO_SECONDS,
+			Math.max(1, Math.round((Date.now() - recStartedAt) / 1000)),
+		);
+		recDuration = elapsed;
+		clearInterval(recTimer);
+		recTimer = null;
+		stopRecStream();
+		const type = recorder?.mimeType || pickAudioType() || "audio/webm";
+		recorder = null;
+		micButton?.classList.remove("recording");
+		if (recCancelled) {
+			resetRecorder();
+			return;
+		}
+		const blob = new Blob(recChunks, { type });
+		recChunks = [];
+		if (!blob.size) {
+			resetRecorder();
+			showError("La grabación quedó vacía. Inténtalo de nuevo.");
+			return;
+		}
+		recBlob = blob;
+		if (recAudio) {
+			if (recUrl) URL.revokeObjectURL(recUrl);
+			recUrl = URL.createObjectURL(blob);
+			recAudio.src = recUrl;
+			recAudio.hidden = false;
+		}
+		if (recorderBar) {
+			recorderBar.hidden = false;
+			recorderBar.classList.add("preview");
+		}
+		if (recTimeEl) recTimeEl.textContent = audioTime(recDuration);
+		if (recStop) recStop.hidden = true;
+		if (recSend) recSend.hidden = false;
+	}
+	function cancelRecording() {
+		if (recorder && recorder.state !== "inactive") {
+			recCancelled = true;
+			recorder.stop();
+			return;
+		}
+		resetRecorder();
+	}
+	async function sendRecording() {
+		if (!recBlob || recBusy) return;
+		recBusy = true;
+		if (recSend) {
+			recSend.disabled = true;
+			recSend.textContent = "Enviando…";
+		}
+		clearError();
+		if (uploadProgress) uploadProgress.hidden = false;
+		if (uploadBar) uploadBar.style.width = "0%";
+		try {
+			const type = recBlob.type || "audio/webm";
+			const ext = type.includes("ogg")
+				? "ogg"
+				: type.includes("mp4")
+					? "m4a"
+					: type.includes("mpeg")
+						? "mp3"
+						: type.includes("wav")
+							? "wav"
+							: "webm";
+			const name = `audio-${Date.now()}.${ext}`;
+			let file;
+			try {
+				file = new File([recBlob], name, { type });
+			} catch {
+				file = recBlob;
+				file.name = name;
+			}
+			const uploaded = await uploadFile(
+				file,
+				(percent) => {
+					if (uploadBar) uploadBar.style.width = `${percent}%`;
+				},
+				recDuration,
+			);
+			const caption = (input?.value || "").trim();
+			const data = await request("/api/chat/messages", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					text: caption,
+					channel: channelId,
+					attachment: uploaded.upload.id,
+					reply: replyTarget?.id || "",
+				}),
+			});
+			resetRecorder();
+			clearContext();
+			if (input) input.value = "";
+			if (counter) counter.textContent = "0";
+			if (data.message) replaceMessage(data.message);
+			await refresh();
+			await refreshChannels();
+			scrollBottom(true);
+		} catch (error) {
+			showError(error.message);
+			if (recSend) {
+				recSend.disabled = false;
+				recSend.textContent = "Reintentar";
+			}
+		} finally {
+			recBusy = false;
+			if (uploadProgress) uploadProgress.hidden = true;
+			if (uploadBar) uploadBar.style.width = "0%";
+		}
+	}
+	micButton?.addEventListener("click", () => {
+		if (recBlob) {
+			if (recAudio) {
+				if (recAudio.paused) recAudio.play().catch(() => {});
+				else recAudio.pause();
+			}
+			return;
+		}
+		if (recorder) {
+			stopRecording();
+			return;
+		}
+		startRecording();
+	});
+	recStop?.addEventListener("click", stopRecording);
+	recSend?.addEventListener("click", sendRecording);
+	recCancel?.addEventListener("click", cancelRecording);
 	if (fileInput) {
 		fileInput.addEventListener("change", () => {
 			selectFile(fileInput.files?.[0] || null);
@@ -982,6 +1298,14 @@
 	if (form && input) {
 		form.addEventListener("submit", async (event) => {
 			event.preventDefault();
+			if (recorder) {
+				showError("Detén la grabación antes de enviar el mensaje.");
+				return;
+			}
+			if (recBlob) {
+				await sendRecording();
+				return;
+			}
 			const text = input.value.trim();
 			if (!text && !selectedFile) return;
 			const stick = nearBottom();
@@ -1026,7 +1350,7 @@
 				(article?.classList.contains("own") ? currentUser : "");
 			const text =
 				stored?.text || article?.querySelector(".chat-text")?.textContent || "";
-			setContext("reply", { id, username, text });
+			setContext("reply", { id, username, text, attachment: stored?.attachment || null });
 			input?.focus();
 			return;
 		}
@@ -1215,7 +1539,9 @@
 				time.textContent = timeText(message.at);
 				head.append(author, channel, time);
 				const text = document.createElement("p");
-				text.textContent = String(message.text || "Adjunto").slice(0, 180);
+				text.textContent = String(
+					message.text || attachmentLabel(message.attachment),
+				).slice(0, 180);
 				button.append(head, text);
 				searchResults.appendChild(button);
 			}
