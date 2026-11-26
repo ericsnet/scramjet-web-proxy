@@ -146,7 +146,9 @@ quedan en `data/` y `backups/`. Más detalles en `deploy/README.md`.
 3. Usa `deploy/webproxy.service` como plantilla de systemd.
 4. Publica el puerto 3030 detrás de un reverse proxy HTTPS. Ejemplo de Apache
    en `deploy/apache-webproxy.conf`; el proxy debe reenviar WebSocket en
-   `/wisp/`.
+   `/wisp/`. La plantilla incluye una página 503 local con reconexión automática
+   (`public/error-503.html`), para que un reinicio de Node no muestre el error
+   genérico de Apache.
 5. Ajusta `PROXY_URL` para `status.sh`:
 
 ```bash

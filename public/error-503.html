@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Servicio no disponible · Proxy Web</title>
+<style>
+	:root { color-scheme: dark; --accent: #3b82f6; --text: #e5edf7; --muted: #8fa4bb; --border: #21344a; }
+	* { box-sizing: border-box; }
+	body {
+		margin: 0;
+		min-height: 100dvh;
+		display: grid;
+		place-items: center;
+		padding: 20px;
+		background:
+			radial-gradient(circle at 50% 0%, rgba(37, 99, 235, .18), transparent 42%),
+			radial-gradient(circle at 10% 100%, rgba(14, 165, 233, .07), transparent 35%),
+			#070c13;
+		color: var(--text);
+		font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	}
+	.card {
+		width: min(580px, 100%);
+		padding: 42px 34px 32px;
+		border: 1px solid var(--border);
+		border-radius: 24px;
+		background: linear-gradient(180deg, rgba(17, 28, 42, .94), rgba(9, 16, 25, .94));
+		box-shadow: 0 30px 90px rgba(0, 0, 0, .55), inset 0 1px rgba(255, 255, 255, .035);
+		text-align: center;
+	}
+	.logo { width: 76px; height: 76px; margin: 0 auto 18px; display: block; filter: drop-shadow(0 12px 26px rgba(37, 99, 235, .25)); }
+	.code {
+		font-size: clamp(74px, 17vw, 118px);
+		font-weight: 800;
+		letter-spacing: -.08em;
+		line-height: .86;
+		background: linear-gradient(180deg, #dbeafe 0%, #60a5fa 55%, #2563eb 100%);
+		-webkit-background-clip: text;
+		background-clip: text;
+		color: transparent;
+	}
+	h1 { margin: 20px 0 10px; font-size: clamp(23px, 4vw, 32px); line-height: 1.15; }
+	p { margin: 0 auto; max-width: 450px; color: var(--muted); font-size: 14.5px; line-height: 1.65; }
+	.actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+	.retry, .link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 40px;
+		padding: 9px 16px;
+		border-radius: 10px;
+		font-size: 13px;
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.retry { background: var(--accent); border: 1px solid #60a5fa; color: #fff; box-shadow: 0 8px 24px rgba(37, 99, 235, .28); }
+	.retry:hover { background: #2563eb; }
+	.link { border: 1px solid var(--border); color: #bfdbfe; background: rgba(148, 163, 184, .05); }
+	.link:hover { background: rgba(59, 130, 246, .12); }
+	.status { margin-top: 20px; color: #93c5fd; font-size: 12.5px; }
+	.hint { margin-top: 8px; color: #6f849b; font-size: 11.5px; }
+	@media (max-width: 480px) {
+		.card { padding: 32px 20px 26px; border-radius: 20px; }
+		.actions { flex-direction: column; }
+		.retry, .link { width: 100%; }
+	}
+</style>
+</head>
+<body>
+<main class="card" role="alert">
+	<svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+		<rect width="64" height="64" rx="16" fill="#0b1017" />
+		<path d="M14 19c7-3 13-2 18 2v26c-5-4-11-5-18-2z" fill="#3b82f6" />
+		<path d="M50 19c-7-3-13-2-18 2v26c5-4 11-5 18-2z" fill="#60a5fa" />
+		<path d="M32 21v26" stroke="#0b1017" stroke-width="3" />
+		<path d="M18 25c4-1 8-1 11 1" stroke="#0b1017" stroke-width="2" stroke-linecap="round" opacity=".55" />
+		<path d="M46 25c-4-1-8-1-11 1" stroke="#0b1017" stroke-width="2" stroke-linecap="round" opacity=".55" />
+	</svg>
+	<div class="code">503</div>
+	<h1>Servicio no disponible</h1>
+	<p>El proxy se está reiniciando o está temporalmente fuera de servicio. No hace falta que cierres esta pestaña: se reconectará automáticamente.</p>
+	<div class="actions">
+		<a class="retry" href="/">Reintentar ahora</a>
+		<a class="link" href="/login">Ir al login</a>
+	</div>
+	<p class="status" id="status">Comprobando conexión…</p>
+	<p class="hint">Si tarda más de un minuto, avisa al administrador.</p>
+</main>
+<script>
+(() => {
+	const status = document.getElementById("status");
+	let attempts = 0;
+	let timer = null;
+	async function check() {
+		attempts += 1;
+		try {
+			const response = await fetch("/healthz", { method: "HEAD", cache: "no-store" });
+			if (response.ok) {
+				status.textContent = "Conexión restablecida. Recargando…";
+				clearInterval(timer);
+				location.reload();
+				return;
+			}
+		} catch {}
+		status.textContent = `Sin conexión. Reintentando automáticamente… (${attempts})`;
+	}
+	check();
+	timer = setInterval(check, 3000);
+	window.addEventListener("pagehide", () => clearInterval(timer));
+})();
+</script>
+</body>
+</html>

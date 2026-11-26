@@ -43,10 +43,15 @@ Para Apache:
 
 ```bash
 sudo cp deploy/apache-webproxy.conf /etc/apache2/sites-available/webproxy.conf
+sudo cp public/error-503.html /var/www/html/webproxy-503.html
 sudo a2ensite webproxy
 sudo apache2ctl configtest
 sudo systemctl reload apache2
 ```
+
+`apache-webproxy.conf` usa esa página local como `ErrorDocument 503`, de modo
+que si la app Node se reinicia se ve una pantalla de “Servicio no disponible”
+con reconexión automática en lugar del 503 genérico de Apache.
 
 El proxy debe publicarse por HTTPS (reverse proxy con TLS, Tailscale Funnel,
 Cloudflare Tunnel, etc.). Los service workers solo funcionan en HTTPS o
