@@ -89,6 +89,7 @@ function migrateUsers() {
 			lang: "",
 			schedule: null,
 			group: "",
+			groupOnboarded: false,
 			mfa: null,
 		};
 		for (const [key, value] of Object.entries(defaults)) {
@@ -188,6 +189,7 @@ export function listUsers() {
 				role: u.role,
 				roles: Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role],
 				group: u.group || "",
+				groupOnboarded: !!u.groupOnboarded,
 				blocked: !!u.blocked,
 				blockedUntil: until,
 				blockMessage: u.blockMessage || "",
@@ -297,9 +299,18 @@ export function createUser(username, password, role) {
 		lang: "",
 		schedule: null,
 		group: "",
+		groupOnboarded: false,
 	};
 	save();
-	return { user: { username: name, role: highestRole(roles), roles, group: "" } };
+	return {
+		user: {
+			username: name,
+			role: highestRole(roles),
+			roles,
+			group: "",
+			groupOnboarded: false,
+		},
+	};
 }
 
 export function deleteUser(username) {
@@ -357,8 +368,19 @@ export function setUserGroup(username, groupId) {
 	);
 	if (!name) return { error: "notfound" };
 	db.users[name].group = String(groupId || "").slice(0, 64);
+	db.users[name].groupOnboarded = true;
 	save();
 	return { ok: true, group: db.users[name].group };
+}
+
+export function markGroupOnboarded(username) {
+	const name = Object.keys(db.users).find(
+		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
+	);
+	if (!name) return { error: "notfound" };
+	db.users[name].groupOnboarded = true;
+	save();
+	return { ok: true };
 }
 
 export function clearGroupAssignments(groupId) {

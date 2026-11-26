@@ -34,6 +34,7 @@ import {
 	setBlockUntil,
 	setBlockMessage,
 	setUserGroup,
+	markGroupOnboarded,
 	clearGroupAssignments,
 	setNotes,
 	setMustChangePassword,
@@ -82,6 +83,7 @@ import {
 	adminReportDetailPage,
 	vaultPage,
 	adminReportsPage,
+	groupOnboardingPage,
 	specialistWorkspacePage,
 	templatesPage,
 	schedulesPage,
@@ -1745,6 +1747,21 @@ app.get("/denied", (req, res) => {
 	);
 });
 
+function needsGroupOnboarding(user) {
+	return (
+		!!user &&
+		!isStaffRole(user.role) &&
+		!user.group &&
+		!user.groupOnboarded &&
+		listGroups().length > 0
+	);
+}
+
+function groupOnboardingRedirect(next) {
+	const target = safeNext(next);
+	return `/welcome?next=${encodeURIComponent(target === "/welcome" ? "/" : target)}`;
+}
+
 app.post("/api/login", sameOrigin, async (req, res) => {
 	if (!validCsrf(req)) {
 		return sendHttpError(req, res, 403, "Token de seguridad no válido", "Recarga el login e inténtalo de nuevo.");
@@ -1900,7 +1917,11 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 		sessionCookie(req, session.token, session.expires),
 		...clearMfaCookie(req),
 	]);
-	res.redirect(303, next);
+	const freshUser = getUser(user.username);
+	res.redirect(
+		303,
+		needsGroupOnboarding(freshUser) ? groupOnboardingRedirect(next) : next,
+	);
 });
 
 app.post("/logout", sameOrigin, (req, res) => {
@@ -2018,12 +2039,72 @@ app.post("/api/login/mfa", sameOrigin, async (req, res) => {
 		sessionCookie(req, session.token, session.expires),
 		...clearMfaCookie(req),
 	]);
-	res.redirect(303, entry.next);
+	res.redirect(
+		303,
+		needsGroupOnboarding(user) ? groupOnboardingRedirect(entry.next) : entry.next,
+	);
 });
 
 /* --------------------------- a partir de aquí, login --------------------------- */
 
 app.use(requireAuth);
+
+app.get("/welcome", (req, res) => {
+	const user = getUser(req.user.username);
+	if (!needsGroupOnboarding(user)) {
+		const target = safeNext(req.query.next);
+		return res.redirect(303, target === "/welcome" ? "/" : target);
+	}
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		groupOnboardingPage({
+			user,
+			groups: listGroups(),
+			next: safeNext(req.query.next),
+			error: req.query.error === "invalid" ? "Ese grupo ya no existe. Elige otro." : "",
+		}),
+	);
+});
+
+app.post("/api/account/group", sameOrigin, (req, res) => {
+	const user = getUser(req.user.username);
+	if (!user) return res.redirect(303, "/login");
+	const target = safeNext(req.body.next);
+	const next = target === "/welcome" || target.startsWith("/welcome?") ? "/" : target;
+	if (user.groupOnboarded) return res.redirect(303, next);
+	if (String(req.body.action || "") === "skip") {
+		markGroupOnboarded(user.username);
+		audit(req, "group.skip", "");
+		return res.redirect(303, next);
+	}
+	const groupId = String(req.body.group || "").trim();
+	const group = groupId ? getGroup(groupId) : null;
+	if (!group) {
+		return res.redirect(
+			303,
+			`/welcome?error=invalid&next=${encodeURIComponent(next)}`,
+		);
+	}
+	setUserGroup(user.username, group.id);
+	audit(req, "group.self", group.name);
+	res.redirect(303, next);
+});
+
+app.use((req, res, next) => {
+	if (
+		req.method !== "GET" ||
+		req.path === "/welcome" ||
+		req.path.startsWith("/api/")
+	) {
+		return next();
+	}
+	const accept = String(req.get("accept") || "");
+	if (!accept.includes("text/html")) return next();
+	const user = getUser(req.user.username);
+	if (!needsGroupOnboarding(user)) return next();
+	const nextUrl = req.originalUrl || "/";
+	return res.redirect(303, `/welcome?next=${encodeURIComponent(nextUrl)}`);
+});
 
 app.use((req, res, next) => {
 	const settings = getSettings();
@@ -2848,6 +2929,7 @@ app.get("/account", (req, res) => {
 			currentId: req.user.id,
 			allowPasswordChange: settings.allowUserPasswordChange || isAdminRole(req.user.role),
 			mfa: mfaStatus(req.user.username),
+			group: getGroup(getUser(req.user.username)?.group)?.name || "",
 			forced: req.user.mustChangePassword || req.query.force === "1",
 			notice,
 			error,

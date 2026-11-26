@@ -93,6 +93,7 @@ function sanitizedUsers() {
 				? user.unblockOverrides
 				: [],
 			group: user.group || "",
+			groupOnboarded: !!user.groupOnboarded,
 		};
 	}
 	return out;

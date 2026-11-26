@@ -240,6 +240,13 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .user-group-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.015)}
 .user-group-form label{margin:0;font-size:12px;color:var(--muted)}
 .user-group-form select{width:auto;min-width:190px}
+.group-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:16px 0}
+.group-choice{position:relative;display:flex;align-items:center;gap:9px;padding:13px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(180deg,rgba(21,30,41,.72),rgba(15,23,42,.55));cursor:pointer;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease}
+.group-choice:hover{border-color:#34506f;background:rgba(30,44,62,.78)}
+.group-choice:has(input:checked){border-color:rgba(96,165,250,.7);background:linear-gradient(180deg,rgba(37,99,235,.24),rgba(30,64,175,.12));box-shadow:0 0 0 1px rgba(96,165,250,.15)}
+.group-choice input{width:16px;height:16px;accent-color:var(--accent);flex:0 0 16px}
+.group-choice strong{font-size:13px;color:var(--text)}
+.group-choice small{display:block;color:var(--muted);font-size:10.5px;margin-top:2px}
 .tool-tabs{margin:0 0 16px}
 .report-status-open{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
 .report-status-triaged{color:#fde68a;border-color:#a16207;background:#2a1d05}
@@ -1357,12 +1364,60 @@ export function errorPage({
 	return shell(`${code} · ${heading}`, body, { topbar: user ? topbar(user) : "", chatFab: false });
 }
 
+export function groupOnboardingPage({
+	user,
+	groups = [],
+	next = "/",
+	error = "",
+} = {}) {
+	const choices = groups
+		.map(
+			(group) => `<label class="group-choice">
+  <input type="radio" name="group" value="${esc(group.id)}" required>
+  <span><strong>${esc(group.name)}</strong><small>Grupo de clase</small></span>
+</label>`,
+		)
+		.join("");
+	const body = `<div class="card" style="max-width:720px;margin:0 auto">
+  <div class="account-head">
+    ${userAvatar(user.username, user.icon, "account-avatar")}
+    <div>
+      <h1>¿Cuál es tu grupo?</h1>
+      <p class="muted">Hola, <strong>${esc(user.username)}</strong>. Elige tu clase y curso para que tu profesor pueda organizarte.</p>
+    </div>
+  </div>
+  <p class="muted">Solo lo preguntamos la primera vez. Si no encuentras tu grupo, pide a un profesor que lo cree.</p>
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <form method="post" action="/api/account/group">
+    <input type="hidden" name="next" value="${esc(next)}">
+    ${
+			groups.length
+				? `<div class="group-choice-grid">${choices}</div>
+    <div class="actions">
+      <button class="primary" type="submit">Guardar mi grupo</button>
+      <button class="small" type="submit" name="action" value="skip" formnovalidate>Ahora no</button>
+    </div>`
+				: `<p class="warn">Todavía no hay grupos creados. Puedes continuar y un administrador te asignará uno más tarde.</p>
+    <div class="actions">
+      <button class="primary" type="submit" name="action" value="skip">Continuar</button>
+    </div>`
+		}
+  </form>
+  <p class="hint">Si te equivocas, un moderador o administrador puede cambiarte de grupo.</p>
+</div>`;
+	return shell("Elige tu grupo · Proxy Web", body, {
+		topbar: topbar(user),
+		chatFab: false,
+	});
+}
+
 export function accountPage({
 	user,
 	sessions = [],
 	currentId = "",
 	allowPasswordChange = true,
 	mfa = {},
+	group = "",
 	forced = false,
 	notice = "",
 	error = "",
@@ -1405,6 +1460,7 @@ ${
       <p class="muted">
         Usuario <strong>${esc(user.username)}</strong> ·
         ${roleLabel(user.role)}
+        ${group ? `<span class="badge group">${esc(group)}</span>` : ""}
       </p>
     </div>
   </div>
