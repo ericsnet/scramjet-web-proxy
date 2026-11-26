@@ -10,13 +10,40 @@
 	let stopped = false;
 	let stack = null;
 
+	function stackTarget() {
+		const wrapper = document.getElementById("sj-frame-wrapper");
+		if (!wrapper) return document.body;
+		const fullscreen = document.fullscreenElement;
+		if (fullscreen && wrapper.contains(fullscreen)) return wrapper;
+		if (wrapper.classList.contains("immersive")) return wrapper;
+		return document.body;
+	}
+
+	function placeStack() {
+		if (!stack) return;
+		const target = stackTarget();
+		if (stack.parentElement !== target) target.appendChild(stack);
+	}
+
 	function ensureStack() {
-		if (stack) return stack;
-		stack = document.createElement("div");
-		stack.className = "chat-toast-stack";
-		stack.setAttribute("aria-live", "polite");
-		document.body.appendChild(stack);
+		if (!stack) {
+			stack = document.createElement("div");
+			stack.className = "chat-toast-stack";
+			stack.setAttribute("aria-live", "polite");
+		}
+		placeStack();
 		return stack;
+	}
+
+	const frameShell = document.getElementById("sj-frame-wrapper");
+	if (frameShell) {
+		new MutationObserver(placeStack).observe(frameShell, {
+			attributes: true,
+			attributeFilter: ["class"],
+		});
+	}
+	for (const event of ["fullscreenchange", "webkitfullscreenchange"]) {
+		document.addEventListener(event, placeStack);
 	}
 
 	function updateBadge() {
