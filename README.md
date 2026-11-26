@@ -245,6 +245,8 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
   2 minutos, servidos con comprobación de pertenencia al canal, nunca desde una
   carpeta pública. El contenido real se valida por cabeceras, no solo por la
   extensión o el tipo que envía el navegador.
+- Reproductor propio para los audios: forma de onda real, botón de
+  reproducir/pausar, progreso y búsqueda al pulsar o arrastrar sobre la onda.
 - Reacciones, encuestas con voto y menciones.
 - Texto plano: no se interpreta HTML ni Markdown; todo se escapa en servidor y
   se pinta con `textContent` en el navegador.

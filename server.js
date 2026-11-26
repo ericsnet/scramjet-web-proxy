@@ -2887,6 +2887,7 @@ app.post(
 		name: fileName,
 		type: req.headers["x-file-type"],
 		duration: req.headers["x-duration"],
+		waveform: req.headers["x-waveform"],
 	});
 	if (result.error) {
 		const status =

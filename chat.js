@@ -437,6 +437,7 @@ export function postChatMessage(
 		}
 		attachment = { id: upload.id, name: upload.name, type: upload.type, size: upload.size };
 		if (upload.duration) attachment.duration = upload.duration;
+		if (upload.waveform?.length) attachment.waveform = upload.waveform;
 		delete uploads[String(attachmentId)];
 	}
 	let reply = null;
@@ -661,10 +662,20 @@ export function searchChat(
 	return { messages: found.map((message) => ({ ...message })) };
 }
 
+function parseWaveform(value) {
+	const parts = Array.isArray(value) ? value : String(value || "").split(",");
+	const peaks = parts
+		.map((entry) => Math.round(Number(entry)))
+		.filter((entry) => Number.isFinite(entry))
+		.slice(0, 64)
+		.map((entry) => Math.min(100, Math.max(4, entry)));
+	return peaks.length >= 8 ? peaks : null;
+}
+
 export function saveChatUpload(
 	username,
 	buffer,
-	{ name = "archivo", type = "", duration = 0 } = {},
+	{ name = "archivo", type = "", duration = 0, waveform = "" } = {},
 ) {
 	if (!Buffer.isBuffer(buffer) || !buffer.length) return { error: "empty" };
 	if (buffer.length > MAX_FILE) return { error: "too_large" };
@@ -709,6 +720,7 @@ export function saveChatUpload(
 	fs.mkdirSync(UPLOAD_DIR, { recursive: true, mode: 0o700 });
 	fs.writeFileSync(path.join(UPLOAD_DIR, `${id}.bin`), buffer, { mode: 0o600 });
 	const seconds = Math.max(0, Math.min(300, Math.round(Number(duration) || 0)));
+	const peaks = mime.startsWith("audio/") ? parseWaveform(waveform) : null;
 	const upload = {
 		id,
 		owner: String(username).slice(0, 32),
@@ -718,6 +730,7 @@ export function saveChatUpload(
 		createdAt: new Date().toISOString(),
 	};
 	if (mime.startsWith("audio/") && seconds) upload.duration = seconds;
+	if (peaks) upload.waveform = peaks;
 	uploads[id] = upload;
 	dirty = true;
 	scheduleSave();

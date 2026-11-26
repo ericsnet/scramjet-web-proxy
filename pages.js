@@ -341,6 +341,8 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .protected-user{border-color:#6b5312;background:linear-gradient(90deg,rgba(161,98,7,.12),rgba(21,30,41,.5) 60%)}
 .protected-user .user-summary{cursor:default}
 .protected-user .user-summary:hover{background:transparent}
+.protected-user.creator-summary .user-summary{cursor:pointer}
+.protected-user.creator-summary .user-summary:hover{background:rgba(59,130,246,.055)}
 .readonly-user{border-color:var(--border);background:var(--soft)}
 .readonly-user .user-summary{cursor:default}
 .readonly-user .user-summary:hover{background:transparent}
@@ -452,12 +454,27 @@ dialog h2{margin-top:0}
 .chat-attachment{display:block;margin-top:8px;border-radius:9px;overflow:hidden;max-width:360px}
 .chat-attachment img{display:block;max-width:100%;max-height:280px;object-fit:contain}
 .chat-attachment.file{font-size:12px;color:#93c5fd;padding:8px 9px;border:1px solid var(--border);background:rgba(0,0,0,.12)}
-.chat-audio{display:flex;align-items:center;gap:9px;margin-top:8px;padding:7px 9px;border:1px solid var(--border);border-radius:11px;background:rgba(0,0,0,.16);max-width:330px;min-width:230px}
-.chat-message.own .chat-audio{border-color:rgba(255,255,255,.22);background:rgba(0,0,0,.14)}
-.chat-audio-icon{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:rgba(59,130,246,.22);font-size:14px}
+.chat-audio{display:flex;align-items:center;gap:10px;margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:rgba(0,0,0,.18);max-width:370px;min-width:250px}
+.chat-message.own .chat-audio{border-color:rgba(255,255,255,.22);background:rgba(0,0,0,.15)}
+.chat-audio audio{display:none}
+.chat-audio-play{position:relative;display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:0;border-radius:50%;background:linear-gradient(145deg,#3b82f6,#2563eb);color:#fff;cursor:pointer;box-shadow:0 5px 14px rgba(37,99,235,.32);transition:transform .12s,box-shadow .12s}
+.chat-audio-play:hover{transform:scale(1.05);box-shadow:0 6px 18px rgba(37,99,235,.45)}
+.chat-audio-play svg{width:17px;height:17px;fill:currentColor}
+.chat-audio-play .icon-pause{display:none}
+.chat-audio.playing .chat-audio-play .icon-play{display:none}
+.chat-audio.playing .chat-audio-play .icon-pause{display:block}
 .chat-audio-body{flex:1;min-width:0}
-.chat-audio audio{display:block;width:100%;height:34px}
-.chat-audio-meta{display:block;margin-top:3px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-audio-wave{display:flex;align-items:center;gap:2px;height:32px;cursor:pointer;touch-action:none;outline:none;border-radius:6px}
+.chat-audio-wave:focus-visible{box-shadow:0 0 0 2px rgba(96,165,250,.6)}
+.chat-audio-bar{flex:1 1 2px;min-width:2px;max-width:4px;border-radius:999px;background:rgba(148,163,184,.35);transition:background-color .12s,box-shadow .12s}
+.chat-audio-bar.played{background:#60a5fa;box-shadow:0 0 5px rgba(96,165,250,.55)}
+.chat-message.own .chat-audio-bar{background:rgba(255,255,255,.3)}
+.chat-message.own .chat-audio-bar.played{background:#fff;box-shadow:0 0 5px rgba(255,255,255,.5)}
+.chat-audio-meta{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:10.5px;color:var(--muted);white-space:nowrap;min-width:0}
+.chat-audio-time{font-variant-numeric:tabular-nums;flex:0 0 auto;color:#bfdbfe}
+.chat-message.own .chat-audio-time{color:#dbeafe}
+.chat-audio-name{overflow:hidden;text-overflow:ellipsis;min-width:0;opacity:.85}
+.chat-audio-name::before{content:"·";margin-right:5px;opacity:.6}
 .chat-message.own .chat-audio-meta{color:rgba(255,255,255,.72)}
 .chat-poll{display:flex;flex-direction:column;gap:5px;margin-top:9px;min-width:190px}
 .chat-poll-option{display:flex;justify-content:space-between;gap:8px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 8px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
@@ -1292,6 +1309,23 @@ function attachmentLabel(attachment) {
 	if (type.startsWith("image/")) return "🖼 Imagen";
 	if (attachment) return "📎 Archivo";
 	return "Adjunto";
+}
+
+function audioPlayerMarkup(attachment) {
+	const duration = Math.max(0, Math.round(Number(attachment?.duration) || 0));
+	const waveform = Array.isArray(attachment?.waveform) ? attachment.waveform.join(",") : "";
+	const name = attachment?.name || "audio";
+	return `<div class="chat-audio" data-audio data-duration="${duration}" data-waveform="${esc(waveform)}">
+      <button type="button" class="chat-audio-play" data-audio-play aria-label="Reproducir audio">
+        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+      </button>
+      <div class="chat-audio-body">
+        <div class="chat-audio-wave" data-audio-wave role="slider" tabindex="0" aria-label="Posición del audio" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        <div class="chat-audio-meta"><span class="chat-audio-time"><span data-audio-time>0:00</span> / <span data-audio-total>${fmtAudioTime(duration)}</span></span><span class="chat-audio-name" title="${esc(name)}">${esc(name)}</span></div>
+      </div>
+      <audio data-audio-el preload="metadata" src="/api/chat/files/${esc(attachment.id)}"></audio>
+    </div>`;
 }
 
 function fmtBytes(bytes) {
@@ -2250,20 +2284,11 @@ export function chatPage({
 			const canDeleteMessage =
 				enabled &&
 				(canDelete || (!isStaffRole(user?.role) && allowDelete && own));
-			const audioMeta = m.attachment
-				? [
-						m.attachment.duration ? fmtAudioTime(m.attachment.duration) : "",
-						m.attachment.name,
-						fmtBytes(m.attachment.size),
-					]
-						.filter(Boolean)
-						.join(" · ")
-				: "";
 			const attachment = m.attachment
 				? m.attachment.type?.startsWith("image/")
 					? `<a class="chat-attachment" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener"><img src="/api/chat/files/${esc(m.attachment.id)}" alt="${esc(m.attachment.name)}" loading="lazy"></a>`
 					: m.attachment.type?.startsWith("audio/")
-						? `<div class="chat-audio"><span class="chat-audio-icon">🎤</span><div class="chat-audio-body"><audio controls preload="metadata" src="/api/chat/files/${esc(m.attachment.id)}"></audio><span class="chat-audio-meta">${esc(audioMeta)}</span></div></div>`
+						? audioPlayerMarkup(m.attachment)
 						: `<a class="chat-attachment file" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener">${esc(m.attachment.name)} · ${esc(fmtBytes(m.attachment.size))}</a>`
 				: "";
 			const poll = m.poll
@@ -2506,7 +2531,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126i" defer></script>` : `
+<script src="/chat.js?v=20261126j" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
@@ -2682,7 +2707,7 @@ export function adminPage({
 							: "Sin permisos para gestionar esta cuenta";
 				const creatorGroupForm =
 					isCreator && self
-						? `<div class="user-body" style="padding-top:0">
+						? `<div class="user-body" style="padding-top:14px">
   <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/group" class="user-group-form" style="margin-bottom:0">
     <label for="group-${esc(u.username)}">Grupo de clase</label>
     <select id="group-${esc(u.username)}" name="group">${groupOptions(u.group)}</select>
@@ -2692,19 +2717,30 @@ export function adminPage({
   </form>
 </div>`
 						: "";
-				return `<div class="${wrapper}">
-  <div class="user-summary">
-    <span class="user-summary-main">
+				const summaryMain = `<span class="user-summary-main">
       ${userAvatar(u.username, u.icon, "user-avatar")}
       <strong class="user-name">${profileLink(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
       ${groupBadge(u.group)}
       ${u.group && u.groupRules === false ? '<span class="badge">reglas de grupo off</span>' : ""}
       ${self ? '<span class="badge">tú</span>' : ""}
-    </span>
-    <span class="user-summary-meta">${self ? '<a class="small" href="/account">Mi cuenta</a>' : ""}${esc(reason)}</span>
-  </div>
+    </span>`;
+				const summaryMeta = `<span class="user-summary-meta">${self ? '<a class="small" href="/account">Mi cuenta</a>' : ""}${esc(reason)}</span>`;
+				if (creatorGroupForm) {
+					return `<details class="${wrapper} creator-summary">
+  <summary class="user-summary">
+    ${summaryMain}
+    ${summaryMeta}
+    <span class="user-chevron" aria-hidden="true">▾</span>
+  </summary>
   ${creatorGroupForm}
+</details>`;
+				}
+				return `<div class="${wrapper}">
+  <div class="user-summary">
+    ${summaryMain}
+    ${summaryMeta}
+  </div>
 </div>`;
 			}
 			const schedule = u.schedule || { enabled: false, days: [1, 2, 3, 4, 5], start: "08:00", end: "20:00" };

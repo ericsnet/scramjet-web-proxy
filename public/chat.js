@@ -47,6 +47,7 @@
 	let inFlight = false;
 	let stopped = false;
 	let selectedFile = null;
+	let activeAudio = null;
 	let cooldownUntil = 0;
 	let channelsCache = [];
 	let onlineUsers = [];
@@ -320,29 +321,7 @@
 			return link;
 		}
 		if (String(attachment.type || "").startsWith("audio/")) {
-			const wrap = document.createElement("div");
-			wrap.className = "chat-audio";
-			const icon = document.createElement("span");
-			icon.className = "chat-audio-icon";
-			icon.textContent = "🎤";
-			const body = document.createElement("div");
-			body.className = "chat-audio-body";
-			const audio = document.createElement("audio");
-			audio.controls = true;
-			audio.preload = "metadata";
-			audio.src = url;
-			const meta = document.createElement("span");
-			meta.className = "chat-audio-meta";
-			meta.textContent = [
-				attachment.duration ? audioTime(attachment.duration) : "",
-				attachment.name || "audio",
-				`${Math.ceil((attachment.size || 0) / 1024)} KB`,
-			]
-				.filter(Boolean)
-				.join(" · ");
-			body.append(audio, meta);
-			wrap.append(icon, body);
-			return wrap;
+			return buildAudioPlayer(attachment);
 		}
 		const link = document.createElement("a");
 		link.className = "chat-attachment file";
@@ -351,6 +330,232 @@
 		link.rel = "noopener";
 		link.textContent = `${attachment.name || "archivo"} · ${Math.ceil((attachment.size || 0) / 1024)} KB`;
 		return link;
+	}
+	function parsePeaks(value) {
+		return String(value || "")
+			.split(",")
+			.map((entry) => Number(entry))
+			.filter((entry) => Number.isFinite(entry) && entry > 0)
+			.slice(0, 64)
+			.map((entry) => Math.min(100, Math.max(4, Math.round(entry))));
+	}
+	function fallbackWaveform(seed) {
+		let hash = 2166136261;
+		for (const char of String(seed || "audio")) {
+			hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
+		}
+		const bars = 44;
+		const peaks = [];
+		for (let index = 0; index < bars; index += 1) {
+			hash = (Math.imul(hash, 1664525) + 1013904223) >>> 0;
+			const base = 0.32 + (hash % 1000) / 1000 * 0.68;
+			const envelope = 0.55 + 0.45 * Math.sin((index / (bars - 1)) * Math.PI);
+			peaks.push(Math.max(8, Math.round(base * envelope * 100)));
+		}
+		return peaks;
+	}
+	function pauseActiveAudio(except = null) {
+		if (activeAudio && activeAudio !== except) activeAudio.pause();
+		activeAudio = except;
+	}
+	function setupAudioPlayer(player) {
+		if (!player || player.dataset.audioReady === "1") return;
+		const audio = player.querySelector("[data-audio-el]");
+		const wave = player.querySelector("[data-audio-wave]");
+		const playButton = player.querySelector("[data-audio-play]");
+		if (!audio || !wave || !playButton) return;
+		player.dataset.audioReady = "1";
+		let duration = Number(player.dataset.duration) || 0;
+		const timeEl = player.querySelector("[data-audio-time]");
+		const totalEl = player.querySelector("[data-audio-total]");
+		const peakValues = parsePeaks(player.dataset.waveform);
+		const peaks =
+			peakValues.length >= 8
+				? peakValues
+				: fallbackWaveform(player.dataset.waveform || audio.getAttribute("src") || "audio");
+		wave.textContent = "";
+		const bars = peaks.map((peak) => {
+			const bar = document.createElement("span");
+			bar.className = "chat-audio-bar";
+			bar.style.height = `${Math.max(4, Math.round((peak / 100) * 24))}px`;
+			wave.appendChild(bar);
+			return bar;
+		});
+		const setTotal = () => {
+			if (totalEl) totalEl.textContent = audioTime(duration);
+		};
+		setTotal();
+		const paint = () => {
+			const current = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+			const total = duration || (Number.isFinite(audio.duration) ? audio.duration : 0);
+			const ratio = total > 0 ? Math.min(1, Math.max(0, current / total)) : 0;
+			const played = Math.round(ratio * bars.length);
+			bars.forEach((bar, index) => bar.classList.toggle("played", index < played));
+			if (timeEl) timeEl.textContent = audioTime(current);
+			wave.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
+			wave.setAttribute(
+				"aria-valuetext",
+				`${audioTime(current)} de ${audioTime(total || duration)}`,
+			);
+		};
+		const seekFromClientX = (clientX) => {
+			const rect = wave.getBoundingClientRect();
+			const total = duration || (Number.isFinite(audio.duration) ? audio.duration : 0);
+			if (!rect.width || !(total > 0)) return;
+			const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+			try {
+				audio.currentTime = ratio * total;
+			} catch {}
+			paint();
+		};
+		playButton.addEventListener("click", () => {
+			if (audio.paused) {
+				pauseActiveAudio(audio);
+				audio.play().catch(() => {
+					pauseActiveAudio();
+					showError("No se pudo reproducir el audio.");
+				});
+			} else {
+				audio.pause();
+			}
+		});
+		wave.addEventListener("pointerdown", (event) => {
+			if (event.pointerType === "mouse" && event.button !== 0) return;
+			event.preventDefault();
+			seekFromClientX(event.clientX);
+			wave.setPointerCapture?.(event.pointerId);
+			const move = (moveEvent) => seekFromClientX(moveEvent.clientX);
+			const finish = (finishEvent) => {
+				wave.removeEventListener("pointermove", move);
+				wave.removeEventListener("pointerup", finish);
+				wave.removeEventListener("pointercancel", finish);
+				wave.releasePointerCapture?.(finishEvent.pointerId);
+			};
+			wave.addEventListener("pointermove", move);
+			wave.addEventListener("pointerup", finish);
+			wave.addEventListener("pointercancel", finish);
+		});
+		wave.addEventListener("keydown", (event) => {
+			if (event.key === " " || event.key === "Enter") {
+				event.preventDefault();
+				playButton.click();
+				return;
+			}
+			if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+			const total = duration || (Number.isFinite(audio.duration) ? audio.duration : 0);
+			if (!(total > 0)) return;
+			event.preventDefault();
+			const delta = event.key === "ArrowRight" ? 5 : -5;
+			audio.currentTime = Math.min(total, Math.max(0, audio.currentTime + delta));
+			paint();
+		});
+		audio.addEventListener("loadedmetadata", () => {
+			if (!duration && Number.isFinite(audio.duration) && audio.duration > 0) {
+				duration = Math.round(audio.duration);
+				setTotal();
+			}
+			paint();
+		});
+		audio.addEventListener("timeupdate", paint);
+		audio.addEventListener("play", () => {
+			pauseActiveAudio(audio);
+			player.classList.add("playing");
+			playButton.setAttribute("aria-label", "Pausar audio");
+		});
+		audio.addEventListener("pause", () => {
+			player.classList.remove("playing");
+			playButton.setAttribute("aria-label", "Reproducir audio");
+		});
+		audio.addEventListener("ended", () => {
+			player.classList.remove("playing");
+			try {
+				audio.currentTime = 0;
+			} catch {}
+			paint();
+		});
+		paint();
+	}
+	function buildAudioPlayer(attachment) {
+		const wrap = document.createElement("div");
+		wrap.className = "chat-audio";
+		wrap.dataset.audio = "";
+		wrap.dataset.duration = String(Math.max(0, Math.round(Number(attachment.duration) || 0)));
+		wrap.dataset.waveform = Array.isArray(attachment.waveform)
+			? attachment.waveform.join(",")
+			: "";
+		const play = document.createElement("button");
+		play.type = "button";
+		play.className = "chat-audio-play";
+		play.dataset.audioPlay = "";
+		play.setAttribute("aria-label", "Reproducir audio");
+		play.innerHTML =
+			'<svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+		const body = document.createElement("div");
+		body.className = "chat-audio-body";
+		const wave = document.createElement("div");
+		wave.className = "chat-audio-wave";
+		wave.dataset.audioWave = "";
+		wave.setAttribute("role", "slider");
+		wave.tabIndex = 0;
+		wave.setAttribute("aria-label", "Posición del audio");
+		wave.setAttribute("aria-valuemin", "0");
+		wave.setAttribute("aria-valuemax", "100");
+		wave.setAttribute("aria-valuenow", "0");
+		const meta = document.createElement("div");
+		meta.className = "chat-audio-meta";
+		const time = document.createElement("span");
+		time.className = "chat-audio-time";
+		const current = document.createElement("span");
+		current.dataset.audioTime = "";
+		current.textContent = "0:00";
+		const total = document.createElement("span");
+		total.dataset.audioTotal = "";
+		total.textContent = audioTime(attachment.duration);
+		time.append(current, document.createTextNode(" / "), total);
+		const name = document.createElement("span");
+		name.className = "chat-audio-name";
+		name.title = attachment.name || "audio";
+		name.textContent = attachment.name || "audio";
+		meta.append(time, name);
+		body.append(wave, meta);
+		const audio = document.createElement("audio");
+		audio.dataset.audioEl = "";
+		audio.preload = "metadata";
+		audio.src = `/api/chat/files/${encodeURIComponent(attachment.id)}`;
+		wrap.append(play, body, audio);
+		setupAudioPlayer(wrap);
+		return wrap;
+	}
+	function initAudioPlayers(root = box) {
+		for (const player of root.querySelectorAll("[data-audio]:not([data-audio-ready='1'])")) {
+			setupAudioPlayer(player);
+		}
+	}
+	async function analyzeAudio(blob) {
+		const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+		if (!Ctx || !blob) return { waveform: [], duration: 0 };
+		try {
+			const bytes = await blob.arrayBuffer();
+			const context = new Ctx(1, 1, 44100);
+			const decoded = await context.decodeAudioData(bytes.slice(0));
+			const channel = decoded.getChannelData(0);
+			const bars = 44;
+			const step = Math.max(1, Math.floor(channel.length / bars));
+			const stride = Math.max(1, Math.floor(step / 160));
+			const waveform = [];
+			for (let index = 0; index < bars; index += 1) {
+				let peak = 0;
+				const start = index * step;
+				const end = Math.min(channel.length, start + step);
+				for (let sample = start; sample < end; sample += stride) {
+					peak = Math.max(peak, Math.abs(channel[sample]));
+				}
+				waveform.push(Math.max(6, Math.round(peak * 100)));
+			}
+			return { waveform, duration: Math.round(decoded.duration) };
+		} catch {
+			return { waveform: [], duration: 0 };
+		}
 	}
 	function makePoll(message) {
 		if (!message.poll) return null;
@@ -540,6 +745,7 @@
 		return article;
 	}
 	function clearMessages() {
+		pauseActiveAudio();
 		for (const el of box.querySelectorAll("[data-chat-message]")) el.remove();
 		seen.clear();
 		messageStore.clear();
@@ -642,6 +848,7 @@
 	function replaceMessage(message) {
 		const old = box.querySelector(`[data-chat-id="${CSS.escape(String(message.id))}"]`);
 		if (!old) return;
+		if (activeAudio && old.contains(activeAudio)) pauseActiveAudio();
 		const top = box.scrollTop;
 		old.replaceWith(makeMessage(message));
 		box.scrollTop = top;
@@ -856,6 +1063,7 @@
 	}
 	function switchChannel(value) {
 		cancelRecording();
+		pauseActiveAudio();
 		channelId = value || "general";
 		clearContext();
 		messageStore.clear();
@@ -879,7 +1087,7 @@
 		forceScroll = true;
 		refresh();
 	}
-	function uploadFile(file, onProgress, duration = 0) {
+	function uploadFile(file, onProgress, duration = 0, waveform = "") {
 		return new Promise((resolve, reject) => {
 			const xhr = new XMLHttpRequest();
 			xhr.open("POST", "/api/chat/upload");
@@ -887,6 +1095,7 @@
 			xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
 			xhr.setRequestHeader("X-File-Type", file.type || "application/octet-stream");
 			if (duration) xhr.setRequestHeader("X-Duration", String(Math.round(duration)));
+			if (waveform) xhr.setRequestHeader("X-Waveform", waveform);
 			xhr.setRequestHeader("Accept", "application/json");
 			xhr.upload.onprogress = (event) => {
 				if (event.lengthComputable && onProgress) {
@@ -931,12 +1140,21 @@
 		let attachment = "";
 		if (selectedFile) {
 			if (selectedFile.size > 5 * 1024 * 1024) throw new Error("El archivo supera 5 MB.");
+			let analysis = null;
+			if (String(selectedFile.type || "").startsWith("audio/")) {
+				analysis = await analyzeAudio(selectedFile);
+			}
 			if (uploadProgress) uploadProgress.hidden = false;
 			if (uploadBar) uploadBar.style.width = "0%";
 			try {
-				const data = await uploadFile(selectedFile, (percent) => {
-					if (uploadBar) uploadBar.style.width = `${percent}%`;
-				});
+				const data = await uploadFile(
+					selectedFile,
+					(percent) => {
+						if (uploadBar) uploadBar.style.width = `${percent}%`;
+					},
+					analysis?.duration || 0,
+					analysis?.waveform?.length ? analysis.waveform.join(",") : "",
+				);
 				attachment = data.upload.id;
 			} finally {
 				if (uploadProgress) uploadProgress.hidden = true;
@@ -1199,12 +1417,14 @@
 				file = recBlob;
 				file.name = name;
 			}
+			const analysis = await analyzeAudio(recBlob);
 			const uploaded = await uploadFile(
 				file,
 				(percent) => {
 					if (uploadBar) uploadBar.style.width = `${percent}%`;
 				},
-				recDuration,
+				recDuration || analysis.duration,
+				analysis.waveform.length ? analysis.waveform.join(",") : "",
 			);
 			const caption = (input?.value || "").trim();
 			const data = await request("/api/chat/messages", {
@@ -1254,6 +1474,7 @@
 	recStop?.addEventListener("click", stopRecording);
 	recSend?.addEventListener("click", sendRecording);
 	recCancel?.addEventListener("click", cancelRecording);
+	initAudioPlayers();
 	if (fileInput) {
 		fileInput.addEventListener("change", () => {
 			selectFile(fileInput.files?.[0] || null);
@@ -1397,6 +1618,7 @@
 					body: JSON.stringify({ channel: channelId }),
 				});
 				const article = deleteButton.closest("[data-chat-message]");
+				if (activeAudio && article?.contains(activeAudio)) pauseActiveAudio();
 				const top = box.scrollTop;
 				seen.delete(String(deleteButton.dataset.chatDelete));
 				article?.remove();
