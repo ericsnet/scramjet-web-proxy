@@ -46,7 +46,7 @@
   <div class="monitor-user-head">
     ${avatar(entry)}
     <div class="monitor-user-title">
-      <strong>${esc(entry.username)}</strong>
+      <strong><a class="profile-link" href="/u/${encodeURIComponent(entry.username)}">${esc(entry.username)}</a></strong>
       <span class="badge role-${esc(entry.role)}">${esc(roleLabel(entry.role))}</span>
       <span class="badge ${entry.online ? "monitor-online" : "monitor-offline"}">${entry.online ? "en línea" : "inactivo"}</span>
     </div>
@@ -71,7 +71,7 @@
 	const renderRecent = (entry) =>
 		`<tr>
   <td class="mono">${esc(fullDate(entry.at))}</td>
-  <td><strong>${esc(entry.username)}</strong></td>
+  <td><strong><a class="profile-link" href="/u/${encodeURIComponent(entry.username)}">${esc(entry.username)}</a></strong></td>
   <td class="mono">${esc(entry.url || "—")}${entry.query ? `<br><span class="muted">Búsqueda: ${esc(entry.query)}</span>` : ""}</td>
 </tr>`;
 

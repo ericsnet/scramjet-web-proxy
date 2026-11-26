@@ -424,8 +424,9 @@
 		const meta = document.createElement("div");
 		meta.className = "chat-meta";
 		if (!own && !grouped) {
-			const author = document.createElement("span");
-			author.className = "chat-author";
+			const author = document.createElement("a");
+			author.className = "chat-author profile-link";
+			author.href = `/u/${encodeURIComponent(message.username)}`;
 			author.textContent = String(message.username);
 			meta.appendChild(author);
 		}

@@ -67,6 +67,7 @@ import {
 	mfaSetupPage,
 	mfaRecoveryPage,
 	accountPage,
+	profilePage,
 	errorPage,
 	adminPage,
 	overviewPage,
@@ -3022,6 +3023,29 @@ app.post("/api/account/history/clear", sameOrigin, (req, res) => {
 });
 
 /* --------------------------------- cuenta --------------------------------- */
+
+app.get("/u/:username", (req, res) => {
+	const target = getUser(req.params.username);
+	if (!target) {
+		return sendHttpError(req, res, 404, "Perfil no encontrado", "Ese perfil no existe.");
+	}
+	const sessions = sessionsForUser(target.username);
+	const online = sessions.some(
+		(session) =>
+			Date.now() - new Date(session.lastActiveAt || session.lastSeenAt).getTime() <
+			5 * 60 * 1000,
+	);
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		profilePage({
+			user: req.user,
+			target,
+			groupName: getGroup(target.group)?.name || "",
+			online,
+			isSelf: target.username.toLowerCase() === req.user.username.toLowerCase(),
+		}),
+	);
+});
 
 app.get("/account", (req, res) => {
 	const settings = getSettings();

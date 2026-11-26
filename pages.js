@@ -738,6 +738,26 @@ button.primary-small:hover,a.primary-small:hover{background:#2f6fdd;border-color
 .account-head h1{margin:0}
 .account-avatar{display:grid;place-items:center;flex:0 0 64px;width:64px;height:64px;border-radius:19px;
   overflow:hidden;color:#fff;font-size:23px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.profile-card{max-width:760px;margin:0 auto}
+.profile-head{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-bottom:20px;border-bottom:1px solid var(--border)}
+.profile-avatar{display:grid;place-items:center;flex:0 0 104px;width:104px;height:104px;border-radius:28px;overflow:hidden;color:#fff;font-size:38px;font-weight:800;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 16px 36px rgba(0,0,0,.28)}
+.profile-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.profile-head h1{margin:0;font-size:clamp(26px,4vw,38px);letter-spacing:-.03em}
+.profile-subtitle{margin:6px 0 0;color:var(--muted);font-size:13px}
+.profile-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px}
+.profile-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:20px}
+.profile-item{padding:11px 12px;border:1px solid var(--border);border-radius:11px;background:rgba(255,255,255,.018)}
+.profile-item span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.profile-item strong{display:block;margin-top:4px;color:var(--text);font-size:13.5px;overflow-wrap:anywhere}
+.profile-presence{display:inline-flex;align-items:center;gap:6px;color:#86efac}
+.profile-presence::before{content:"";width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 3px rgba(74,222,128,.12)}
+.profile-presence.offline{color:var(--muted)}
+.profile-presence.offline::before{background:#64748b;box-shadow:none}
+.profile-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:20px}
+.profile-link{color:inherit;text-decoration:none}
+.profile-link:hover{color:#93c5fd;text-decoration:underline}
+.role-members a{color:#bfdbfe;text-decoration:none}
+.role-members a:hover{text-decoration:underline}
 .account-icon-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px}
 .account-icon-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .account-icon-actions form{margin:0}
@@ -1032,6 +1052,10 @@ function userAvatar(name, icon, className = "user-avatar") {
 		? `<img src="${esc(icon.url)}" alt="" loading="lazy">`
 		: initial;
 	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${image}</span>`;
+}
+
+function profileLink(name, className = "profile-link") {
+	return `<a class="${esc(className)}" href="/u/${encodeURIComponent(name)}" onclick="event.stopPropagation()">${esc(name)}</a>`;
 }
 
 function groupAvatar(name, className = "group-avatar") {
@@ -1477,7 +1501,7 @@ export function groupPanelPage({
 				canManageRole(user.role, member.role);
 			return `<tr>
   <td><input type="checkbox" name="usernames" value="${esc(member.username)}" form="group-bulk" data-bulk${manageable ? "" : " disabled"} title="${manageable ? "Seleccionar" : "Sin permisos para gestionar esta cuenta"}"></td>
-  <td><strong>${esc(member.username)}</strong> ${roleBadges(member.roles, member.role)}</td>
+  <td><strong>${profileLink(member.username)}</strong> ${roleBadges(member.roles, member.role)}</td>
   <td><span class="badge ${online ? "monitor-online" : "monitor-offline"}">${online ? "en línea" : "inactivo"}</span> <span class="badge${member.groupRules === false ? "" : " group"}" title="Reglas del grupo">${member.groupRules === false ? "reglas off" : "reglas on"}</span></td>
   <td class="muted">${stats ? `${stats.count} sesión${stats.count === 1 ? "" : "es"}` : "0 sesiones"}</td>
   <td class="mono">${current ? esc(current.url || "Solo búsqueda") : "—"}</td>
@@ -1659,6 +1683,43 @@ export function groupOnboardingPage({
 	});
 }
 
+export function profilePage({
+	user,
+	target,
+	groupName = "",
+	online = false,
+	isSelf = false,
+} = {}) {
+	const roles = Array.isArray(target.roles) && target.roles.length ? target.roles : [target.role];
+	const roleNames = roles.map((role) => roleLabel(role)).join(" · ");
+	const body = `<div class="card profile-card">
+  <div class="profile-head">
+    ${userAvatar(target.username, target.icon, "profile-avatar")}
+    <div>
+      <h1>${esc(target.username)}</h1>
+      <p class="profile-subtitle">${isSelf ? "Tu perfil público" : "Perfil de usuario"}</p>
+      <div class="profile-badges">${roleBadges(roles, target.role)}${groupName ? `<span class="badge group">${esc(groupName)}</span>` : ""}</div>
+    </div>
+  </div>
+  <div class="profile-grid">
+    <div class="profile-item"><span>Usuario</span><strong>${esc(target.username)}</strong></div>
+    <div class="profile-item"><span>Roles</span><strong>${esc(roleNames)}</strong></div>
+    <div class="profile-item"><span>Grupo</span><strong>${esc(groupName || "Sin grupo")}</strong></div>
+    <div class="profile-item"><span>Estado</span><strong><span class="profile-presence${online ? "" : " offline"}">${online ? "En línea" : "Desconectado"}</span></strong></div>
+    <div class="profile-item"><span>Miembro desde</span><strong>${esc(fmtDate(target.createdAt))}</strong></div>
+  </div>
+  <div class="profile-actions">
+    ${isSelf ? '<a class="small primary-small" href="/account">Editar mi perfil</a>' : ""}
+    <a class="small" href="/chat">Ir al chat</a>
+    <a class="small" href="/">Volver al inicio</a>
+  </div>
+</div>`;
+	return shell(`Perfil de ${target.username} · Proxy Web`, body, {
+		topbar: topbar(user),
+		chatFab: false,
+	});
+}
+
 export function accountPage({
 	user,
 	sessions = [],
@@ -1713,7 +1774,7 @@ ${
     </div>
   </div>
   <p class="muted">
-    <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a> · <a href="/vault">Bóveda de contraseñas</a>
+    <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a> · <a href="/vault">Bóveda de contraseñas</a> · <a href="/u/${encodeURIComponent(user.username)}">Ver mi perfil</a>
   </p>
   ${
 		allowPasswordChange || forced
@@ -2093,21 +2154,21 @@ export function chatPage({
       <input type="hidden" name="username" value="${esc(entry.username)}">
       <input type="hidden" name="next" value="${esc(returnTo)}">
       ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
-      <span class="friend-name">${esc(entry.username)}</span>
+      <span class="friend-name">${profileLink(entry.username)}</span>
       <button class="small primary-small" type="submit">Enviar solicitud</button>
     </form>`)
 		.join("");
 	const friendRows = friends
 		.map((entry) => `<div class="friend-row">
       ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
-      <span class="friend-name">${esc(entry.username)}</span>
+      <span class="friend-name">${profileLink(entry.username)}</span>
       <form method="post" action="/api/friends/remove"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small danger" type="submit">Quitar</button></form>
     </div>`)
 		.join("");
 	const incomingRows = incomingEntries
 		.map((entry) => `<div class="friend-row">
       ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
-      <span class="friend-name">${esc(entry.username)}</span>
+      <span class="friend-name">${profileLink(entry.username)}</span>
       <div class="actions">
         <form method="post" action="/api/friends/accept"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small primary-small" type="submit">Aceptar</button></form>
         <form method="post" action="/api/friends/reject"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small danger" type="submit">Rechazar</button></form>
@@ -2117,7 +2178,7 @@ export function chatPage({
 	const outgoingRows = outgoingEntries
 		.map((entry) => `<div class="friend-row">
       ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
-      <span class="friend-name">${esc(entry.username)}</span>
+      <span class="friend-name">${profileLink(entry.username)}</span>
       <span class="badge">pendiente</span>
       <form method="post" action="/api/friends/cancel"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small" type="submit">Cancelar</button></form>
     </div>`)
@@ -2177,7 +2238,7 @@ export function chatPage({
 				)
 				.join("")}</div></details>`;
 			const replyQuote = m.replyTo
-				? `<div class="chat-reply-quote"><strong>@${esc(m.replyTo.username)}</strong><span>${esc((m.replyTo.text || "").slice(0, 140) || "Adjunto")}</span></div>`
+				? `<div class="chat-reply-quote"><strong>@${profileLink(m.replyTo.username)}</strong><span>${esc((m.replyTo.text || "").slice(0, 140) || "Adjunto")}</span></div>`
 				: "";
 			const edited = m.editedAt
 				? `<span class="chat-edited" title="Editado ${esc(fmtDate(m.editedAt))}">editado</span>`
@@ -2197,7 +2258,7 @@ export function chatPage({
   <div class="chat-bubble">
     ${replyQuote}
     <div class="chat-meta">
-      ${own ? "" : `<span class="chat-author">${esc(m.username)}</span>`}
+      ${own ? "" : `<a class="chat-author profile-link" href="/u/${encodeURIComponent(m.username)}">${esc(m.username)}</a>`}
       ${roleBadge(role, m.roles)}
       ${pinBadge}
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
@@ -2383,7 +2444,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126g" defer></script>` : `
+<script src="/chat.js?v=20261126h" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
@@ -2573,7 +2634,7 @@ export function adminPage({
   <div class="user-summary">
     <span class="user-summary-main">
       ${userAvatar(u.username, u.icon, "user-avatar")}
-      <strong class="user-name">${esc(u.username)}</strong>
+      <strong class="user-name">${profileLink(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
       ${groupBadge(u.group)}
       ${u.group && u.groupRules === false ? '<span class="badge">reglas de grupo off</span>' : ""}
@@ -2691,7 +2752,7 @@ export function adminPage({
   <summary class="user-summary">
     <span class="user-summary-main">
       ${userAvatar(u.username, u.icon, "user-avatar")}
-      <strong class="user-name">${esc(u.username)}</strong>
+      <strong class="user-name">${profileLink(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
       ${groupBadge(u.group)}
       ${u.group && u.groupRules === false ? '<span class="badge">reglas de grupo off</span>' : ""}
@@ -2751,7 +2812,7 @@ export function adminPage({
 			.filter((member) => rolesOf(member).includes(role))
 			.map((member) => member.username);
 		return `<span class="role-members${names.length ? "" : " empty"}">${
-			names.length ? names.map((name) => esc(name)).join(" · ") : "Sin usuarios"
+			names.length ? names.map((name) => profileLink(name)).join(" · ") : "Sin usuarios"
 		}</span>`;
 	};
 
@@ -3390,7 +3451,7 @@ export function monitorPage({ user, snapshot = {} } = {}) {
   <div class="monitor-user-head">
     ${userAvatar(entry.username, entry.icon, "user-avatar")}
     <div class="monitor-user-title">
-      <strong>${esc(entry.username)}</strong>
+      <strong>${profileLink(entry.username)}</strong>
       <span class="badge role-${esc(entry.role)}">${esc(roleLabel(entry.role))}</span>
       <span class="badge ${entry.online ? "monitor-online" : "monitor-offline"}">${entry.online ? "en línea" : "inactivo"}</span>
     </div>
@@ -3437,7 +3498,7 @@ ${adminTabs("monitor", user.role)}
   <div class="scroll"><table class="monitor-recent"><thead><tr><th>Hora</th><th>Usuario</th><th>Web / búsqueda</th></tr></thead><tbody id="monitor-recent-body">${recent.map(recentRow).join("") || '<tr><td colspan="3" class="empty">Sin actividad reciente.</td></tr>'}</tbody></table></div>
   <p class="hint" id="monitor-updated">Actualizado: ${esc(fmtDate(snapshot.generatedAt || new Date().toISOString()))}</p>
 </div>
-<script src="/monitor.js" defer></script>`;
+<script src="/monitor.js?v=20261126a" defer></script>`;
 	return shell("Vigilancia · Administración", body, { topbar: topbar(user), wide: true });
 }
 
