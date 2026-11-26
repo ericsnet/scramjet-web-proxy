@@ -291,6 +291,41 @@ window.addEventListener("keydown", (event) => {
 	}
 });
 
+function createLazyImagesPlugin() {
+	const PluginClass = globalThis.$scramjet?.Plugin;
+	if (typeof PluginClass !== "function") return null;
+	const plugin = new PluginClass("lazy-images");
+	plugin.install = (frame) => {
+		plugin.tap(frame.hooks.init.pre, ({ window }) => {
+			try {
+				const href = String(window.location.href || "");
+				if (!/(poki\.com|tiktok\.com)/i.test(href)) return;
+				const doc = window.document;
+				if (!doc) return;
+				const enhance = (root) => {
+					const images = root.matches?.("img")
+						? [root]
+						: root.querySelectorAll?.("img") || [];
+					for (const image of images) {
+						if (!image.hasAttribute("loading")) image.setAttribute("loading", "lazy");
+						if (!image.hasAttribute("decoding")) image.setAttribute("decoding", "async");
+					}
+				};
+				enhance(doc);
+				const observer = new window.MutationObserver((records) => {
+					for (const record of records) {
+						for (const node of record.addedNodes) {
+							if (node.nodeType === 1) enhance(node);
+						}
+					}
+				});
+				observer.observe(doc, { childList: true, subtree: true });
+			} catch {}
+		});
+	};
+	return plugin;
+}
+
 async function init() {
 	if (controller) return;
 	if (!navigator.serviceWorker) {
@@ -331,8 +366,11 @@ async function init() {
 			),
 	);
 
+	const plugins = [urlWatcher, catchEscapedLinks];
+	const lazyImages = createLazyImagesPlugin();
+	if (lazyImages) plugins.push(lazyImages);
 	frame = controller.createFrame(frameElement, {
-		plugins: [urlWatcher, catchEscapedLinks],
+		plugins,
 	});
 	frameElement.addEventListener("load", () => {
 		stopLoading();
