@@ -77,6 +77,7 @@ import {
 	systemPage,
 	adminLogsPage,
 	reportsPage,
+	vaultPage,
 	adminReportsPage,
 	specialistWorkspacePage,
 	templatesPage,
@@ -117,6 +118,14 @@ import {
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
 import { listTemplates, addTemplate, deleteTemplate } from "./templates.js";
 import { listSchedules, addSchedule, deleteSchedule, activeJob } from "./schedules.js";
+import {
+	getVault,
+	initVault,
+	saveEntry as saveVaultEntry,
+	deleteEntry as deleteVaultEntry,
+	resetVault,
+	deleteVault,
+} from "./vault.js";
 import {
 	listReports,
 	createReport,
@@ -944,6 +953,20 @@ const wispConnections = new Map(); // sessionId -> Set<{ username, socket }>
 const chatUploadBuckets = new Map(); // username:ip -> [timestamps]
 const chatTyping = new Map(); // channelId -> Map(lowerUsername -> { name, at })
 const reportBuckets = new Map(); // username -> [timestamps]
+const vaultBuckets = new Map(); // username -> [timestamps]
+
+function allowVault(username) {
+	const key = String(username || "").toLowerCase();
+	const now = Date.now();
+	const bucket = (vaultBuckets.get(key) || []).filter((at) => now - at < 60_000);
+	if (bucket.length >= 120) {
+		vaultBuckets.set(key, bucket);
+		return false;
+	}
+	bucket.push(now);
+	vaultBuckets.set(key, bucket);
+	return true;
+}
 
 function allowReport(username) {
 	const key = String(username || "").toLowerCase();
@@ -2663,6 +2686,76 @@ app.post("/api/admin/reports/:id", requireCreator, sameOrigin, (req, res) => {
 	res.redirect(303, "/admin/reports?ok=updated");
 });
 
+app.get("/vault", (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(vaultPage({ user: req.user }));
+});
+
+app.use("/api/vault", (req, res, next) => {
+	if (!allowVault(req.user.username)) {
+		return res.status(429).json({ error: "rate" });
+	}
+	next();
+});
+
+app.get("/api/vault", (req, res) => {
+	const vault = getVault(req.user.username);
+	res.set("Cache-Control", "no-store");
+	res.json(vault || { configured: false, entries: [] });
+});
+
+app.post("/api/vault/init", sameOrigin, (req, res) => {
+	const result = initVault(req.user.username, {
+		salt: req.body.salt,
+		checkIv: req.body.checkIv,
+		checkCiphertext: req.body.checkCiphertext,
+	});
+	if (result.error) {
+		const status = result.error === "exists" ? 409 : 400;
+		return res.status(status).json({ error: result.error });
+	}
+	audit(req, "vault.init");
+	res.status(201).json({ vault: result.vault });
+});
+
+app.post("/api/vault/entries", sameOrigin, (req, res) => {
+	const result = saveVaultEntry(req.user.username, {
+		id: req.body.id,
+		iv: req.body.iv,
+		ciphertext: req.body.ciphertext,
+	});
+	if (result.error) {
+		const status =
+			result.error === "notconfigured"
+				? 409
+				: result.error === "limit"
+					? 409
+					: 400;
+		return res.status(status).json({ error: result.error });
+	}
+	audit(req, "vault.entry", result.entry.id, "guardada");
+	res.status(201).json({ entry: result.entry });
+});
+
+app.post("/api/vault/entries/:id/delete", sameOrigin, (req, res) => {
+	const result = deleteVaultEntry(req.user.username, req.params.id);
+	if (result.error) {
+		return res.status(result.error === "notfound" ? 404 : 409).json({ error: result.error });
+	}
+	audit(req, "vault.entry", req.params.id, "eliminada");
+	res.status(204).end();
+});
+
+app.post("/api/vault/reset", sameOrigin, async (req, res) => {
+	if (!(await verifyUserPassword(req.user.username, String(req.body.password || "")))) {
+		return res.status(403).json({ error: "password" });
+	}
+	const result = resetVault(req.user.username);
+	if (result.error) return res.status(404).json({ error: result.error });
+	audit(req, "vault.reset");
+	res.json({ ok: true });
+});
+
 app.get("/bookmarks", (req, res) => {
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -4194,6 +4287,7 @@ app.post("/api/admin/users/:username/delete", requireAdmin, sameOrigin, (req, re
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
 	deleteUserBookmarks(target);
 	deleteChatMessagesByUser(target);
+	deleteVault(target);
 	closeUserConnections(target);
 	audit(req, "user.delete", target);
 	res.redirect(303, "/admin?ok=deleted");

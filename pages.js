@@ -1055,6 +1055,7 @@ function topbar(user) {
   <a href="/chat">Chat</a>
   <a href="/bookmarks">Favoritos</a>
   <a href="/history">Historial</a>
+  <a href="/vault">Bóveda</a>
   <a href="/account">Mi cuenta</a>
   ${toolLinks.join("")}
   ${security}
@@ -1362,7 +1363,7 @@ ${
     </div>
   </div>
   <p class="muted">
-    <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a>
+    <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a> · <a href="/vault">Bóveda de contraseñas</a>
   </p>
   ${
 		allowPasswordChange || forced
@@ -3574,7 +3575,6 @@ function reportTable(reports, { admin = false } = {}) {
 
 export function reportsPage({ user, reports = [], notice = "", error = "", browser = "" } = {}) {
 	const body = `
-${topbar(user)}
 ${toolTabs("reports", user)}
 <div class="card">
   <h1>Informes de fallos</h1>
@@ -3704,7 +3704,6 @@ export function specialistWorkspacePage({
   </div>`
 			: "";
 	const body = `
-${topbar(user)}
 ${toolTabs(tool, user)}
 <div class="card">
   <h1>${config.icon} ${esc(config.title)}</h1>
@@ -3729,6 +3728,110 @@ ${designSwatches ? `<div class="card">${designSwatches}</div>` : ""}
   </div>
 </div>`;
 	return shell(`${config.title} · Herramientas`, body, { topbar: topbar(user), wide: true });
+}
+
+export function vaultPage({ user } = {}) {
+	const body = `
+<div class="card vault-shell" id="vault-app">
+  <div class="vault-head">
+    <div>
+      <h1>🔐 Bóveda de contraseñas</h1>
+      <p class="muted">Cifrada en tu navegador con AES-GCM. La contraseña maestra no se envía al servidor y no se guarda.</p>
+    </div>
+    <span class="vault-badge">Privada</span>
+  </div>
+  <p class="vault-warning">Si olvidas la contraseña maestra, no se puede recuperar. El servidor solo guarda datos cifrados.</p>
+  <p class="muted" id="vault-loading">Cargando bóveda…</p>
+
+  <section id="vault-setup" hidden>
+    <h2>Crear bóveda</h2>
+    <p class="muted">Elige una contraseña maestra larga y distinta de la de tu cuenta.</p>
+    <div class="field-grid">
+      <div>
+        <label for="vault-new-password">Contraseña maestra</label>
+        <input id="vault-new-password" type="password" minlength="12" autocomplete="new-password" placeholder="Mínimo 12 caracteres">
+      </div>
+      <div>
+        <label for="vault-confirm-password">Repetir contraseña maestra</label>
+        <input id="vault-confirm-password" type="password" minlength="12" autocomplete="new-password">
+      </div>
+    </div>
+    <button class="primary" type="button" id="vault-setup-btn">Crear bóveda</button>
+    <p class="msg error" id="vault-setup-error" hidden></p>
+  </section>
+
+  <section id="vault-unlock" hidden>
+    <h2>Desbloquear</h2>
+    <p class="muted">Introduce tu contraseña maestra para descifrar las entradas en este navegador.</p>
+    <label for="vault-unlock-password">Contraseña maestra</label>
+    <input id="vault-unlock-password" type="password" autocomplete="current-password" placeholder="Contraseña maestra">
+    <button class="primary" type="button" id="vault-unlock-btn">Desbloquear</button>
+    <p class="msg error" id="vault-unlock-error" hidden></p>
+    <p class="hint"><a href="#" id="vault-reset-link">He olvidado la contraseña maestra</a></p>
+  </section>
+
+  <section id="vault-content" hidden>
+    <div class="vault-toolbar">
+      <input id="vault-search" type="search" placeholder="Buscar por título, usuario o web…" aria-label="Buscar en la bóveda">
+      <button class="small primary-small" type="button" id="vault-add-btn">＋ Añadir</button>
+      <button class="small" type="button" id="vault-lock-btn">Bloquear</button>
+    </div>
+    <div id="vault-list" class="vault-list"></div>
+    <p class="empty" id="vault-empty" hidden>No hay entradas todavía. Añade la primera.</p>
+  </section>
+</div>
+
+<dialog id="vault-dialog" class="chat-dialog vault-dialog">
+  <form method="dialog">
+    <button type="button" class="dialog-x" data-vault-close aria-label="Cerrar">×</button>
+    <h2 id="vault-dialog-title">Nueva contraseña</h2>
+    <input type="hidden" id="vault-entry-id">
+    <div class="field-grid">
+      <div>
+        <label for="vault-entry-title">Título</label>
+        <input id="vault-entry-title" maxlength="100" placeholder="Ej.: Correo personal" required>
+      </div>
+      <div>
+        <label for="vault-entry-category">Categoría</label>
+        <select id="vault-entry-category">
+          <option value="general">General</option>
+          <option value="email">Correo</option>
+          <option value="social">Redes sociales</option>
+          <option value="banking">Banca</option>
+          <option value="work">Trabajo</option>
+          <option value="other">Otra</option>
+        </select>
+      </div>
+      <div>
+        <label for="vault-entry-username">Usuario</label>
+        <input id="vault-entry-username" maxlength="200" autocomplete="off">
+      </div>
+      <div>
+        <label for="vault-entry-url">Web</label>
+        <input id="vault-entry-url" maxlength="500" placeholder="https://…">
+      </div>
+    </div>
+    <label for="vault-entry-password">Contraseña</label>
+    <div class="vault-password-row">
+      <input id="vault-entry-password" type="password" maxlength="500" autocomplete="new-password">
+      <button class="small" type="button" id="vault-toggle-password">Ver</button>
+      <button class="small" type="button" id="vault-generate-password">Generar</button>
+    </div>
+    <label for="vault-entry-notes">Notas</label>
+    <textarea id="vault-entry-notes" maxlength="4000" style="min-height:70px"></textarea>
+    <p class="msg error" id="vault-dialog-error" hidden></p>
+    <div class="dialog-actions">
+      <button class="small" type="button" data-vault-close>Cancelar</button>
+      <button class="small primary-small" type="button" id="vault-save-entry">Guardar</button>
+    </div>
+  </form>
+</dialog>
+<p class="vault-toast" id="vault-toast" hidden></p>
+<script src="/vault.js" defer></script>`;
+	return shell("Bóveda · Proxy Web", body, {
+		topbar: topbar(user),
+		head: '<link rel="stylesheet" href="/vault.css">',
+	});
 }
 
 export function adminLogsPage({ user, unit = "webproxy", lines = 200, output = "", error = "" } = {}) {
