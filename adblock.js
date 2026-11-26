@@ -48,8 +48,16 @@ export const AD_HOSTS = Object.freeze([
 	"clarity.ms",
 	"bat.bing.com",
 	"connect.facebook.net",
+	"analytics.tiktok.com",
+	"ads.tiktok.com",
+	"ads-api.tiktok.com",
+	"business-api.tiktok.com",
 	"t.poki.io",
 ]);
+
+const AD_PATTERNS = [
+	/^(?:mon|mcs|starling)[a-z0-9-]*\.tiktokv?\.(?:com|eu)$/i,
+];
 
 function normalizeHost(value) {
 	return String(value || "").toLowerCase().replace(/\.$/, "");
@@ -58,5 +66,8 @@ function normalizeHost(value) {
 export function isAdHost(hostname) {
 	const host = normalizeHost(hostname);
 	if (!host) return false;
-	return AD_HOSTS.some((item) => host === item || host.endsWith(`.${item}`));
+	if (AD_HOSTS.some((item) => host === item || host.endsWith(`.${item}`))) {
+		return true;
+	}
+	return AD_PATTERNS.some((pattern) => pattern.test(host));
 }

@@ -387,7 +387,7 @@ function effectiveWispLimits(username) {
 		),
 		maxStreams: choose(
 			rules.maxStreams,
-			Math.max(8, Number(settings.proxyMaxStreamsPerUser) || 32),
+			Math.max(8, Number(settings.proxyMaxStreamsPerUser) || 64),
 			8,
 			128,
 		),
@@ -572,8 +572,8 @@ function applyWispBlocklist() {
 applyWispBlocklist();
 wisp.options.allow_direct_ip = false;
 wisp.options.allow_udp_streams = false;
-wisp.options.stream_limit_total = 64;
-wisp.options.stream_limit_per_host = 16;
+wisp.options.stream_limit_total = 128;
+wisp.options.stream_limit_per_host = 64;
 wisp.options.dns_ttl = 600;
 wisp.options.dns_cache_size = 8192;
 wisp.options.port_blacklist = [

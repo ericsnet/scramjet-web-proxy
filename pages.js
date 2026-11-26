@@ -3455,7 +3455,7 @@ ${adminTabs("settings")}
       </div>
       <div>
         <label for="proxyMaxStreamsPerUser">Máximo de streams por usuario</label>
-        <input id="proxyMaxStreamsPerUser" name="proxyMaxStreamsPerUser" type="number" min="8" max="128" value="${esc(settings.proxyMaxStreamsPerUser ?? 32)}" required>
+        <input id="proxyMaxStreamsPerUser" name="proxyMaxStreamsPerUser" type="number" min="8" max="128" value="${esc(settings.proxyMaxStreamsPerUser ?? 64)}" required>
       </div>
       <div>
         <label for="proxyMaxConnectionsPerUser">Conexiones Wisp simultáneas por usuario</label>

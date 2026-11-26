@@ -34,7 +34,7 @@ export const DEFAULTS = Object.freeze({
 	activityPerUser: 500,
 	activityTotal: 3000,
 	proxyBandwidthPerUserKbps: 8000,
-	proxyMaxStreamsPerUser: 32,
+	proxyMaxStreamsPerUser: 64,
 	proxyMaxConnectionsPerUser: 6,
 	proxyWispBufferMB: 4,
 	blockAds: true,
