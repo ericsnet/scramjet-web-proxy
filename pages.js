@@ -486,8 +486,8 @@ dialog h2{margin-top:0}
 .role-scale li.role-creator strong{color:#fde68a}
 .role-scale span{display:block}
 .role-scale b{color:#fde68a}
-.role-members{display:block;margin-top:3px;color:#8fa4bb;font-size:11px;line-height:1.45;word-break:break-word}
-.role-members.empty{color:#6f849b;font-style:italic}
+.role-members{display:block;margin-top:4px;color:#d3e1f0;font-size:13.5px;font-weight:500;line-height:1.55;word-break:break-word}
+.role-members.empty{color:#8298ad;font-size:12px;font-weight:400;font-style:italic}
 .traffic-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .traffic-live{display:inline-flex;align-items:center;gap:7px;color:#86efac;font-size:12px;font-weight:600;padding:6px 10px;border:1px solid rgba(74,222,128,.3);border-radius:999px;background:rgba(74,222,128,.07)}
 .traffic-live i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 4px rgba(74,222,128,.12);animation:trafficPulse 1.8s infinite}
