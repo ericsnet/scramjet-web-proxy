@@ -486,21 +486,8 @@ dialog h2{margin-top:0}
 .role-scale li.role-creator strong{color:#fde68a}
 .role-scale span{display:block}
 .role-scale b{color:#fde68a}
-.role-groups{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
-.role-group-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
-.role-group{display:grid;grid-template-columns:32px minmax(110px,150px) minmax(0,1fr);gap:7px 10px;align-items:center;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.015)}
-.role-group-unassigned{border-style:dashed}
-.role-group-avatar{width:32px;height:32px;flex:0 0 32px;border-radius:10px;font-size:11px;margin:0}
-.role-group-head{display:flex;flex-direction:column;min-width:0}
-.role-group-head strong{display:block;font-size:12.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.role-group-head small{display:block;font-size:10px;color:var(--muted);margin-top:1px}
-.role-group-members{display:flex;flex-wrap:wrap;gap:3px;margin:0;max-height:54px;overflow-y:auto;min-width:0}
-.role-member{display:inline-flex;align-items:center;max-width:100%;border:1px solid var(--border);border-radius:999px;padding:2px 6px;font-size:10.5px;color:#cbd9e8;background:rgba(0,0,0,.1)}
-.role-member-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.role-member-avatar{width:16px;height:16px;flex:0 0 16px;border-radius:5px;font-size:8px;overflow:hidden}
-.role-member-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
-.role-group-empty{font-size:10.5px;color:var(--muted);padding:1px 0}
-@media(max-width:640px){.role-group{grid-template-columns:32px minmax(0,1fr)}.role-group-members{grid-column:1/-1;max-height:none}}
+.role-members{display:block;margin-top:3px;color:#8fa4bb;font-size:11px;line-height:1.45;word-break:break-word}
+.role-members.empty{color:#6f849b;font-style:italic}
 .traffic-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .traffic-live{display:inline-flex;align-items:center;gap:7px;color:#86efac;font-size:12px;font-weight:600;padding:6px 10px;border:1px solid rgba(74,222,128,.3);border-radius:999px;background:rgba(74,222,128,.07)}
 .traffic-live i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 4px rgba(74,222,128,.12);animation:trafficPulse 1.8s infinite}
@@ -2757,60 +2744,30 @@ export function adminPage({
 	const visibleUsers =
 		user.role === "creator" ? users : users.filter((entry) => entry.role !== "creator");
 	const visibleGroupIds = new Set(groups.map((group) => group.id));
-	const groupCards = groups
-		.map((group) => {
-			const members = visibleUsers.filter((entry) => entry.group === group.id);
-			return `<div class="role-group">
-      ${groupAvatar(group.name, "group-avatar role-group-avatar")}
-      <div class="role-group-head"><strong>${esc(group.name)}</strong><small>${members.length} usuario${members.length === 1 ? "" : "s"}</small></div>
-      <div class="role-group-members">${
-				members.length
-					? members
-							.map((member) => {
-								const roles = (member.roles || [member.role]).map(roleLabel).join(", ");
-								return `<span class="role-member" title="${esc(roles)}">${esc(member.username)}</span>`;
-							})
-							.join("")
-					: '<span class="role-group-empty">Sin miembros</span>'
-			}</div>
-    </div>`;
-		})
-		.join("");
-	const ungroupedMembers = visibleUsers.filter(
-		(entry) => !entry.group || !visibleGroupIds.has(entry.group),
-	);
-	const ungroupedCard = `<div class="role-group role-group-unassigned">
-      ${groupAvatar("Sin grupo", "group-avatar role-group-avatar")}
-      <div class="role-group-head"><strong>Sin grupo</strong><small>${ungroupedMembers.length} usuario${ungroupedMembers.length === 1 ? "" : "s"}</small></div>
-      <div class="role-group-members">${
-				ungroupedMembers.length
-					? ungroupedMembers
-							.map((member) => {
-								const roles = (member.roles || [member.role]).map(roleLabel).join(", ");
-								return `<span class="role-member" title="${esc(roles)}">${esc(member.username)}</span>`;
-							})
-							.join("")
-					: '<span class="role-group-empty">Todos tienen grupo</span>'
-			}</div>
-    </div>`;
+	const rolesOf = (member) =>
+		Array.isArray(member.roles) && member.roles.length ? member.roles : [member.role];
+	const roleMembers = (role) => {
+		const names = visibleUsers
+			.filter((member) => rolesOf(member).includes(role))
+			.map((member) => member.username);
+		return `<span class="role-members${names.length ? "" : " empty"}">${
+			names.length ? names.map((name) => esc(name)).join(" · ") : "Sin usuarios"
+		}</span>`;
+	};
 
 	const body = `
 ${adminTabs("users", user.role)}
 <div class="card" style="margin-bottom:22px">
   <h2>Escala de privilegios</h2>
   <ol class="role-scale">
-    <li class="role-user"><strong>Usuario</strong><span>Navegación, chat, favoritos, historial propio y cuenta.</span></li>
-    <li class="role-designer"><strong>Diseñador gráfico</strong><span>Herramientas de diseño, sistema visual, revisión de interfaz e informes de problemas visuales.</span></li>
-    <li class="role-pentester"><strong>Pentester</strong><span>Checklist de seguridad, resumen de exposición e informes de vulnerabilidades. Sin acceso a datos de administración.</span></li>
-    <li class="role-qa"><strong>QA / bugs</strong><span>Casos de prueba, entorno del navegador e informes de fallos con pasos para reproducirlos.</span></li>
-    <li class="role-moderator"><strong>Moderador</strong><span>Consulta usuarios, actividad, sesiones, auditoría y solicitudes; puede bloquear o cerrar sesión solo a usuarios.</span></li>
-    <li class="role-admin"><strong>Administrador</strong><span>Gestiona usuarios y moderadores, ajustes, seguridad y copias; no puede gestionar a otros administradores ni al creador.</span></li>
-    <li class="role-creator"><strong>Creador</strong><span>Acceso total y cuenta protegida. <b>Único</b> que puede crear, ascender, degradar, resetear o eliminar administradores.</span></li>
+    <li class="role-user"><strong>Usuario</strong><span>Navegación, chat, favoritos, historial propio y cuenta.</span>${roleMembers("user")}</li>
+    <li class="role-designer"><strong>Diseñador gráfico</strong><span>Herramientas de diseño, sistema visual, revisión de interfaz e informes de problemas visuales.</span>${roleMembers("designer")}</li>
+    <li class="role-pentester"><strong>Pentester</strong><span>Checklist de seguridad, resumen de exposición e informes de vulnerabilidades. Sin acceso a datos de administración.</span>${roleMembers("pentester")}</li>
+    <li class="role-qa"><strong>QA / bugs</strong><span>Casos de prueba, entorno del navegador e informes de fallos con pasos para reproducirlos.</span>${roleMembers("qa")}</li>
+    <li class="role-moderator"><strong>Moderador</strong><span>Consulta usuarios, actividad, sesiones, auditoría y solicitudes; puede bloquear o cerrar sesión solo a usuarios.</span>${roleMembers("moderator")}</li>
+    <li class="role-admin"><strong>Administrador</strong><span>Gestiona usuarios y moderadores, ajustes, seguridad y copias; no puede gestionar a otros administradores ni al creador.</span>${roleMembers("admin")}</li>
+    <li class="role-creator"><strong>Creador</strong><span>Acceso total y cuenta protegida. <b>Único</b> que puede crear, ascender, degradar, resetear o eliminar administradores.</span>${roleMembers("creator")}</li>
   </ol>
-  <div class="role-groups">
-    <div class="section-title-row"><h3>Grupos y miembros</h3><span class="hint">Quién pertenece a cada grupo</span></div>
-    <div class="role-group-list">${groupCards}${ungroupedCard}</div>
-  </div>
   <p class="hint">Tu rol actual: <strong>${esc(roleLabel(user.role))}</strong>.</p>
 </div>
 <div class="card" style="margin-bottom:22px">
