@@ -1,6 +1,7 @@
 (() => {
 	const box = document.getElementById("chat-messages");
 	if (!box) return;
+	if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
 	const chatApp = document.querySelector(".chat-app");
 	const showOnline = chatApp?.dataset.showOnline !== "0";
@@ -143,6 +144,13 @@
 	if (messageResizeObserver) {
 		for (const child of box.children) messageResizeObserver.observe(child);
 	}
+	const containerResizeObserver =
+		typeof ResizeObserver === "function"
+			? new ResizeObserver(() => {
+					if (stickToBottom) scrollBottom();
+				})
+			: null;
+	containerResizeObserver?.observe(box);
 	const messageListObserver =
 		typeof MutationObserver === "function"
 			? new MutationObserver((mutations) => {
@@ -2100,4 +2108,12 @@
 	refresh();
 	refreshChannels();
 	scrollBottom(true);
+	const pinOnLoad = () => {
+		if (stickToBottom) scrollBottom(true);
+	};
+	window.addEventListener("load", pinOnLoad, { once: true });
+	window.addEventListener("pageshow", pinOnLoad);
+	window.visualViewport?.addEventListener("resize", pinOnLoad);
+	for (const delay of [0, 120, 400, 1000]) setTimeout(pinOnLoad, delay);
+	document.fonts?.ready?.then(pinOnLoad).catch?.(() => {});
 })();

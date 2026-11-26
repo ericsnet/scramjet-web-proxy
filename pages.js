@@ -2557,7 +2557,7 @@ export function chatPage({
 		chatFab: false,
 		wide: true,
 		full: true,
-		head: '<link rel="stylesheet" href="/chat.css">',
+		head: '<link rel="stylesheet" href="/chat.css?v=20261126a">',
 	});
 }
 
