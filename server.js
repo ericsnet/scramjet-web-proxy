@@ -179,6 +179,7 @@ import {
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
 import { normalizeIp } from "./ip.js";
+import { isAdHost } from "./adblock.js";
 import { activatePanic, panicUntil, flushPanic, CLASSROOM_URL } from "./panic.js";
 import { handleHtcpcp } from "./htcpcp.js";
 import {
@@ -573,6 +574,8 @@ wisp.options.allow_direct_ip = false;
 wisp.options.allow_udp_streams = false;
 wisp.options.stream_limit_total = 64;
 wisp.options.stream_limit_per_host = 16;
+wisp.options.dns_ttl = 600;
+wisp.options.dns_cache_size = 8192;
 wisp.options.port_blacklist = [
 	[22, 22],
 	[23, 23],
@@ -1410,12 +1413,22 @@ function isUserScheduleOpen(user, timezone) {
 }
 
 function checkHostPolicy(user, hostname) {
-	if (!user || isAdminRole(user.role)) return { blocked: false };
 	const settings = getSettings();
-	const group = groupRulesForUser(user);
-	const rules = group?.rules || {};
 	const host = String(hostname || "").toLowerCase().replace(/\.$/, "");
 	if (!host) return { blocked: false };
+
+	if (settings.blockAds && isAdHost(host)) {
+		metric("ads_blocked_total");
+		return {
+			blocked: true,
+			reason: "adblock",
+			message: "Anuncio o rastreador bloqueado para acelerar la navegación.",
+		};
+	}
+
+	if (!user || isAdminRole(user.role)) return { blocked: false };
+	const group = groupRulesForUser(user);
+	const rules = group?.rules || {};
 
 	if (matchSite(host, user.unblockOverrides)) return { blocked: false };
 
@@ -4367,6 +4380,7 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		proxyMaxStreamsPerUser: req.body.proxyMaxStreamsPerUser,
 		proxyMaxConnectionsPerUser: req.body.proxyMaxConnectionsPerUser,
 		proxyWispBufferMB: req.body.proxyWispBufferMB,
+		blockAds: req.body.blockAds === "on",
 		proxyAllowStaffBrowsing: req.body.proxyAllowStaffBrowsing === "on",
 		requireMfaForStaff: req.body.requireMfaForStaff === "on",
 		revision: req.body.revision,

@@ -37,6 +37,7 @@ export const DEFAULTS = Object.freeze({
 	proxyMaxStreamsPerUser: 32,
 	proxyMaxConnectionsPerUser: 6,
 	proxyWispBufferMB: 4,
+	blockAds: true,
 	maintenanceMode: false,
 	maintenanceMessage:
 		"El proxy está en mantenimiento. Vuelve a intentarlo más tarde.",
@@ -228,6 +229,12 @@ function normalize(input, silent = false) {
 			input.proxyAllowStaffBrowsing === true ||
 			input.proxyAllowStaffBrowsing === "1" ||
 			input.proxyAllowStaffBrowsing === "on";
+	}
+	if (input.blockAds !== undefined) {
+		next.blockAds =
+			input.blockAds === true ||
+			input.blockAds === "1" ||
+			input.blockAds === "on";
 	}
 	if (input.requireMfaForStaff !== undefined) {
 		next.requireMfaForStaff =

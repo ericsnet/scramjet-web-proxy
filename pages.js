@@ -3466,6 +3466,7 @@ ${adminTabs("settings")}
         <input id="proxyWispBufferMB" name="proxyWispBufferMB" type="number" min="1" max="32" value="${esc(settings.proxyWispBufferMB ?? 4)}" required>
       </div>
     </div>
+    <label class="check"><input type="checkbox" name="blockAds"${settings.blockAds ? " checked" : ""}> Bloquear anuncios y rastreadores (mejora Poki y webs con mucha publicidad)</label>
     <p class="hint">El límite de ancho de banda es por usuario y suma subida y bajada; 8000 Kbps ≈ 8 Mbps. Un stream es una conexión de red de la web (imágenes, vídeo, juegos…). Si hay muchos usuarios, baja el ancho de banda o los streams antes que el búfer.</p>
   </div>
 
