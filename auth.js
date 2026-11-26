@@ -99,6 +99,12 @@ function migrateUsers() {
 		if (!Array.isArray(user.roles) || !user.roles.length) {
 			user.roles = normalizeRoleList(user.role || "user");
 			changed = true;
+		} else {
+			const normalizedRoles = normalizeRoleList(user.roles);
+			if (normalizedRoles.join(",") !== user.roles.join(",")) {
+				user.roles = normalizedRoles;
+				changed = true;
+			}
 		}
 		const highest = highestRole(user.roles);
 		if (user.role !== highest) {

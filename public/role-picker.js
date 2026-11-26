@@ -5,10 +5,6 @@
 		if (!boxes.length) continue;
 		const byValue = (value) => boxes.find((box) => box.value === value);
 		const sync = () => {
-			if (!boxes.some((box) => box.checked)) {
-				const user = byValue("user");
-				if (user) user.checked = true;
-			}
 			const moderator = byValue("moderator");
 			const admin = byValue("admin");
 			if (moderator) moderator.disabled = false;
@@ -19,6 +15,14 @@
 			} else if (admin?.checked && moderator) {
 				moderator.checked = false;
 				moderator.disabled = true;
+			}
+			// Moderador y administrador no son usuarios normales: sustituyen
+			// al rol de usuario, no se combinan con él.
+			const staff = Boolean(moderator?.checked || admin?.checked);
+			const user = byValue("user");
+			if (user) {
+				user.disabled = staff;
+				user.checked = !staff;
 			}
 			for (const box of boxes) {
 				const option = box.closest(".role-option");

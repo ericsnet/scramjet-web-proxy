@@ -2204,7 +2204,7 @@ export function adminPage({
           <legend>Roles de ${esc(u.username)}</legend>
           ${assignableRoles.map((role) => roleOption(role, currentRoles.includes(role))).join("")}
         </fieldset>
-        <p class="hint">Moderador y administrador son excluyentes.</p>
+        <p class="hint">Moderador y administrador sustituyen al rol de usuario y son excluyentes entre sí.</p>
         <button class="small" type="submit">Guardar roles</button>
       </form>`;
 			const blockForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block">
@@ -2378,7 +2378,7 @@ ${adminTabs("users", user.role)}
       <legend>Roles (puedes elegir varios)</legend>
       ${assignableRoles.map((role) => roleOption(role, role === "user")).join("")}
     </fieldset>
-        <p class="hint">Moderador y administrador son excluyentes.</p>
+        <p class="hint">Moderador y administrador sustituyen al rol de usuario y son excluyentes entre sí.</p>
     <button class="primary" type="submit">Crear usuario</button>
   </form>
   <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar.</p>

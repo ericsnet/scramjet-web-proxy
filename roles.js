@@ -37,10 +37,18 @@ function rolesOf(input) {
 	return input ? [String(input)] : [];
 }
 
+const STAFF_ROLES = new Set(["moderator", "admin", "creator"]);
+
 export function normalizeRoleList(input) {
 	const roles = rolesOf(input).filter(isKnownRole);
 	const unique = [...new Set(roles)];
-	return unique.length ? unique : ["user"];
+	if (!unique.length) return ["user"];
+	// Moderador, administrador y creador no son usuarios normales: su rol
+	// sustituye al de usuario en lugar de sumarse a él.
+	if (unique.some((role) => STAFF_ROLES.has(role))) {
+		return unique.filter((role) => role !== "user");
+	}
+	return unique.includes("user") ? unique : ["user", ...unique];
 }
 
 export function highestRole(input) {
