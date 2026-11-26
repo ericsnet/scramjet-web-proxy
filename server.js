@@ -1286,6 +1286,7 @@ const ADMIN_ERRORS = {
 	"invalid-user": "Usuario no válido: de 3 a 32 caracteres (letras, números, punto, guion o guion bajo).",
 	"invalid-password": "La contraseña debe tener entre 8 y 128 caracteres.",
 	"invalid-role": "Rol no válido.",
+	"role-conflict": "Un usuario no puede ser moderador y administrador a la vez.",
 	"invalid-date": "La fecha de bloqueo no es válida o ya ha pasado.",
 	"invalid-schedule": "Horario no válido: elige al menos un día y horas correctas.",
 	notfound: "Usuario no encontrado.",

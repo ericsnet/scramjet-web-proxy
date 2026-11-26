@@ -213,8 +213,19 @@ textarea{width:100%;background:linear-gradient(180deg,#141e29,#111923);border:1p
 textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.13)}
 .check{display:flex;align-items:center;gap:9px;margin:14px 0;color:var(--muted);font-size:14px}
 .check input{width:16px;height:16px;accent-color:var(--accent)}
-.role-picker{border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin:12px 0;display:flex;flex-wrap:wrap;gap:4px 16px}
-.role-picker legend{padding:0 6px;color:var(--muted);font-size:12px}
+.role-picker{border:0;padding:0;margin:12px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:8px}
+.role-picker legend{padding:0 0 8px;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.03em}
+.role-option{position:relative;display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(180deg,rgba(21,30,41,.72),rgba(15,23,42,.55));cursor:pointer;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease,transform .16s ease}
+.role-option:hover{border-color:#34506f;background:rgba(30,44,62,.78);transform:translateY(-1px)}
+.role-option:focus-within{outline:2px solid rgba(96,165,250,.45);outline-offset:2px}
+.role-option.selected{border-color:rgba(96,165,250,.62);background:linear-gradient(180deg,rgba(37,99,235,.22),rgba(30,64,175,.10));box-shadow:0 0 0 1px rgba(96,165,250,.12),0 6px 18px rgba(37,99,235,.10)}
+.role-option.disabled{opacity:.42;cursor:not-allowed;filter:grayscale(.6);transform:none}
+.role-option input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.role-option-icon{display:grid;place-items:center;width:32px;height:32px;flex:0 0 32px;border-radius:9px;background:rgba(148,163,184,.09);border:1px solid rgba(148,163,184,.12);font-size:16px}
+.role-option.selected .role-option-icon{background:rgba(59,130,246,.22);border-color:rgba(96,165,250,.28)}
+.role-option-text{min-width:0;display:flex;flex-direction:column;gap:1px}
+.role-option-text strong{font-size:12.5px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-option-text small{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .report-status-open{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
 .report-status-triaged{color:#fde68a;border-color:#a16207;background:#2a1d05}
 .report-status-in_progress{color:#bfdbfe;border-color:#1d4ed8;background:#0d1b2e}
@@ -1056,6 +1067,25 @@ function roleBadges(roles, fallback = "user") {
 	return list
 		.map((role) => `<span class="badge role-${esc(role)}">${esc(roleLabel(role))}</span>`)
 		.join(" ");
+}
+
+const ROLE_META = {
+	user: { icon: "👤", desc: "Navegación, chat y cuenta" },
+	moderator: { icon: "🛡", desc: "Moderación y consulta" },
+	designer: { icon: "🎨", desc: "Interfaz y sistema visual" },
+	pentester: { icon: "🕵", desc: "Seguridad y pentest" },
+	qa: { icon: "🧪", desc: "Pruebas y bugs" },
+	admin: { icon: "⚙", desc: "Gestión completa" },
+	creator: { icon: "👑", desc: "Cuenta propietaria" },
+};
+
+function roleOption(role, checked = false) {
+	const meta = ROLE_META[role] || { icon: "•", desc: "" };
+	return `<label class="role-option${checked ? " selected" : ""}">
+  <input type="checkbox" name="roles" value="${esc(role)}"${checked ? " checked" : ""}>
+  <span class="role-option-icon">${esc(meta.icon)}</span>
+  <span class="role-option-text"><strong>${esc(roleLabel(role))}</strong><small>${esc(meta.desc)}</small></span>
+</label>`;
 }
 
 const ADMIN_TABS = [
@@ -2107,8 +2137,9 @@ export function adminPage({
 			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role">
         <fieldset class="role-picker">
           <legend>Roles de ${esc(u.username)}</legend>
-          ${assignableRoles.map((role) => `<label class="check"><input type="checkbox" name="roles" value="${role}"${currentRoles.includes(role) ? " checked" : ""}> ${esc(roleLabel(role))}</label>`).join("")}
+          ${assignableRoles.map((role) => roleOption(role, currentRoles.includes(role))).join("")}
         </fieldset>
+        <p class="hint">Moderador y administrador son excluyentes.</p>
         <button class="small" type="submit">Guardar roles</button>
       </form>`;
 			const blockForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/block">
@@ -2280,14 +2311,15 @@ ${adminTabs("users", user.role)}
     </div>
     <fieldset class="role-picker">
       <legend>Roles (puedes elegir varios)</legend>
-      ${assignableRoles.map((role) => `<label class="check"><input type="checkbox" name="roles" value="${role}"${role === "user" ? " checked" : ""}> ${esc(roleLabel(role))}</label>`).join("")}
+      ${assignableRoles.map((role) => roleOption(role, role === "user")).join("")}
     </fieldset>
+        <p class="hint">Moderador y administrador son excluyentes.</p>
     <button class="primary" type="submit">Crear usuario</button>
   </form>
   <p class="hint">Las contraseñas se guardan con hash scrypt: no se pueden ver, solo cambiar.</p>
   <details class="card" style="margin-top:16px;background:rgba(255,255,255,.015)">
     <summary class="muted" style="cursor:pointer">Importar usuarios desde CSV</summary>
-    <p class="hint">Columnas: usuario, roles, contraseña. Los roles se separan con `|` (ej.: user|designer|pentester). Son opcionales; si faltan, se usa usuario y se genera una contraseña temporal.</p>
+    <p class="hint">Columnas: usuario, roles, contraseña. Los roles se separan con <code>|</code> (ej.: user|designer|pentester). Son opcionales; si faltan, se usa usuario y se genera una contraseña temporal.</p>
     <input id="users-import-file" type="file" accept=".csv,text/csv">
     <button id="users-import-run" class="small" type="button" style="margin-top:10px">Importar CSV</button>
     <pre id="users-import-result" class="panel" style="display:none;white-space:pre-wrap;margin-top:12px"></pre>
@@ -2316,7 +2348,8 @@ function genPass() {
   input.focus();
   input.select();
 }
-</script>`;
+</script>
+<script src="/role-picker.js" defer></script>`;
 	return shell("Usuarios · Administración", body, { topbar: topbar(user), wide: true });
 }
 

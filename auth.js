@@ -260,6 +260,7 @@ export function createUser(username, password, role) {
 	if (getUser(name)) return { error: "exists" };
 	const roles = normalizeRoleList(role);
 	if (!roles.length || roles.includes("creator")) return { error: "invalid-role" };
+	if (roles.includes("admin") && roles.includes("moderator")) return { error: "role-conflict" };
 	db.users[name] = {
 		role: highestRole(roles),
 		roles,
@@ -312,6 +313,7 @@ export function setRoles(username, input) {
 	if (user.role === "creator") return { error: "protected" };
 	const roles = normalizeRoleList(input);
 	if (!roles.length || roles.includes("creator")) return { error: "invalid-role" };
+	if (roles.includes("admin") && roles.includes("moderator")) return { error: "role-conflict" };
 	const highest = highestRole(roles);
 	if (
 		user.role === "admin" &&

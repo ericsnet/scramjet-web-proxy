@@ -31,7 +31,7 @@ const SKIP_PATH =
 // Endpoints que el propio panel consulta periódicamente. No son navegación
 // humana y no deben contar como ráfaga ni como intervalos automatizados.
 const ROUTINE_PATH =
-	/^\/(?:api\/(?:chat\/(?:unread|channels|read|messages|files|notifications)|me|lang|config|admin\/(?:traffic|monitor)))$/;
+	/^(?:\/api\/(?:chat\/(?:unread|channels|read|messages|files|notifications)|me|lang|config|admin\/(?:traffic|monitor))|\/(?:design|pentest|qa|reports))$/;
 const ROUTINE_ANY_METHOD =
 	/^\/(?:api\/(?:chat\/(?:read|unread|channels)|me|lang|admin\/(?:traffic|monitor)))$/;
 
@@ -353,7 +353,7 @@ function behaviorSignals(tracker, now) {
 	let score = 0;
 	const reasons = [];
 
-	if (recent.length >= 30) {
+	if (recent.length >= 60) {
 		score += 5;
 		reasons.push("Ráfaga de peticiones");
 	}
