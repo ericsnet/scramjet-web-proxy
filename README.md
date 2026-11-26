@@ -26,7 +26,7 @@ administración.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
 - Escala de roles: **usuario → moderador → administrador → creador**. El creador es la cuenta propietaria: nadie más puede modificarla, bloquearla, borrarla ni ver su historial, sesiones o auditoría. Solo el creador puede crear, ascender, degradar, resetear o eliminar administradores; los administradores solo gestionan usuarios y moderadores.
 - **Roles especialistas** que no sustituyen a los anteriores: **diseñador gráfico**, **pentester** y **QA / bugs**. Se pueden combinar entre sí y con los roles existentes; un usuario puede tener varios roles a la vez.
-- Herramientas propias: `/design` (sistema visual y checklist de interfaz), `/pentest` (checklist y resumen de seguridad) y `/qa` (casos de prueba y entorno).
+- Herramientas propias: `/design` (sistema visual y checklist de interfaz), `/pentest` (checklist y resumen de seguridad) y `/qa` (casos de prueba y entorno). Solo el **creador** tiene acceso automático a todas; los administradores solo si además tienen el rol especialista correspondiente.
 - **Informes comunes** en `/reports` para diseño, pentest y QA: título, tipo, gravedad, zona, URL, pasos, esperado y real. Administración los tria en `/admin/reports` con estado y notas.
 - **Vista compacta de usuarios** en Administración: cada fila muestra el resumen y se despliega al pulsarla con toda la información y acciones.
 - Los administradores pueden:

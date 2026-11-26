@@ -1,5 +1,5 @@
 import { countOpenAlerts } from "./security.js";
-import { canAssignRole, canManageRole } from "./roles.js";
+import { canAssignRole, canManageRole, isAdminRole, isReportsRole } from "./roles.js";
 
 export function esc(value) {
 	return String(value ?? "")
@@ -226,6 +226,15 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .role-option-text{min-width:0;display:flex;flex-direction:column;gap:1px}
 .role-option-text strong{font-size:12.5px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .role-option-text small{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-option::after{content:"";margin-left:auto;flex:0 0 18px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:rgba(2,6,23,.25)}
+.role-option.selected::after{content:"✓";display:grid;place-items:center;background:var(--accent);border-color:var(--accent);color:#fff;font-size:11px;font-weight:700}
+.role-picker-vertical{display:flex;flex-direction:column;gap:7px}
+.role-picker-vertical .role-option{width:100%}
+.role-picker-vertical .role-option-text small{white-space:normal}
+.role-form{flex:1 0 100%;width:100%}
+.role-form .role-picker-vertical{width:min(100%,460px);margin:4px 0 0}
+.role-form .hint{margin:6px 0 8px}
+.tool-tabs{margin:0 0 16px}
 .report-status-open{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
 .report-status-triaged{color:#fde68a;border-color:#a16207;background:#2a1d05}
 .report-status-in_progress{color:#bfdbfe;border-color:#1d4ed8;background:#0d1b2e}
@@ -1028,11 +1037,15 @@ function topbar(user) {
 		? `<a href="/admin/security">Seguridad${alertCount ? ` <span class="alert-count">${alertCount}</span>` : ""}</a>`
 		: "";
 	const toolLinks = [];
-	if (roles.includes("designer")) toolLinks.push('<a href="/design">Diseño</a>');
-	if (roles.includes("pentester")) toolLinks.push('<a href="/pentest">Pentest</a>');
-	if (roles.includes("qa")) toolLinks.push('<a href="/qa">QA</a>');
-	if (roles.some((role) => ["designer", "pentester", "qa"].includes(role))) {
-		toolLinks.push('<a href="/reports">Informes</a>');
+	if (roles.includes("creator")) {
+		toolLinks.push('<a href="/design">Herramientas</a>');
+	} else {
+		if (roles.includes("designer")) toolLinks.push('<a href="/design">Diseño</a>');
+		if (roles.includes("pentester")) toolLinks.push('<a href="/pentest">Pentest</a>');
+		if (roles.includes("qa")) toolLinks.push('<a href="/qa">QA</a>');
+		if (roles.some((role) => ["designer", "pentester", "qa"].includes(role))) {
+			toolLinks.push('<a href="/reports">Informes</a>');
+		}
 	}
 	const roleNames = roles.map(roleLabel);
 	const roleText = `${roleNames.slice(0, 2).join(" + ")}${roleNames.length > 2 ? ` +${roleNames.length - 2}` : ""}`;
@@ -1078,6 +1091,23 @@ const ROLE_META = {
 	admin: { icon: "⚙", desc: "Gestión completa" },
 	creator: { icon: "👑", desc: "Cuenta propietaria" },
 };
+
+function toolTabs(active, user) {
+	const roles = Array.isArray(user?.roles) && user.roles.length ? user.roles : [user?.role];
+	const privileged = roles.includes("creator");
+	const tools = [];
+	if (privileged || roles.includes("designer")) tools.push(["designer", "/design", "Diseño"]);
+	if (privileged || roles.includes("pentester")) tools.push(["pentester", "/pentest", "Pentest"]);
+	if (privileged || roles.includes("qa")) tools.push(["qa", "/qa", "QA"]);
+	if (isReportsRole(roles)) tools.push(["reports", "/reports", "Informes"]);
+	if (!tools.length) return "";
+	return `<nav class="tabs tool-tabs">${tools
+		.map(
+			([key, href, label]) =>
+				`<a href="${href}"${key === active ? ' class="active"' : ""}>${label}</a>`,
+		)
+		.join("")}</nav>`;
+}
 
 function roleOption(role, checked = false) {
 	const meta = ROLE_META[role] || { icon: "•", desc: "" };
@@ -2134,8 +2164,8 @@ export function adminPage({
 				)
 				.join("");
 			const currentRoles = Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role];
-			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role">
-        <fieldset class="role-picker">
+			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role" class="role-form">
+        <fieldset class="role-picker role-picker-vertical">
           <legend>Roles de ${esc(u.username)}</legend>
           ${assignableRoles.map((role) => roleOption(role, currentRoles.includes(role))).join("")}
         </fieldset>
@@ -3544,6 +3574,7 @@ function reportTable(reports, { admin = false } = {}) {
 export function reportsPage({ user, reports = [], notice = "", error = "", browser = "" } = {}) {
 	const body = `
 ${topbar(user)}
+${toolTabs("reports", user)}
 <div class="card">
   <h1>Informes de fallos</h1>
   <p class="muted">Sección común para diseño, pentest y QA. Puedes enviar un informe y seguir su estado.</p>
@@ -3673,6 +3704,7 @@ export function specialistWorkspacePage({
 			: "";
 	const body = `
 ${topbar(user)}
+${toolTabs(tool, user)}
 <div class="card">
   <h1>${config.icon} ${esc(config.title)}</h1>
   <p class="muted">${esc(config.intro)}</p>

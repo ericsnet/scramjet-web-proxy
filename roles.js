@@ -70,7 +70,7 @@ export function isSpecialistRole(input) {
 }
 
 export function isReportsRole(input) {
-	return hasAnyRole(input, ["designer", "pentester", "qa", "admin", "creator"]);
+	return hasAnyRole(input, ["designer", "pentester", "qa", "creator"]);
 }
 
 export function canAssignRole(actorRole, role) {

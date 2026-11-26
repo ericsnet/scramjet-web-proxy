@@ -698,7 +698,7 @@ function requireStaff(req, res, next) {
 }
 
 function hasToolAccess(user, tool) {
-	return !!user && (isAdminRole(user.role) || hasAnyRole(user.roles || user.role, [tool]));
+	return !!user && (hasAnyRole(user.roles || user.role, ["creator"]) || hasAnyRole(user.roles || user.role, [tool]));
 }
 
 function requireTool(tool) {
