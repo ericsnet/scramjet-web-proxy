@@ -236,7 +236,8 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .group-list{display:flex;flex-direction:column;gap:7px;margin-top:12px}
 .group-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
 .group-row .muted{font-size:12px}
-.group-row form{margin-left:auto}
+.group-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
+.group-row form{margin-left:0}
 .user-group-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.015)}
 .user-group-form label{margin:0;font-size:12px;color:var(--muted)}
 .user-group-form select{width:auto;min-width:190px}
@@ -1364,6 +1365,220 @@ export function errorPage({
 	return shell(`${code} · ${heading}`, body, { topbar: user ? topbar(user) : "", chatFab: false });
 }
 
+export function groupPanelPage({
+	user,
+	group,
+	members = [],
+	sessions = [],
+	activity = [],
+	groups = [],
+	canEditRules = false,
+	notice = "",
+	error = "",
+} = {}) {
+	const rules = group?.rules || {};
+	const now = Date.now();
+	const dayLabels = [
+		[0, "D"],
+		[1, "L"],
+		[2, "M"],
+		[3, "X"],
+		[4, "J"],
+		[5, "V"],
+		[6, "S"],
+	];
+	const sessionStats = new Map();
+	for (const session of sessions) {
+		const key = String(session.username || "").toLowerCase();
+		const current = sessionStats.get(key) || { count: 0, lastActiveAt: null, ip: "" };
+		current.count += 1;
+		if (
+			!current.lastActiveAt ||
+			new Date(session.lastActiveAt || session.lastSeenAt) > new Date(current.lastActiveAt)
+		) {
+			current.lastActiveAt = session.lastActiveAt || session.lastSeenAt;
+			current.ip = session.ip || "";
+		}
+		sessionStats.set(key, current);
+	}
+	const latest = new Map();
+	for (const entry of activity) {
+		const key = String(entry.username || "").toLowerCase();
+		if (!latest.has(key)) latest.set(key, entry);
+	}
+	const onlineCount = members.filter((member) => {
+		const stats = sessionStats.get(member.username.toLowerCase());
+		return (
+			stats?.lastActiveAt &&
+			now - new Date(stats.lastActiveAt).getTime() < 5 * 60 * 1000
+		);
+	}).length;
+	const schedule = rules.schedule?.enabled
+		? rules.schedule
+		: { enabled: false, days: [1, 2, 3, 4, 5], start: "08:00", end: "20:00" };
+	const accessLabel =
+		rules.accessMode === "allowlist"
+			? `Lista blanca del grupo (${(rules.allowedSites || []).length})`
+			: rules.accessMode === "blacklist"
+				? `Lista negra del grupo (${(rules.blockedSites || []).length})`
+				: "Hereda las reglas globales";
+	const scheduleLabel = schedule.enabled
+		? `${schedule.days.map((day) => dayLabels.find(([value]) => value === day)?.[1] || "?").join("")} · ${schedule.start}-${schedule.end}`
+		: "Sin horario propio";
+	const limitParts = [];
+	if (rules.bandwidthKbps > 0) limitParts.push(`${rules.bandwidthKbps} Kbps`);
+	if (rules.maxStreams > 0) limitParts.push(`${rules.maxStreams} streams`);
+	if (rules.maxConnections > 0) limitParts.push(`${rules.maxConnections} conexiones`);
+	const limitLabel = limitParts.length ? limitParts.join(" · ") : "Hereda los límites globales";
+	const blockedText = (rules.blockedSites || [])
+		.map((host) =>
+			rules.siteMessages?.[host] ? `${host} | ${rules.siteMessages[host]}` : host,
+		)
+		.join("\n");
+	const memberRows = members
+		.map((member) => {
+			const key = member.username.toLowerCase();
+			const stats = sessionStats.get(key);
+			const current = latest.get(key);
+			const online =
+				stats?.lastActiveAt &&
+				now - new Date(stats.lastActiveAt).getTime() < 5 * 60 * 1000;
+			const manageable =
+				member.username.toLowerCase() !== user.username.toLowerCase() &&
+				canManageRole(user.role, member.role);
+			return `<tr>
+  <td><input type="checkbox" name="usernames" value="${esc(member.username)}" form="group-bulk" data-bulk${manageable ? "" : " disabled"} title="${manageable ? "Seleccionar" : "Sin permisos para gestionar esta cuenta"}"></td>
+  <td><strong>${esc(member.username)}</strong> ${roleBadges(member.roles, member.role)}</td>
+  <td><span class="badge ${online ? "monitor-online" : "monitor-offline"}">${online ? "en línea" : "inactivo"}</span> <span class="badge${member.groupRules === false ? "" : " group"}" title="Reglas del grupo">${member.groupRules === false ? "reglas off" : "reglas on"}</span></td>
+  <td class="muted">${stats ? `${stats.count} sesión${stats.count === 1 ? "" : "es"}` : "0 sesiones"}</td>
+  <td class="mono">${current ? esc(current.url || "Solo búsqueda") : "—"}</td>
+  <td><a class="small" href="/admin/activity?user=${encodeURIComponent(member.username)}">Ver actividad</a></td>
+</tr>`;
+		})
+		.join("");
+	const body = `
+${adminTabs("users", user.role)}
+<div class="card" style="margin-bottom:22px">
+  <div class="section-title-row">
+    <div>
+      <h1>${esc(group.name)}</h1>
+      <p class="muted">Panel del grupo de clase. Revisa sus reglas, miembros y actividad.</p>
+    </div>
+    <a class="small" href="/admin">Volver a usuarios</a>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Miembros</div><div class="v">${members.length}</div></div>
+    <div class="stat"><div class="k">En línea</div><div class="v">${onlineCount}</div></div>
+    <div class="stat"><div class="k">Sesiones</div><div class="v">${sessions.length}</div></div>
+    <div class="stat"><div class="k">Sitios bloqueados</div><div class="v">${(rules.blockedSites || []).length}</div></div>
+  </div>
+  <div class="settings-status">
+    <span class="badge group">${esc(accessLabel)}</span>
+    <span class="badge">${esc(scheduleLabel)}</span>
+    <span class="badge">${esc(limitLabel)}</span>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:22px" id="rules">
+  <div class="section-title-row">
+    <h2>⚙ Reglas del grupo</h2>
+    ${canEditRules ? '<span class="hint">Solo administradores y creador</span>' : ""}
+  </div>
+  ${
+		canEditRules
+			? `<details>
+    <summary class="muted" style="cursor:pointer">Editar reglas</summary>
+    <form method="post" action="/api/admin/groups/${encodeURIComponent(group.id)}/rules" style="margin-top:14px">
+      <div class="grid">
+        <div>
+          <label for="group-access">Modo de sitios</label>
+          <select id="group-access" name="accessMode">
+            <option value=""${rules.accessMode === "" ? " selected" : ""}>Heredar reglas globales</option>
+            <option value="blacklist"${rules.accessMode === "blacklist" ? " selected" : ""}>Lista negra del grupo</option>
+            <option value="allowlist"${rules.accessMode === "allowlist" ? " selected" : ""}>Lista blanca del grupo</option>
+          </select>
+        </div>
+        <div>
+          <label for="group-allow-message">Mensaje de lista blanca</label>
+          <input id="group-allow-message" name="allowlistMessage" maxlength="300" value="${esc(rules.allowlistMessage || "")}" placeholder="Este sitio no está permitido para tu grupo.">
+        </div>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label for="group-blocked">Sitios bloqueados del grupo</label>
+          <textarea id="group-blocked" name="blockedSites" placeholder="ejemplo.com | No permitido">${esc(blockedText)}</textarea>
+        </div>
+        <div>
+          <label for="group-allowed">Sitios permitidos (lista blanca)</label>
+          <textarea id="group-allowed" name="allowedSites" placeholder="classroom.google.com&#10;wikipedia.org">${esc((rules.allowedSites || []).join("\n"))}</textarea>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="scheduleEnabled"${schedule.enabled ? " checked" : ""}> Activar horario del grupo</label>
+      <div class="days">${dayLabels
+				.map(
+					([value, label]) =>
+						`<label class="day"><input type="checkbox" name="days" value="${value}"${schedule.days?.includes(value) ? " checked" : ""}> ${label}</label>`,
+				)
+				.join("")}</div>
+      <div class="field-grid">
+        <div><label for="group-start">Desde</label><input id="group-start" type="time" name="start" value="${esc(schedule.start)}"></div>
+        <div><label for="group-end">Hasta</label><input id="group-end" type="time" name="end" value="${esc(schedule.end)}"></div>
+      </div>
+      <div class="field-grid">
+        <div><label for="group-bandwidth">Ancho de banda (Kbps, 0 = heredar)</label><input id="group-bandwidth" name="bandwidthKbps" type="number" min="0" max="100000" step="250" value="${esc(rules.bandwidthKbps || 0)}"></div>
+        <div><label for="group-streams">Streams (0 = heredar)</label><input id="group-streams" name="maxStreams" type="number" min="0" max="128" value="${esc(rules.maxStreams || 0)}"></div>
+        <div><label for="group-connections">Conexiones Wisp (0 = heredar)</label><input id="group-connections" name="maxConnections" type="number" min="0" max="10" value="${esc(rules.maxConnections || 0)}"></div>
+      </div>
+      <p class="hint">Si activas la lista blanca sin añadir sitios, el grupo no podrá navegar. Los límites a 0 heredan el valor global.</p>
+      <button class="primary" type="submit" style="margin-top:12px">Guardar reglas del grupo</button>
+    </form>
+  </details>`
+			: '<p class="hint">Solo administradores y creador pueden editar las reglas de este grupo.</p>'
+	}
+  ${notice ? `<p class="msg ok" style="margin-top:12px">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error" style="margin-top:12px">${esc(error)}</p>` : ""}
+</div>
+
+<div class="card">
+  <h2>Miembros (${members.length})</h2>
+  <form id="group-bulk" method="post" action="/api/admin/groups/${encodeURIComponent(group.id)}/bulk" onsubmit="return confirm('¿Aplicar esta acción a los usuarios seleccionados?')">
+    <div class="filter" style="margin-bottom:12px">
+      <select name="action" aria-label="Acción masiva">
+        <option value="assign">Asignar a otro grupo</option>
+        <option value="remove">Quitar del grupo</option>
+        <option value="rules-on">Activar reglas del grupo</option>
+        <option value="rules-off">Desactivar reglas del grupo</option>
+        <option value="block">Bloquear</option>
+        <option value="unblock">Desbloquear</option>
+        <option value="kick">Echar / cerrar sesiones</option>
+      </select>
+      <select name="group" aria-label="Grupo de destino">
+        ${groups.map((item) => `<option value="${esc(item.id)}"${item.id === group.id ? " selected" : ""}>${esc(item.name)}</option>`).join("")}
+      </select>
+      <button class="small danger" type="submit">Aplicar a seleccionados</button>
+      <button class="small" type="button" onclick="document.querySelectorAll('[data-bulk]:not(:disabled)').forEach(c=>c.checked=true)">Seleccionar todos</button>
+    </div>
+  </form>
+  ${
+		members.length
+			? `<div class="scroll"><table>
+    <thead><tr><th></th><th>Usuario</th><th>Estado</th><th>Sesiones</th><th>Última web</th><th></th></tr></thead>
+    <tbody>${memberRows}</tbody>
+  </table></div>`
+			: '<p class="empty">Este grupo no tiene miembros.</p>'
+	}
+</div>
+<script>
+(() => {
+  if (location.hash === "#rules") document.querySelector("#rules details")?.setAttribute("open", "");
+})();
+</script>`;
+	return shell(`Grupo ${group.name} · Administración`, body, {
+		topbar: topbar(user),
+		wide: true,
+	});
+}
+
 export function groupOnboardingPage({
 	user,
 	groups = [],
@@ -2282,6 +2497,7 @@ export function adminPage({
       <strong class="user-name">${esc(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
       ${groupBadge(u.group)}
+      ${u.group && u.groupRules === false ? '<span class="badge">reglas de grupo off</span>' : ""}
       ${self ? '<span class="badge">tú</span>' : ""}
     </span>
     <span class="user-summary-meta">${self ? '<a class="small" href="/account">Mi cuenta</a>' : ""}${esc(reason)}</span>
@@ -2398,6 +2614,7 @@ export function adminPage({
       <strong class="user-name">${esc(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
       ${groupBadge(u.group)}
+      ${u.group && u.groupRules === false ? '<span class="badge">reglas de grupo off</span>' : ""}
       ${u.blocked ? '<span class="badge blocked">bloqueado</span>' : ""}
       ${tempBlocked ? `<span class="badge blocked">hasta ${esc(fmtDate(u.blockedUntil))}</span>` : ""}
       ${u.mustChangePassword ? '<span class="badge">cambio obligatorio</span>' : ""}
@@ -2420,6 +2637,8 @@ export function adminPage({
   <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/group" class="user-group-form">
     <label for="group-${esc(u.username)}">Grupo de ${esc(u.username)}</label>
     <select id="group-${esc(u.username)}" name="group">${groupOptions(u.group)}</select>
+    <input type="hidden" name="groupRulesPresent" value="1">
+    <label class="check" style="margin:0"><input type="checkbox" name="groupRules" value="1"${u.groupRules === false ? "" : " checked"}> Aplicar reglas del grupo</label>
     <button class="small" type="submit">Guardar grupo</button>
   </form>
   <div class="actions">
@@ -2475,6 +2694,10 @@ ${adminTabs("users", user.role)}
 						(group) => `<div class="group-row">
       <span class="badge group">${esc(group.name)}</span>
       <span class="muted">${groupCounts.get(group.id) || 0} usuario${groupCounts.get(group.id) === 1 ? "" : "s"}</span>
+      <span class="group-actions">
+        <a class="small" href="/admin/groups/${encodeURIComponent(group.id)}">Abrir panel</a>
+        ${canManage ? `<a class="small" href="/admin/groups/${encodeURIComponent(group.id)}#rules">Reglas</a>` : ""}
+      </span>
       ${
 				canManage
 					? `<form method="post" action="/api/admin/groups/${encodeURIComponent(group.id)}/delete" onsubmit="return confirm('¿Eliminar el grupo ${esc(group.name)}? Sus usuarios quedarán sin grupo.')">

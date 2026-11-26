@@ -90,6 +90,7 @@ function migrateUsers() {
 			schedule: null,
 			group: "",
 			groupOnboarded: false,
+			groupRules: true,
 			mfa: null,
 		};
 		for (const [key, value] of Object.entries(defaults)) {
@@ -190,6 +191,7 @@ export function listUsers() {
 				roles: Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role],
 				group: u.group || "",
 				groupOnboarded: !!u.groupOnboarded,
+				groupRules: u.groupRules !== false,
 				blocked: !!u.blocked,
 				blockedUntil: until,
 				blockMessage: u.blockMessage || "",
@@ -300,6 +302,7 @@ export function createUser(username, password, role) {
 		schedule: null,
 		group: "",
 		groupOnboarded: false,
+		groupRules: true,
 	};
 	save();
 	return {
@@ -309,6 +312,7 @@ export function createUser(username, password, role) {
 			roles,
 			group: "",
 			groupOnboarded: false,
+			groupRules: true,
 		},
 	};
 }
@@ -381,6 +385,16 @@ export function markGroupOnboarded(username) {
 	db.users[name].groupOnboarded = true;
 	save();
 	return { ok: true };
+}
+
+export function setUserGroupRules(username, enabled) {
+	const name = Object.keys(db.users).find(
+		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
+	);
+	if (!name) return { error: "notfound" };
+	db.users[name].groupRules = !!enabled;
+	save();
+	return { ok: true, groupRules: db.users[name].groupRules };
 }
 
 export function clearGroupAssignments(groupId) {

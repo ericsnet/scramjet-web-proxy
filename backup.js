@@ -94,6 +94,7 @@ function sanitizedUsers() {
 				: [],
 			group: user.group || "",
 			groupOnboarded: !!user.groupOnboarded,
+			groupRules: user.groupRules !== false,
 		};
 	}
 	return out;

@@ -34,6 +34,7 @@ import {
 	setBlockUntil,
 	setBlockMessage,
 	setUserGroup,
+	setUserGroupRules,
 	markGroupOnboarded,
 	clearGroupAssignments,
 	setNotes,
@@ -84,6 +85,7 @@ import {
 	vaultPage,
 	adminReportsPage,
 	groupOnboardingPage,
+	groupPanelPage,
 	specialistWorkspacePage,
 	templatesPage,
 	schedulesPage,
@@ -159,7 +161,13 @@ import {
 	deleteUserBookmarks,
 	exportBookmarks,
 } from "./bookmarks.js";
-import { listGroups, getGroup, createGroup, deleteGroup } from "./groups.js";
+import {
+	listGroups,
+	getGroup,
+	createGroup,
+	updateGroupRules,
+	deleteGroup,
+} from "./groups.js";
 import {
 	createBackup,
 	listBackups,
@@ -359,20 +367,46 @@ function wispUserKey(username) {
 	return String(username || "anónimo").toLowerCase().slice(0, 64);
 }
 
+function effectiveWispLimits(username) {
+	const user = getUser(username);
+	const group = groupRulesForUser(user);
+	const rules = group?.rules || {};
+	const settings = getSettings();
+	const choose = (override, fallback, min, max) => {
+		const value = Number(override) || 0;
+		if (!value) return fallback;
+		return Math.min(max, Math.max(min, value));
+	};
+	return {
+		bandwidthKbps: choose(
+			rules.bandwidthKbps,
+			Math.max(0, Number(settings.proxyBandwidthPerUserKbps) || 0),
+			256,
+			100000,
+		),
+		maxStreams: choose(
+			rules.maxStreams,
+			Math.max(8, Number(settings.proxyMaxStreamsPerUser) || 32),
+			8,
+			128,
+		),
+		maxConnections: choose(
+			rules.maxConnections,
+			Math.max(1, Number(settings.proxyMaxConnectionsPerUser) || 6),
+			1,
+			10,
+		),
+	};
+}
+
 function wispConnectionLimit(username) {
-	const max = Math.max(
-		1,
-		Math.min(10, Number(getSettings().proxyMaxConnectionsPerUser) || 6),
-	);
+	const max = effectiveWispLimits(username).maxConnections;
 	const key = wispUserKey(username);
 	return { allowed: (wispUserConnections.get(key) || 0) < max, key, max };
 }
 
 function wispStreamLimit(username) {
-	const max = Math.max(
-		8,
-		Math.min(128, Number(getSettings().proxyMaxStreamsPerUser) || 32),
-	);
+	const max = effectiveWispLimits(username).maxStreams;
 	const key = wispUserKey(username);
 	return { allowed: (wispUserStreams.get(key) || 0) < max, key, max };
 }
@@ -387,8 +421,8 @@ function wispStreamRemove(key) {
 	else wispUserStreams.delete(key);
 }
 
-async function throttleWisp(username, bytes) {
-	const kbps = Math.max(0, Number(getSettings().proxyBandwidthPerUserKbps) || 0);
+async function throttleWisp(username, bytes, bandwidthKbps = 0) {
+	const kbps = Math.max(0, Number(bandwidthKbps) || 0);
 	const amount = Math.max(0, Number(bytes) || 0);
 	if (!kbps || !amount) return;
 	const rate = kbps * 125; // Kbps -> bytes/s
@@ -417,25 +451,26 @@ async function throttleWisp(username, bytes) {
 	await task;
 }
 
-function patchWispStream(stream) {
+function patchWispStream(stream, limits = null) {
 	const socket = stream?.socket;
 	if (!socket || socket.__wispRatePatched) return;
 	socket.__wispRatePatched = true;
 	const username = stream.conn?.username;
+	const bandwidthKbps = limits?.bandwidthKbps || 0;
 	const recv = typeof socket.recv === "function" ? socket.recv.bind(socket) : null;
 	const send = typeof socket.send === "function" ? socket.send.bind(socket) : null;
 	if (recv) {
 		socket.recv = async (...args) => {
 			const data = await recv(...args);
 			const bytes = data?.length || data?.byteLength || 0;
-			if (bytes) await throttleWisp(username, bytes);
+			if (bytes) await throttleWisp(username, bytes, bandwidthKbps);
 			return data;
 		};
 	}
 	if (send) {
 		socket.send = async (data) => {
 			const bytes = data?.length || data?.byteLength || 0;
-			if (bytes) await throttleWisp(username, bytes);
+			if (bytes) await throttleWisp(username, bytes, bandwidthKbps);
 			return send(data);
 		};
 	}
@@ -460,6 +495,7 @@ function instrumentWispTraffic() {
 	};
 	const createStream = connection.create_stream;
 	connection.create_stream = function (streamId, type, hostname, port) {
+		const limits = effectiveWispLimits(this.username);
 		const limit = wispStreamLimit(this.username);
 		if (!limit.allowed) {
 			metric("wisp_streams_throttled_total");
@@ -483,7 +519,7 @@ function instrumentWispTraffic() {
 		try {
 			wispOpen(this, streamId, type, hostname, port);
 		} catch {}
-		patchWispStream(result);
+		patchWispStream(result, limits);
 		return result;
 	};
 	const closeStream = connection.close_stream;
@@ -800,7 +836,7 @@ function requireAuth(req, res, next) {
 
 	if (
 		!isAdminRole(session.role) &&
-		!isWithinSchedule(getUser(session.username), settings.timezone)
+		!isUserScheduleOpen(getUser(session.username), settings.timezone)
 	) {
 		if (req.path.startsWith("/api/")) {
 			return res.status(403).json({ error: "outside_hours" });
@@ -1356,9 +1392,28 @@ function matchSite(host, list) {
 	return null;
 }
 
+function groupForUser(user) {
+	return user?.group ? getGroup(user.group) : null;
+}
+
+function groupRulesForUser(user) {
+	return user?.groupRules === false ? null : groupForUser(user);
+}
+
+function isUserScheduleOpen(user, timezone) {
+	const group = groupRulesForUser(user);
+	const groupSchedule = group?.rules?.schedule || null;
+	return (
+		isWithinSchedule(user, timezone) &&
+		isWithinSchedule({ schedule: groupSchedule }, timezone)
+	);
+}
+
 function checkHostPolicy(user, hostname) {
 	if (!user || isAdminRole(user.role)) return { blocked: false };
 	const settings = getSettings();
+	const group = groupRulesForUser(user);
+	const rules = group?.rules || {};
 	const host = String(hostname || "").toLowerCase().replace(/\.$/, "");
 	if (!host) return { blocked: false };
 
@@ -1381,18 +1436,30 @@ function checkHostPolicy(user, hostname) {
 				message: settings.allowlistMessage || "Este sitio no está permitido.",
 			};
 		}
-		return { blocked: false };
 	}
 
-	const globalMatch = matchSite(host, settings.blockedSites);
-	if (globalMatch) {
+	if (rules.accessMode === "allowlist") {
+		const allowed = rules.allowedSites || [];
+		if (!allowed.length || !matchSite(host, allowed)) {
+			return {
+				blocked: true,
+				reason: "group-allowlist",
+				message:
+					rules.allowlistMessage ||
+					"Este sitio no está permitido para tu grupo.",
+			};
+		}
+	}
+
+	const groupMatch = matchSite(host, rules.blockedSites);
+	if (groupMatch) {
 		return {
 			blocked: true,
-			reason: "blocked",
+			reason: "group",
 			message:
-				(settings.siteMessages || {})[globalMatch] ||
+				(rules.siteMessages || {})[groupMatch] ||
 				settings.defaultBlockMessage ||
-				"Este sitio está bloqueado.",
+				"Este sitio está bloqueado para tu grupo.",
 		};
 	}
 
@@ -1403,6 +1470,20 @@ function checkHostPolicy(user, hostname) {
 			reason: "user",
 			message:
 				(user.siteMessages || {})[userMatch] ||
+				settings.defaultBlockMessage ||
+				"Este sitio está bloqueado.",
+		};
+	}
+
+	if (settings.accessMode === "allowlist") return { blocked: false };
+
+	const globalMatch = matchSite(host, settings.blockedSites);
+	if (globalMatch) {
+		return {
+			blocked: true,
+			reason: "blocked",
+			message:
+				(settings.siteMessages || {})[globalMatch] ||
 				settings.defaultBlockMessage ||
 				"Este sitio está bloqueado.",
 		};
@@ -1434,7 +1515,7 @@ function checkUrlPolicy(user, value) {
 			message: settings.quarantineMessage || "El proxy está en cuarentena.",
 		};
 	}
-	if (!isWithinSchedule(user, settings.timezone)) {
+	if (!isUserScheduleOpen(user, settings.timezone)) {
 		return {
 			blocked: true,
 			reason: "schedule",
@@ -1541,6 +1622,11 @@ const ADMIN_ERRORS = {
 	"group-limit": "Has alcanzado el máximo de grupos.",
 	"group-notfound": "Ese grupo ya no existe.",
 	"group-forbidden": "No tienes permisos para gestionar ese grupo.",
+	"schedule-invalid": "El horario del grupo no es válido.",
+	"limit-invalid": "Alguno de los límites del grupo no es válido.",
+	"sites-invalid": "Revisa los sitios: hay alguna entrada no válida.",
+	"bulk-invalid": "Acción masiva no válida.",
+	"bulk-empty": "Selecciona al menos un usuario.",
 	"creator-protected": "La cuenta del creador está protegida y no puede modificarse.",
 	protected: "La cuenta del creador está protegida y no puede modificarse.",
 	forbidden: "No tienes permisos sobre un administrador.",
@@ -1560,6 +1646,7 @@ const ADMIN_OK = {
 	"group-created": "Grupo creado.",
 	"group-deleted": "Grupo eliminado. Sus usuarios han quedado sin grupo.",
 	group: "Grupo del usuario actualizado.",
+	rules: "Reglas del grupo guardadas.",
 	notes: "Notas guardadas.",
 	blockmessage: "Mensaje de bloqueo guardado.",
 	sites: "Sitios del usuario actualizados.",
@@ -1858,7 +1945,7 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 	}
 	if (
 		!isAdminRole(user.role) &&
-		!isWithinSchedule(getUser(user.username), settings.timezone)
+		!isUserScheduleOpen(getUser(user.username), settings.timezone)
 	) {
 		addAudit({
 			actor: user.username,
@@ -2000,7 +2087,7 @@ app.post("/api/login/mfa", sameOrigin, async (req, res) => {
 		res.setHeader("Set-Cookie", clearMfaCookie(req));
 		return res.redirect(303, `/login?error=maintenance&next=${encodeURIComponent(entry.next)}`);
 	}
-	if (!isAdminRole(user.role) && !isWithinSchedule(getUser(user.username), settings.timezone)) {
+	if (!isAdminRole(user.role) && !isUserScheduleOpen(getUser(user.username), settings.timezone)) {
 		destroyMfaPending(req);
 		res.setHeader("Set-Cookie", clearMfaCookie(req));
 		return res.redirect(303, "/denied?reason=schedule");
@@ -2086,6 +2173,7 @@ app.post("/api/account/group", sameOrigin, (req, res) => {
 		);
 	}
 	setUserGroup(user.username, group.id);
+	closeUserConnections(user.username);
 	audit(req, "group.self", group.name);
 	res.redirect(303, next);
 });
@@ -3994,7 +4082,7 @@ app.get("/admin/users.csv", requireAdmin, (req, res) => {
 	};
 	const users = hideCreatorData(req, listUsers(), (entry) => entry.username);
 	const lines = [
-		"usuario,roles,rol_principal,grupo,bloqueado,bloqueado_hasta,cambio_obligatorio,creado,ultimo_login,idioma",
+		"usuario,roles,rol_principal,grupo,reglas_grupo,bloqueado,bloqueado_hasta,cambio_obligatorio,creado,ultimo_login,idioma",
 	];
 	for (const entry of users) {
 		lines.push(
@@ -4003,6 +4091,7 @@ app.get("/admin/users.csv", requireAdmin, (req, res) => {
 				(entry.roles || [entry.role]).join(" "),
 				entry.role,
 				getGroup(entry.group)?.name || "",
+				entry.groupRules === false ? "no" : "si",
 				entry.blocked ? "si" : "no",
 				entry.blockedUntil || "",
 				entry.mustChangePassword ? "si" : "no",
@@ -4624,9 +4713,159 @@ app.post("/api/admin/groups/:id/delete", requireAdmin, sameOrigin, (req, res) =>
 	if (!group) return res.redirect(303, "/admin?error=group-notfound");
 	const result = deleteGroup(group.id);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
+	closeGroupConnections(group.id);
 	const cleared = clearGroupAssignments(group.id);
 	audit(req, "group.delete", group.name, `${cleared} usuarios sin grupo`);
 	res.redirect(303, "/admin?ok=group-deleted");
+});
+
+function closeGroupConnections(groupId) {
+	let count = 0;
+	for (const member of listUsers()) {
+		if (member.group !== groupId) continue;
+		closeUserConnections(member.username);
+		count++;
+	}
+	return count;
+}
+
+app.get("/admin/groups/:id", requireStaff, (req, res) => {
+	const group = getGroup(req.params.id);
+	if (!group) return res.redirect(303, "/admin?error=group-notfound");
+	let members = listUsers().filter((member) => member.group === group.id);
+	if (req.user.role !== "creator") {
+		members = members.filter((member) => member.role !== "creator");
+	}
+	const names = new Set(members.map((member) => member.username.toLowerCase()));
+	const sessions = listSessions().filter((session) =>
+		names.has(String(session.username || "").toLowerCase()),
+	);
+	const activity = getActivity({ limit: 1000 })
+		.filter((entry) => names.has(String(entry.username || "").toLowerCase()))
+		.slice(0, 50);
+	const notice =
+		req.query.ok === "rules"
+			? ADMIN_OK.rules
+			: req.query.ok === "bulk"
+				? `Acción masiva aplicada a ${Math.max(0, Number(req.query.count) || 0)} usuario(s).`
+				: "";
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		groupPanelPage({
+			user: req.user,
+			group,
+			members,
+			sessions,
+			activity,
+			groups: listGroups(),
+			canEditRules: isAdminRole(req.user.role),
+			notice,
+			error: ADMIN_ERRORS[req.query.error] || "",
+		}),
+	);
+});
+
+app.post("/api/admin/groups/:id/rules", requireAdmin, sameOrigin, (req, res) => {
+	const group = getGroup(req.params.id);
+	if (!group) return res.redirect(303, "/admin?error=group-notfound");
+	const result = updateGroupRules(group.id, req.body, req.user.username);
+	if (result.error) {
+		return res.redirect(303, `/admin/groups/${group.id}?error=${result.error}`);
+	}
+	const closed = closeGroupConnections(group.id);
+	audit(req, "group.rules", group.name, `${closed} conexiones reiniciadas`);
+	res.redirect(303, `/admin/groups/${group.id}?ok=rules`);
+});
+
+app.post("/api/admin/groups/:id/bulk", requireStaff, sameOrigin, (req, res) => {
+	const group = getGroup(req.params.id);
+	if (!group) return res.redirect(303, "/admin?error=group-notfound");
+	const action = String(req.body.action || "");
+	if (!["assign", "remove", "rules-on", "rules-off", "block", "unblock", "kick"].includes(action)) {
+		return res.redirect(303, `/admin/groups/${group.id}?error=bulk-invalid`);
+	}
+	const names = [
+		...new Set(
+			(Array.isArray(req.body.usernames)
+				? req.body.usernames
+				: req.body.usernames
+					? [req.body.usernames]
+					: []
+			)
+				.map((name) => String(name || "").trim())
+				.filter(Boolean),
+		),
+	].slice(0, 200);
+	if (!names.length) {
+		return res.redirect(303, `/admin/groups/${group.id}?error=bulk-empty`);
+	}
+	const targetGroup =
+		action === "assign" ? getGroup(String(req.body.group || "")) : null;
+	if (action === "assign" && !targetGroup) {
+		return res.redirect(303, `/admin/groups/${group.id}?error=group-notfound`);
+	}
+	let applied = 0;
+	let skipped = 0;
+	for (const name of names) {
+		const target = getUser(name);
+		if (
+			!target ||
+			target.role === "creator" ||
+			target.username.toLowerCase() === req.user.username.toLowerCase() ||
+			!canManageRole(req.user.role, target.role)
+		) {
+			skipped++;
+			continue;
+		}
+		if (action === "assign") {
+			const result = setUserGroup(target.username, targetGroup.id);
+			if (result.error) {
+				skipped++;
+				continue;
+			}
+			closeUserConnections(target.username);
+		} else if (action === "remove") {
+			const result = setUserGroup(target.username, "");
+			if (result.error) {
+				skipped++;
+				continue;
+			}
+			closeUserConnections(target.username);
+		} else if (action === "rules-on" || action === "rules-off") {
+			const result = setUserGroupRules(target.username, action === "rules-on");
+			if (result.error) {
+				skipped++;
+				continue;
+			}
+			closeUserConnections(target.username);
+		} else if (action === "block") {
+			const result = setBlocked(target.username, true, target.blockMessage || "");
+			if (result.error) {
+				skipped++;
+				continue;
+			}
+			closeUserConnections(target.username);
+			notifyUserLogout(target.username, "blocked");
+		} else if (action === "unblock") {
+			const result = setBlocked(target.username, false, "");
+			if (result.error) {
+				skipped++;
+				continue;
+			}
+		} else if (action === "kick") {
+			revokeUserSessions(target.username);
+			closeUserConnections(target.username);
+			notifyUserLogout(target.username, "forced");
+		}
+		applied++;
+	}
+	audit(
+		req,
+		"group.bulk",
+		group.name,
+		`${action}: ${applied} aplicados, ${skipped} omitidos`,
+	);
+	res.redirect(303, `/admin/groups/${group.id}?ok=bulk&count=${applied}`);
 });
 
 app.post("/api/admin/users/:username/group", requireStaff, sameOrigin, (req, res) => {
@@ -4640,7 +4879,18 @@ app.post("/api/admin/users/:username/group", requireStaff, sameOrigin, (req, res
 	if (groupId && !group) return res.redirect(303, "/admin?error=group-notfound");
 	const result = setUserGroup(target.username, group?.id || "");
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
-	audit(req, "user.group", target.username, group ? group.name : "sin grupo");
+	const applyGroupRules =
+		req.body.groupRules === undefined && req.body.groupRulesPresent !== "1"
+			? target.groupRules !== false
+			: ["on", "1", "true"].includes(String(req.body.groupRules));
+	setUserGroupRules(target.username, applyGroupRules);
+	closeUserConnections(target.username);
+	audit(
+		req,
+		"user.group",
+		target.username,
+		`${group ? group.name : "sin grupo"} · reglas ${applyGroupRules ? "activadas" : "desactivadas"}`,
+	);
 	res.redirect(303, "/admin?ok=group");
 });
 
@@ -4910,7 +5160,7 @@ setInterval(() => {
 		let close = false;
 		for (const entry of set) {
 			const user = getUser(entry.username);
-			if (user && !isAdminRole(user.role) && !isWithinSchedule(user, tz)) {
+			if (user && !isAdminRole(user.role) && !isUserScheduleOpen(user, tz)) {
 				close = true;
 			}
 		}
@@ -4962,7 +5212,7 @@ server.on("upgrade", (req, socket, head) => {
 		(settings.maintenanceMode && !isAdminRole(session.role)) ||
 		session.mustChangePassword ||
 		(!isAdminRole(session.role) &&
-			!isWithinSchedule(currentUser, settings.timezone))
+			!isUserScheduleOpen(currentUser, settings.timezone))
 	) {
 		if (settings.quarantineMode) {
 			if (session) {
