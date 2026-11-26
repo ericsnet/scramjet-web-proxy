@@ -226,8 +226,13 @@ export function listChatChannels(username) {
 			};
 		})
 		.sort((a, b) => {
-			if (a.type === "public" && b.type !== "public") return -1;
-			if (b.type === "public" && a.type !== "public") return 1;
+			const rank = (channel) =>
+				channel.type === "class" ? 0 : channel.id === GENERAL ? 1 : 2;
+			const difference = rank(a) - rank(b);
+			if (difference) return difference;
+			if (a.type === "class" && b.type === "class") {
+				return String(a.name).localeCompare(String(b.name), "es");
+			}
 			return new Date(b.lastAt || 0) - new Date(a.lastAt || 0);
 		});
 }

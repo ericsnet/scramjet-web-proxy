@@ -664,11 +664,23 @@
 							: "Chat privado";
 		}
 	}
+	function orderedChannels() {
+		const rank = (channel) =>
+			channel.type === "class" ? 0 : channel.id === "general" ? 1 : 2;
+		return [...channelsCache].sort((a, b) => {
+			const difference = rank(a) - rank(b);
+			if (difference) return difference;
+			if (a.type === "class" && b.type === "class") {
+				return String(a.name).localeCompare(String(b.name), "es");
+			}
+			return 0;
+		});
+	}
 	function syncMobileChannels() {
 		const select = document.getElementById("chat-mobile-channel");
 		if (!select) return;
 		select.textContent = "";
-		for (const channel of channelsCache) {
+		for (const channel of orderedChannels()) {
 			const option = document.createElement("option");
 			option.value = channel.id;
 			option.textContent = `${channel.name}${channel.unread ? ` (${channel.unread})` : ""}`;
@@ -679,7 +691,7 @@
 	function renderChannelList() {
 		if (!channelList) return;
 		channelList.textContent = "";
-		for (const channel of channelsCache) {
+		for (const channel of orderedChannels()) {
 			const button = document.createElement("button");
 			button.type = "button";
 			button.className = `chat-channel-item${channel.id === channelId ? " active" : ""}`;

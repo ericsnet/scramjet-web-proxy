@@ -4913,7 +4913,9 @@ app.post("/api/admin/groups/:id/bulk", requireStaff, sameOrigin, (req, res) => {
 app.post("/api/admin/users/:username/group", requireStaff, sameOrigin, (req, res) => {
 	const target = getUser(req.params.username);
 	if (!target) return res.redirect(303, "/admin?error=notfound");
-	if (!canManageRole(req.user.role, target.role)) {
+	const self = target.username.toLowerCase() === req.user.username.toLowerCase();
+	const canSelfAssign = self && req.user.role === "creator";
+	if (!canSelfAssign && !canManageRole(req.user.role, target.role)) {
 		return res.redirect(303, "/admin?error=group-forbidden");
 	}
 	const groupId = String(req.body.group || "").trim();
