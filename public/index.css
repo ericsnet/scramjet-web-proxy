@@ -1007,6 +1007,18 @@ footer a:hover {
 	color: #fff;
 }
 
+.fullscreen-panic {
+	display: none !important;
+}
+
+#sj-frame-wrapper.immersive .fullscreen-panic {
+	display: block !important;
+}
+
+#sj-frame-wrapper.immersive ~ .panic-button-form {
+	display: none !important;
+}
+
 @media (max-width: 640px) {
 	.panic-button-form {
 		left: 12px;
