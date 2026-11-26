@@ -105,6 +105,14 @@ export function updateReport(id, { status = "", adminNote = "", by = "" } = {}) 
 	return { report: { ...report } };
 }
 
+export function deleteReport(id) {
+	const index = db.reports.findIndex((item) => item.id === String(id || ""));
+	if (index < 0) return { error: "notfound" };
+	const [removed] = db.reports.splice(index, 1);
+	save();
+	return { report: { ...removed } };
+}
+
 export function countOpenReports() {
 	return db.reports.filter((report) => report.status === "open").length;
 }

@@ -251,8 +251,45 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .report-detail-body{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.55;max-width:760px}
 .report-detail-body p{margin:4px 0}
 .report-admin-form{display:flex;flex-direction:column;gap:5px;min-width:180px}
+.report-title-link{color:#dbeafe;font-weight:600;text-decoration:none}
+.report-title-link:hover{text-decoration:underline}
+.report-detail-card h1{margin:10px 0 6px}
+.report-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.report-detail-id{color:#8298af;font-size:11px;border:1px solid var(--border);border-radius:999px;padding:4px 8px}
+.report-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:10px 0}
+.report-detail-grid section{padding:12px;border:1px solid var(--border);border-radius:11px;background:rgba(255,255,255,.02);min-width:0}
+.report-detail-grid h2{margin-top:0}
+.report-long-text{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted);line-height:1.65;font-size:13.5px}
+.report-management{margin-top:10px;padding-top:14px;border-top:1px solid var(--border)}
+.report-management textarea{min-height:90px}
+@media (max-width:700px){.report-detail-grid{grid-template-columns:1fr}}
 .report-admin-form select,.report-admin-form input{font-size:12px;padding:6px 8px}
 .tool-checklist{margin:0;padding-left:20px;color:var(--muted);line-height:1.8;font-size:13.5px}
+.tool-tools{margin-bottom:14px}
+.tool-inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}
+.tool-inline label{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin:0}
+.tool-inline input[type="color"]{width:40px;height:32px;padding:2px;border-radius:7px;border:1px solid var(--border);background:transparent}
+.tool-inline input[type="text"],.tool-inline input:not([type]){min-width:220px}
+.tool-result{margin:8px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.tool-result.ok{color:#86efac}
+.tool-result.warn{color:#fde68a}
+.tool-output{margin:10px 0 0;padding:10px 11px;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.18);color:#bfdbfe;font-family:"JetBrains Mono",monospace;font-size:11.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
+.tool-output li{list-style:none;margin:3px 0}
+.tool-output li.warn{color:#fde68a}
+.contrast-preview{margin-top:10px;padding:22px;border-radius:10px;border:1px solid var(--border);font-size:18px;font-weight:600;text-align:center}
+.qa-tests{display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.qa-test{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:6px 10px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02)}
+.qa-test-info{min-width:0;display:flex;flex-direction:column;gap:2px}
+.qa-test-info strong{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qa-test-info small{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.qa-status-buttons{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end}
+.qa-status{padding:3px 6px!important;font-size:10px!important;border-radius:6px!important}
+.qa-status.active.pending{border-color:#475569!important;background:rgba(148,163,184,.18)!important;color:#e2e8f0!important}
+.qa-status.active.pass{border-color:#166534!important;background:rgba(74,222,128,.16)!important;color:#bbf7d0!important}
+.qa-status.active.fail{border-color:#7f1d1d!important;background:rgba(248,113,113,.18)!important;color:#fecaca!important}
+.qa-status.active.blocked{border-color:#a16207!important;background:rgba(251,191,36,.16)!important;color:#fde68a!important}
+.qa-note{grid-column:1/-1;width:100%;padding:6px 8px;font-size:11.5px;border-radius:7px}
+@media (max-width:700px){.qa-test{grid-template-columns:1fr}.qa-status-buttons{justify-content:flex-start}}
 .design-swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
 .design-swatch{border:1px solid var(--border);border-radius:10px;padding:8px;background:rgba(255,255,255,.02);display:flex;flex-direction:column;gap:4px}
 .design-swatch span{display:block;height:34px;border-radius:7px;border:1px solid rgba(255,255,255,.08)}
@@ -2893,7 +2930,7 @@ export function monitorPage({ user, snapshot = {} } = {}) {
       <span class="badge role-${esc(entry.role)}">${esc(roleLabel(entry.role))}</span>
       <span class="badge ${entry.online ? "monitor-online" : "monitor-offline"}">${entry.online ? "en línea" : "inactivo"}</span>
     </div>
-    <span class="monitor-time">${esc(fmtDate(entry.lastSeenAt))}</span>
+    <span class="monitor-time" title="Última actividad">${esc(fmtDate(entry.lastActiveAt || entry.lastSeenAt))}</span>
   </div>
   <div class="monitor-current">
     <span class="monitor-label">Última web</span>
@@ -3553,17 +3590,7 @@ function reportTable(reports, { admin = false } = {}) {
     </details>
   </td>
   <td>${reportStatusBadge(report.status)}</td>
-  ${
-		admin
-			? `<td><form method="post" action="/api/admin/reports/${encodeURIComponent(report.id)}" class="report-admin-form">
-      <select name="status" aria-label="Estado">
-        ${Object.entries(REPORT_STATUS_LABELS).map(([value, label]) => `<option value="${value}"${report.status === value ? " selected" : ""}>${label}</option>`).join("")}
-      </select>
-      <input name="note" maxlength="2000" value="${esc(report.adminNote || "")}" placeholder="Nota interna">
-      <button class="small" type="submit">Guardar</button>
-    </form></td>`
-			: ""
-	}
+  ${admin ? `<td><a class="small" href="/admin/reports/${encodeURIComponent(report.id)}">Abrir ficha</a></td>` : ""}
 </tr>`,
 		)
 		.join("");
@@ -3605,6 +3632,59 @@ ${adminTabs("reports", user.role)}
   ${reportTable(reports, { admin: true })}
 </div>`;
 	return shell("Informes · Administración", body, { topbar: topbar(user) });
+}
+
+export function adminReportDetailPage({ user, report, notice = "", error = "" } = {}) {
+	const body = `
+${adminTabs("reports", user.role)}
+<div class="card report-detail-card">
+  <p><a class="small" href="/admin/reports">← Volver a informes</a></p>
+  <div class="report-detail-head">
+    <div>
+      <h1>${esc(report.title)}</h1>
+      <p class="muted">Enviado por <strong>${esc(report.createdBy)}</strong> · ${esc(fmtDate(report.createdAt))}${report.updatedAt ? ` · actualizado ${esc(fmtDate(report.updatedAt))}` : ""}</p>
+      <div class="actions">
+        <span class="badge report-type-${esc(report.type)}">${esc(REPORT_TYPE_LABELS[report.type] || report.type)}</span>
+        <span class="badge report-severity-${esc(report.severity)}">${esc(REPORT_SEVERITY_LABELS[report.severity] || report.severity)}</span>
+        ${reportStatusBadge(report.status)}
+      </div>
+    </div>
+    <span class="report-detail-id mono">#${esc(report.id)}</span>
+  </div>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <div class="report-detail-grid">
+    <section>
+      <h2>Zona / página</h2>
+      <p>${esc(report.area || "—")}</p>
+      ${report.url ? `<p class="mono">${esc(report.url)}</p>` : ""}
+    </section>
+    <section>
+      <h2>Navegador / dispositivo</h2>
+      <p>${esc(report.browser || "—")}</p>
+    </section>
+  </div>
+  <h2>Qué falla</h2>
+  <p class="report-long-text">${esc(report.description)}</p>
+  ${report.steps ? `<h2>Pasos para reproducirlo</h2><p class="report-long-text">${esc(report.steps)}</p>` : ""}
+  <div class="report-detail-grid">
+    <section><h2>Resultado esperado</h2><p class="report-long-text">${esc(report.expected || "—")}</p></section>
+    <section><h2>Resultado real</h2><p class="report-long-text">${esc(report.actual || "—")}</p></section>
+  </div>
+  <h2>Gestión</h2>
+  <form method="post" action="/api/admin/reports/${encodeURIComponent(report.id)}" class="report-management">
+    <label for="report-admin-note">Nota interna</label>
+    <textarea id="report-admin-note" name="note" maxlength="2000" placeholder="Qué se ha hecho, quién lo revisa, etc.">${esc(report.adminNote || "")}</textarea>
+    <div class="actions">
+      <button class="small" type="submit" name="action" value="save">Guardar nota</button>
+      <button class="small" type="submit" name="action" value="triaged">Marcar triado</button>
+      <button class="small" type="submit" name="action" value="in_progress">Marcar en curso</button>
+      <button class="small" type="submit" name="action" value="fixed" onclick="return confirm('¿Marcar como corregido? El informe se eliminará.')">Corregido y eliminar</button>
+      <button class="small danger" type="submit" name="action" value="dismissed" onclick="return confirm('¿Descartar el informe? Se eliminará.')">Descartar y eliminar</button>
+    </div>
+  </form>
+</div>`;
+	return shell(`Informe · ${report.title}`, body, { topbar: topbar(user), wide: true });
 }
 
 const TOOL_CONFIG = {
@@ -3703,6 +3783,96 @@ export function specialistWorkspacePage({
     <span class="badge report-status-open">Abierto</span>
   </div>`
 			: "";
+	let toolPanel = "";
+	let toolScript = "";
+	if (tool === "designer") {
+		toolPanel = `<div class="grid tool-tools">
+  <div class="card">
+    <h2>Comprobador de contraste</h2>
+    <p class="muted">Calcula el contraste WCAG entre texto y fondo.</p>
+    <div class="tool-inline">
+      <label>Texto <input type="color" id="design-fg" value="#e5edf7"></label>
+      <label>Fondo <input type="color" id="design-bg" value="#0b1017"></label>
+    </div>
+    <div class="contrast-preview" id="design-contrast-preview">Texto de ejemplo</div>
+    <p class="tool-result" id="design-contrast-result"></p>
+  </div>
+  <div class="card">
+    <h2>Paleta a partir de un color</h2>
+    <div class="tool-inline">
+      <label>Color base <input type="color" id="design-palette-base" value="#3b82f6"></label>
+      <button class="small" type="button" id="design-palette-copy">Copiar CSS</button>
+    </div>
+    <div class="design-swatches" id="design-palette"></div>
+    <pre class="tool-output" id="design-palette-css"></pre>
+  </div>
+</div>`;
+		toolScript = '<script src="/design-tools.js" defer></script>';
+	} else if (tool === "pentester") {
+		toolPanel = `<div class="grid tool-tools">
+  <div class="card">
+    <h2>Analizador de cabeceras</h2>
+    <p class="muted">Pega las cabeceras de una respuesta HTTP y revisa las protecciones.</p>
+    <textarea id="pentest-headers" style="min-height:130px" placeholder="HTTP/1.1 200 OK&#10;content-type: text/html&#10;strict-transport-security: max-age=..."></textarea>
+    <button class="small primary-small" type="button" id="pentest-headers-btn">Analizar cabeceras</button>
+    <pre class="tool-output" id="pentest-headers-result"></pre>
+  </div>
+  <div class="card">
+    <h2>Inspector JWT</h2>
+    <p class="muted">Decodifica header y payload. No verifica la firma.</p>
+    <textarea id="pentest-jwt" style="min-height:130px" placeholder="eyJhbGciOi..."></textarea>
+    <button class="small primary-small" type="button" id="pentest-jwt-btn">Decodificar JWT</button>
+    <pre class="tool-output" id="pentest-jwt-result"></pre>
+  </div>
+</div>
+<div class="grid tool-tools">
+  <div class="card">
+    <h2>Analizador de URL</h2>
+    <div class="tool-inline">
+      <input id="pentest-url" placeholder="https://ejemplo.com/ruta?x=1">
+      <button class="small" type="button" id="pentest-url-btn">Analizar</button>
+    </div>
+    <ul class="tool-output" id="pentest-url-result"></ul>
+  </div>
+  <div class="card">
+    <h2>Hash y codificación</h2>
+    <textarea id="pentest-hash-input" style="min-height:80px" placeholder="Texto…"></textarea>
+    <div class="tool-inline">
+      <select id="pentest-hash-alg">
+        <option value="SHA-256">SHA-256</option>
+        <option value="SHA-1">SHA-1</option>
+        <option value="SHA-512">SHA-512</option>
+      </select>
+      <button class="small" type="button" id="pentest-hash-btn">Calcular</button>
+      <button class="small" type="button" id="pentest-b64-btn">Base64</button>
+    </div>
+    <pre class="tool-output" id="pentest-hash-result"></pre>
+  </div>
+</div>`;
+		toolScript = '<script src="/pentest-tools.js" defer></script>';
+	} else if (tool === "qa") {
+		toolPanel = `<div class="grid tool-tools">
+  <div class="card">
+    <h2>Banco de pruebas</h2>
+    <p class="muted">Marca cada caso como pendiente, pasa, falla o bloqueado. Se guarda en este navegador.</p>
+    <div id="qa-tests" class="qa-tests"></div>
+    <form id="qa-add-form" class="tool-inline">
+      <input id="qa-new-title" maxlength="120" placeholder="Nuevo caso de prueba…">
+      <button class="small" type="submit">Añadir caso</button>
+    </form>
+    <div class="actions">
+      <button class="small" type="button" id="qa-reset">Restablecer banco</button>
+      <button class="small" type="button" id="qa-export">Exportar JSON</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Entorno de prueba</h2>
+    <pre class="tool-output" id="qa-env"></pre>
+    <button class="small" type="button" id="qa-copy-env">Copiar entorno</button>
+  </div>
+</div>`;
+		toolScript = '<script src="/qa-tools.js" defer></script>';
+	}
 	const body = `
 ${toolTabs(tool, user)}
 <div class="card">
@@ -3717,6 +3887,7 @@ ${toolTabs(tool, user)}
 </div>
 ${stats}
 ${designSwatches ? `<div class="card">${designSwatches}</div>` : ""}
+${toolPanel}
 <div class="grid">
   <div class="card">
     <h2>Checklist</h2>
@@ -3726,7 +3897,8 @@ ${designSwatches ? `<div class="card">${designSwatches}</div>` : ""}
     <h2>Últimos informes</h2>
     ${reportTable(reports.slice(0, 5))}
   </div>
-</div>`;
+</div>
+${toolScript}`;
 	return shell(`${config.title} · Herramientas`, body, { topbar: topbar(user), wide: true });
 }
 

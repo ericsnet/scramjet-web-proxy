@@ -48,7 +48,7 @@
       <span class="badge role-${esc(entry.role)}">${esc(roleLabel(entry.role))}</span>
       <span class="badge ${entry.online ? "monitor-online" : "monitor-offline"}">${entry.online ? "en línea" : "inactivo"}</span>
     </div>
-    <span class="monitor-time">${esc(fullDate(entry.lastSeenAt))}</span>
+    <span class="monitor-time" title="Última actividad">${esc(fullDate(entry.lastActiveAt || entry.lastSeenAt))}</span>
   </div>
   <div class="monitor-current">
     <span class="monitor-label">Última web</span>

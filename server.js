@@ -77,6 +77,7 @@ import {
 	systemPage,
 	adminLogsPage,
 	reportsPage,
+	adminReportDetailPage,
 	vaultPage,
 	adminReportsPage,
 	specialistWorkspacePage,
@@ -131,6 +132,7 @@ import {
 	createReport,
 	getReport,
 	updateReport,
+	deleteReport,
 	countOpenReports,
 } from "./reports.js";
 import {
@@ -764,7 +766,7 @@ function chatOnlineCount() {
 	const cutoff = Date.now() - 5 * 60 * 1000;
 	const users = new Set();
 	for (const session of listSessions()) {
-		const seen = new Date(session.lastSeenAt).getTime();
+		const seen = new Date(session.lastActiveAt || session.lastSeenAt).getTime();
 		if (Number.isFinite(seen) && seen >= cutoff) {
 			users.add(String(session.username).toLowerCase());
 		}
@@ -2669,6 +2671,25 @@ app.get("/admin/reports", requireCreator, (req, res) => {
 			user: req.user,
 			reports: listReports({ status, limit: 500 }),
 			status,
+			notice:
+				req.query.ok === "updated"
+					? "Informe actualizado."
+					: req.query.ok === "deleted"
+						? "Informe eliminado."
+						: "",
+			error: req.query.error === "notfound" ? "El informe ya no existe." : "",
+		}),
+	);
+});
+
+app.get("/admin/reports/:id", requireCreator, (req, res) => {
+	const report = getReport(req.params.id);
+	if (!report) return res.redirect(303, "/admin/reports?error=notfound");
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		adminReportDetailPage({
+			user: req.user,
+			report,
 			notice: req.query.ok === "updated" ? "Informe actualizado." : "",
 			error: req.query.error === "notfound" ? "El informe ya no existe." : "",
 		}),
@@ -2676,14 +2697,34 @@ app.get("/admin/reports", requireCreator, (req, res) => {
 });
 
 app.post("/api/admin/reports/:id", requireCreator, sameOrigin, (req, res) => {
-	const result = updateReport(req.params.id, {
-		status: req.body.status,
+	const report = getReport(req.params.id);
+	if (!report) return res.redirect(303, "/admin/reports?error=notfound");
+	const action = String(req.body.action || "save");
+	if (action === "fixed" || action === "dismissed") {
+		const result = deleteReport(report.id);
+		if (result.error) return res.redirect(303, `/admin/reports?error=${result.error}`);
+		audit(
+			req,
+			action === "fixed" ? "report.fixed" : "report.dismissed",
+			report.id,
+			`${report.type}: ${report.title}`,
+		);
+		return res.redirect(303, "/admin/reports?ok=deleted");
+	}
+	const status =
+		action === "triaged"
+			? "triaged"
+			: action === "in_progress"
+				? "in_progress"
+				: report.status;
+	const result = updateReport(report.id, {
+		status,
 		adminNote: req.body.note,
 		by: req.user.username,
 	});
-	if (result.error) return res.redirect(303, `/admin/reports?error=${result.error}`);
+	if (result.error) return res.redirect(303, `/admin/reports/${report.id}?error=${result.error}`);
 	audit(req, "report.update", result.report.id, `estado: ${result.report.status}`);
-	res.redirect(303, "/admin/reports?ok=updated");
+	res.redirect(303, `/admin/reports/${report.id}?ok=updated`);
 });
 
 app.get("/vault", (req, res) => {
@@ -3276,6 +3317,7 @@ function monitorSnapshot(req) {
 				ips: new Set(),
 				sessions: 0,
 				lastSeenAt: session.lastSeenAt,
+				lastActiveAt: session.lastActiveAt || session.lastSeenAt,
 				createdAt: session.createdAt,
 				userAgent: session.userAgent,
 				streams: [],
@@ -3287,6 +3329,9 @@ function monitorSnapshot(req) {
 		if (new Date(session.lastSeenAt) > new Date(entry.lastSeenAt)) {
 			entry.lastSeenAt = session.lastSeenAt;
 			entry.userAgent = session.userAgent;
+		}
+		if (new Date(session.lastActiveAt || session.lastSeenAt) > new Date(entry.lastActiveAt)) {
+			entry.lastActiveAt = session.lastActiveAt || session.lastSeenAt;
 		}
 	}
 	for (const stream of wisp) {
@@ -3304,10 +3349,11 @@ function monitorSnapshot(req) {
 			username: entry.username,
 			role: entry.role,
 			icon: entry.icon,
-			online: now - new Date(entry.lastSeenAt).getTime() < 5 * 60 * 1000,
+			online: now - new Date(entry.lastActiveAt).getTime() < 5 * 60 * 1000,
 			ips: [...entry.ips].filter(Boolean).slice(0, 4),
 			sessions: entry.sessions,
 			lastSeenAt: entry.lastSeenAt,
+			lastActiveAt: entry.lastActiveAt,
 			createdAt: entry.createdAt,
 			userAgent: entry.userAgent,
 			streams: entry.streams
@@ -3317,7 +3363,7 @@ function monitorSnapshot(req) {
 				? { url: current.url || "", query: current.query || "", at: current.at }
 				: null,
 		};
-	}).sort((a, b) => Number(b.online) - Number(a.online) || new Date(b.lastSeenAt) - new Date(a.lastSeenAt));
+	}).sort((a, b) => Number(b.online) - Number(a.online) || new Date(b.lastActiveAt) - new Date(a.lastActiveAt));
 	const recent = activity
 		.filter((entry) => now - new Date(entry.at).getTime() <= 24 * 60 * 60 * 1000)
 		.slice(0, 80)

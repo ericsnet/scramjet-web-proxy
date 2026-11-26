@@ -17,6 +17,15 @@ const ABSOLUTE_SESSION_MS = 7 * 24 * 60 * 60 * 1000; // 7 días como máximo
 
 export const SESSION_COOKIE = "__Host-pw_session";
 const LEGACY_SESSION_COOKIE = "pw_session";
+const HEARTBEAT_PATH =
+	/^\/(?:api\/(?:chat\/(?:notifications|messages|channels|unread|read|typing)|me|lang|config|admin\/(?:monitor|traffic)))$/;
+const HEARTBEAT_ANY_METHOD = /^\/api\/chat\/read$/;
+
+function isHeartbeatRequest(req) {
+	const path = req.path || "";
+	if (HEARTBEAT_ANY_METHOD.test(path)) return true;
+	return ["GET", "HEAD"].includes(String(req.method || "").toUpperCase()) && HEARTBEAT_PATH.test(path);
+}
 
 const sessions = new Map(); // tokenHash -> { id, username, createdAt, lastSeenAt, expires, absoluteExpires, ip, userAgent }
 const loginAttempts = new Map(); // username -> { count, resetAt }
@@ -622,6 +631,7 @@ function loadSessions() {
 				username: entry.username,
 				createdAt: entry.createdAt || new Date(now).toISOString(),
 				lastSeenAt: entry.lastSeenAt || new Date(now).toISOString(),
+				lastActiveAt: entry.lastActiveAt || entry.lastSeenAt || new Date(now).toISOString(),
 				expires: entry.expires,
 				absoluteExpires:
 					entry.absoluteExpires && entry.absoluteExpires > entry.expires
@@ -666,6 +676,7 @@ export function createSession(username, { ip = "", userAgent = "" } = {}) {
 		username: user ? user.username : username,
 		createdAt: new Date(now).toISOString(),
 		lastSeenAt: new Date(now).toISOString(),
+		lastActiveAt: new Date(now).toISOString(),
 		expires,
 		absoluteExpires: now + ABSOLUTE_SESSION_MS,
 		ip: String(ip || "").slice(0, 64),
@@ -738,6 +749,7 @@ export function listSessions() {
 				role: user ? user.role : "user",
 				createdAt: s.createdAt,
 				lastSeenAt: s.lastSeenAt,
+				lastActiveAt: s.lastActiveAt || s.lastSeenAt,
 				expires: s.expires,
 				ip: s.ip,
 				userAgent: s.userAgent,
@@ -821,6 +833,9 @@ export function getSession(req) {
 	if (now - new Date(session.lastSeenAt).getTime() > 30_000) {
 		session.lastSeenAt = new Date(now).toISOString();
 	}
+	if (!isHeartbeatRequest(req)) {
+		session.lastActiveAt = new Date(now).toISOString();
+	}
 	const ttl = getSettings().sessionHours * 60 * 60 * 1000;
 	const extended = Math.min(now + ttl, session.absoluteExpires || now + ABSOLUTE_SESSION_MS);
 	if (extended > session.expires) session.expires = extended;
@@ -839,6 +854,7 @@ export function getSession(req) {
 		icon: avatarInfo(user.username),
 		createdAt: session.createdAt,
 		lastSeenAt: session.lastSeenAt,
+		lastActiveAt: session.lastActiveAt || session.lastSeenAt,
 		expires: session.expires,
 		mustChangePassword: !!user.mustChangePassword,
 		lang: user.lang || "",

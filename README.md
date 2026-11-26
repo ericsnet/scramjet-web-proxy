@@ -15,7 +15,7 @@ administración.
 - **Reproducción de audio y vídeo HTML5/MSE** con peticiones `Range`, búsqueda/seek, `blob:` y streaming progresivo sin cachear el archivo completo.
 - **Favoritos** por usuario, **historial propio**, autocompletado, atrás/adelante/recargar, **pestañas internas** y atajos de teclado.
 - **Resumen de administración**: estado rápido de usuarios, sesiones, alertas, tráfico, copias y acciones rápidas.
-- **Vigilancia en vivo**: usuarios conectados, última web visitada, destinos Wisp y actividad reciente, con actualización automática.
+- **Vigilancia en vivo**: usuarios conectados, última web visitada, destinos Wisp y actividad reciente, con actualización automática. La presencia usa actividad humana, no el polling de fondo.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
@@ -27,8 +27,8 @@ administración.
 - Login con contraseñas hasheadas (scrypt) y sesiones persistentes.
 - Escala de roles: **usuario → moderador → administrador → creador**. El creador es la cuenta propietaria: nadie más puede modificarla, bloquearla, borrarla ni ver su historial, sesiones o auditoría. Solo el creador puede crear, ascender, degradar, resetear o eliminar administradores; los administradores solo gestionan usuarios y moderadores.
 - **Roles especialistas** que no sustituyen a los anteriores: **diseñador gráfico**, **pentester** y **QA / bugs**. Se pueden combinar entre sí y con los roles existentes; un usuario puede tener varios roles a la vez.
-- Herramientas propias: `/design` (sistema visual y checklist de interfaz), `/pentest` (checklist y resumen de seguridad) y `/qa` (casos de prueba y entorno). Solo el **creador** tiene acceso automático a todas; los administradores solo si además tienen el rol especialista correspondiente.
-- **Informes comunes** en `/reports` para diseño, pentest y QA: título, tipo, gravedad, zona, URL, pasos, esperado y real. El **creador** los tria en `/admin/reports` con estado y notas.
+- Herramientas propias: `/design` (contraste WCAG, paleta y sistema visual), `/pentest` (cabeceras HTTP, JWT, URL y hashes) y `/qa` (banco de pruebas con estados y entorno). Solo el **creador** tiene acceso automático a todas; los administradores solo si además tienen el rol especialista correspondiente.
+- **Informes comunes** en `/reports` para diseño, pentest y QA: título, tipo, gravedad, zona, URL, pasos, esperado y real. Cada informe tiene ficha propia en `/admin/reports/<id>` y el creador lo tria con estado y notas; al marcarlo como corregido o descartado se elimina.
 - **Vista compacta de usuarios** en Administración: cada fila muestra el resumen y se despliega al pulsarla con toda la información y acciones.
 - Los administradores pueden:
   - crear usuarios y resetear contraseñas,
