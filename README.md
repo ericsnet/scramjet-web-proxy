@@ -21,7 +21,7 @@ administración.
 - **Carga diferida en Poki y TikTok**: las imágenes fuera de pantalla se marcan como `lazy` y `async` dentro del proxy, para que no se saturen los streams al abrir la página.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
-- **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y panel de conectados. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
+- **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y presencia por conversación. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
 - **Bóveda de contraseñas privada**: cifrada en el navegador con AES-GCM y PBKDF2; el servidor solo guarda blobs cifrados y nunca recibe la contraseña maestra. Incluye generador, búsqueda, copia, bloqueo automático y **autocompletado/guardado en webs abiertas por el proxy**.
 - **Botón de pánico**: abajo a la izquierda; activa durante 5 minutos la redirección automática de ese dispositivo a `classroom.google.com`.
 - **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.

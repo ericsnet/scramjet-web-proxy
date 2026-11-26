@@ -2,14 +2,14 @@
 	const box = document.getElementById("chat-messages");
 	if (!box) return;
 
+	const chatApp = document.querySelector(".chat-app");
+	const showOnline = chatApp?.dataset.showOnline !== "0";
 	const channelList = document.getElementById("chat-channel-list");
 	const channelHidden = document.getElementById("chat-channel-hidden");
 	const form = document.getElementById("chat-form");
 	const input = document.getElementById("chat-input");
 	const send = document.getElementById("chat-send");
 	const counter = document.getElementById("chat-counter");
-	const onlineEl = document.getElementById("chat-online");
-	const onlineUsersEl = document.getElementById("chat-online-users");
 	const errorEl = document.getElementById("chat-error");
 	const fileInput = document.getElementById("chat-file");
 	const fileName = document.getElementById("chat-file-name");
@@ -42,6 +42,7 @@
 	let selectedFile = null;
 	let cooldownUntil = 0;
 	let channelsCache = [];
+	let onlineUsers = [];
 	let forceScroll = false;
 	let replyTarget = null;
 	let editTarget = null;
@@ -532,23 +533,33 @@
 		old.replaceWith(makeMessage(message));
 		box.scrollTop = top;
 	}
-	function updateOnline(value, icons = null) {
+	function channelPresence(channel, onlineSet = null) {
+		if (!showOnline) return "";
+		const set = onlineSet || new Set(onlineUsers.map((name) => String(name).toLowerCase()));
+		if (channel.type === "public") return `${set.size} en línea`;
+		if (channel.type === "group") {
+			const count = (channel.members || []).filter((member) =>
+				set.has(String(member).toLowerCase()),
+			).length;
+			return `${count} en línea`;
+		}
+		return set.has(String(channel.name).toLowerCase()) ? "en línea" : "desconectado";
+	}
+
+	function updateChannelPresence() {
+		if (!channelList) return;
+		const onlineSet = new Set(onlineUsers.map((name) => String(name).toLowerCase()));
+		for (const button of channelList.querySelectorAll("[data-channel-id]")) {
+			const channel = channelsCache.find((item) => item.id === button.dataset.channelId);
+			const presence = button.querySelector(".chat-channel-presence");
+			if (channel && presence) presence.textContent = channelPresence(channel, onlineSet);
+		}
+	}
+
+	function updateOnline(value) {
 		if (value === null || value === undefined) return;
-		const list = Array.isArray(value) ? value : [];
-		if (onlineEl) {
-			const n = list.length;
-			onlineEl.textContent = `${n} conectado${n === 1 ? "" : "s"}`;
-		}
-		if (onlineUsersEl) {
-			onlineUsersEl.textContent = "";
-			for (const name of list) {
-				const chip = document.createElement("span");
-				chip.className = "chat-user-chip";
-				chip.appendChild(makeUserAvatar(name, icons?.[name], "chat-chip-avatar"));
-				chip.appendChild(document.createTextNode(String(name)));
-				onlineUsersEl.appendChild(chip);
-			}
-		}
+		onlineUsers = Array.isArray(value) ? value : [];
+		updateChannelPresence();
 	}
 	async function request(url, options = {}) {
 		const response = await fetch(url, {
@@ -674,8 +685,17 @@
 			const title = document.createElement("strong");
 			title.textContent = channel.name;
 			const kind = document.createElement("small");
-			kind.textContent =
+			const baseKind =
 				channel.type === "public" ? "Sala general" : channel.type === "group" ? "Grupo" : "Privado";
+			const presenceText = channelPresence(channel);
+			kind.textContent = `${baseKind}${presenceText ? ` · ${presenceText}` : ""}`;
+			if (presenceText) {
+				const presence = document.createElement("span");
+				presence.className = "chat-channel-presence";
+				presence.textContent = presenceText;
+				kind.textContent = `${baseKind} · `;
+				kind.appendChild(presence);
+			}
 			text.append(title, kind);
 			button.append(avatar, text);
 			if (channel.unread) {

@@ -567,7 +567,7 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .chat-sidebar-brand strong{display:block;font-size:14px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-sidebar-brand small{display:block;color:#6f8197;font-size:10.5px;margin-top:2px}
 .chat-sidebar-label{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#64778c;padding:10px 8px 3px}
-.chat-channel-list{display:flex;flex-direction:column;gap:3px;min-height:0;overflow-y:auto;padding-right:2px}
+.chat-channel-list{display:flex;flex:1;flex-direction:column;gap:3px;min-height:0;overflow-y:auto;padding-right:2px}
 .chat-channel-item{display:flex;align-items:center;gap:9px;width:100%;padding:8px;border:1px solid transparent;
   border-radius:10px;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
 .chat-channel-item:hover{background:rgba(59,130,246,.08)}
@@ -577,7 +577,8 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .chat-channel-avatar.large{width:40px;height:40px;border-radius:12px;font-size:16px}
 .chat-channel-text{min-width:0;flex:1}
 .chat-channel-text strong{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chat-channel-text small{display:block;font-size:10.5px;color:#6f8197;margin-top:2px}
+.chat-channel-text small{display:block;font-size:10.5px;color:#6f8197;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-channel-presence{color:#86efac}
 .chat-unread{min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#3b82f6;color:#fff;
   font-size:10.5px;font-weight:700;line-height:19px;text-align:center}
 .chat-online-users{display:flex;flex-direction:column;gap:5px;padding:0 4px;overflow-y:auto;max-height:155px}
@@ -2014,11 +2015,31 @@ export function chatPage({
 	const pendingCount = incomingEntries.length;
 	const channelIcon = (channel) =>
 		channel.type === "public" ? "#" : channel.type === "group" ? "◆" : channel.name.slice(0, 1).toUpperCase();
+	const onlineSet = new Set(
+		(Array.isArray(onlineUsers) ? onlineUsers : []).map((name) =>
+			String(name).toLowerCase(),
+		),
+	);
+	const channelPresence = (channel) => {
+		if (!settings.chatShowOnline) return "";
+		if (channel.type === "public") {
+			return `${onlineSet.size} en línea`;
+		}
+		if (channel.type === "group") {
+			const count = (channel.members || []).filter((member) =>
+				onlineSet.has(String(member).toLowerCase()),
+			).length;
+			return `${count} en línea`;
+		}
+		return onlineSet.has(String(channel.name).toLowerCase())
+			? "en línea"
+			: "desconectado";
+	};
 	const channelItems = channels
 		.map(
 			(channel) => `<button type="button" class="chat-channel-item${channel.id === currentChannel ? " active" : ""}" data-channel-id="${esc(channel.id)}">
   <span class="chat-channel-avatar" style="background:${avatarColor(channel.name)}">${esc(channelIcon(channel))}</span>
-  <span class="chat-channel-text"><strong>${esc(channel.name)}</strong><small>${channel.type === "public" ? "Sala general" : channel.type === "group" ? "Grupo" : "Privado"}</small></span>
+  <span class="chat-channel-text"><strong>${esc(channel.name)}</strong><small>${channel.type === "public" ? "Sala general" : channel.type === "group" ? "Grupo" : "Privado"}${channelPresence(channel) ? ` · <span class="chat-channel-presence">${esc(channelPresence(channel))}</span>` : ""}</small></span>
   ${channel.unread ? `<span class="chat-unread">${channel.unread > 99 ? "99+" : channel.unread}</span>` : ""}
 </button>`,
 		)
@@ -2085,12 +2106,6 @@ export function chatPage({
       <span class="badge">pendiente</span>
       <form method="post" action="/api/friends/cancel"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small" type="submit">Cancelar</button></form>
     </div>`)
-		.join("");
-	const onlineChips = onlineUsers
-		.map((name) => {
-			const entry = userByName.get(String(name).toLowerCase());
-			return `<span class="chat-user-chip">${userAvatar(name, entry?.icon, "chat-chip-avatar")}${esc(name)}</span>`;
-		})
 		.join("");
 	const reactionSet = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 	const formatText = (text) =>
@@ -2185,15 +2200,13 @@ export function chatPage({
 				.join("")
 		: "";
 	const body = enabled ? `
-<div class="chat-app">
+<div class="chat-app" data-show-online="${settings.chatShowOnline ? "1" : "0"}">
   <aside class="chat-sidebar">
     <div class="chat-sidebar-head">
       <div class="chat-sidebar-brand"><span class="chat-sidebar-mark">◉</span><div><strong>${esc(settings.chatTitle || "Chat")}</strong><small>Mensajería interna</small></div></div>
     </div>
     <div class="chat-sidebar-label">Conversaciones</div>
     <div class="chat-channel-list" id="chat-channel-list">${channelItems}</div>
-    <div class="chat-sidebar-label">En línea</div>
-    <div class="chat-online-users" id="chat-online-users">${onlineChips || '<span class="chat-sidebar-empty">Nadie conectado</span>'}</div>
   </aside>
   <section class="chat-main">
     <header class="chat-header">
@@ -2201,7 +2214,7 @@ export function chatPage({
         <span class="chat-channel-avatar large" style="background:${avatarColor(currentInfo.name)}">${esc(channelIcon(currentInfo))}</span>
         <div>
           <h1 id="chat-channel-name">${esc(currentInfo.name)}</h1>
-          <p><span id="chat-channel-meta">${esc(channelMeta)}</span>${settings.chatShowOnline ? ` <span class="chat-online" id="chat-online">${esc(online)} conectado${online === 1 ? "" : "s"}</span>` : ""}</p>
+          <p><span id="chat-channel-meta">${esc(channelMeta)}</span></p>
         </div>
       </div>
       <select id="chat-mobile-channel" class="chat-mobile-channel" aria-label="Canal">${channelOptions}</select>
@@ -2345,7 +2358,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js" defer></script>` : `
+<script src="/chat.js?v=20261126e" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
