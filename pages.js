@@ -486,20 +486,21 @@ dialog h2{margin-top:0}
 .role-scale li.role-creator strong{color:#fde68a}
 .role-scale span{display:block}
 .role-scale b{color:#fde68a}
-.role-groups{margin-top:20px;padding-top:18px;border-top:1px solid var(--border)}
-.role-groups-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:10px;margin-top:12px}
-.role-group{border:1px solid var(--border);border-radius:12px;padding:11px;background:rgba(255,255,255,.015);min-width:0}
+.role-groups{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.role-group-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.role-group{display:grid;grid-template-columns:32px minmax(110px,150px) minmax(0,1fr);gap:7px 10px;align-items:center;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.015)}
 .role-group-unassigned{border-style:dashed}
-.role-group-head{display:flex;align-items:center;gap:9px;min-width:0}
-.role-group-avatar{width:40px;height:40px;flex:0 0 40px;border-radius:12px;font-size:13px;margin:0}
-.role-group-head strong{display:block;font-size:13px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.role-group-head small{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
-.role-group-members{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;max-height:150px;overflow-y:auto}
-.role-member{display:inline-flex;align-items:center;gap:5px;max-width:100%;border:1px solid var(--border);border-radius:999px;padding:3px 7px 3px 3px;font-size:11px;color:#cbd9e8;background:rgba(0,0,0,.1)}
-.role-member-avatar{width:18px;height:18px;flex:0 0 18px;border-radius:6px;font-size:8px}
+.role-group-avatar{width:32px;height:32px;flex:0 0 32px;border-radius:10px;font-size:11px;margin:0}
+.role-group-head{display:flex;flex-direction:column;min-width:0}
+.role-group-head strong{display:block;font-size:12.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-group-head small{display:block;font-size:10px;color:var(--muted);margin-top:1px}
+.role-group-members{display:flex;flex-wrap:wrap;gap:3px;margin:0;max-height:54px;overflow-y:auto;min-width:0}
+.role-member{display:inline-flex;align-items:center;max-width:100%;border:1px solid var(--border);border-radius:999px;padding:2px 6px;font-size:10.5px;color:#cbd9e8;background:rgba(0,0,0,.1)}
 .role-member-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.role-member .badge{font-size:8.5px;padding:2px 4px;margin:0}
-.role-group-empty{font-size:11px;color:var(--muted);padding:2px 0}
+.role-member-avatar{width:16px;height:16px;flex:0 0 16px;border-radius:5px;font-size:8px;overflow:hidden}
+.role-member-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.role-group-empty{font-size:10.5px;color:var(--muted);padding:1px 0}
+@media(max-width:640px){.role-group{grid-template-columns:32px minmax(0,1fr)}.role-group-members{grid-column:1/-1;max-height:none}}
 .traffic-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .traffic-live{display:inline-flex;align-items:center;gap:7px;color:#86efac;font-size:12px;font-weight:600;padding:6px 10px;border:1px solid rgba(74,222,128,.3);border-radius:999px;background:rgba(74,222,128,.07)}
 .traffic-live i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 4px rgba(74,222,128,.12);animation:trafficPulse 1.8s infinite}
@@ -2760,17 +2761,15 @@ export function adminPage({
 		.map((group) => {
 			const members = visibleUsers.filter((entry) => entry.group === group.id);
 			return `<div class="role-group">
-      <div class="role-group-head">
-        ${groupAvatar(group.name, "group-avatar role-group-avatar")}
-        <div><strong>${esc(group.name)}</strong><small>${members.length} usuario${members.length === 1 ? "" : "s"}</small></div>
-      </div>
+      ${groupAvatar(group.name, "group-avatar role-group-avatar")}
+      <div class="role-group-head"><strong>${esc(group.name)}</strong><small>${members.length} usuario${members.length === 1 ? "" : "s"}</small></div>
       <div class="role-group-members">${
 				members.length
 					? members
-							.map(
-								(member) =>
-									`<span class="role-member">${userAvatar(member.username, member.icon, "role-member-avatar")}<span class="role-member-name">${esc(member.username)}</span>${roleBadges(member.roles, member.role)}</span>`,
-							)
+							.map((member) => {
+								const roles = (member.roles || [member.role]).map(roleLabel).join(", ");
+								return `<span class="role-member" title="${esc(roles)}">${esc(member.username)}</span>`;
+							})
 							.join("")
 					: '<span class="role-group-empty">Sin miembros</span>'
 			}</div>
@@ -2781,22 +2780,19 @@ export function adminPage({
 		(entry) => !entry.group || !visibleGroupIds.has(entry.group),
 	);
 	const ungroupedCard = `<div class="role-group role-group-unassigned">
-      <div class="role-group-head">
-        ${groupAvatar("Sin grupo", "group-avatar role-group-avatar")}
-        <div><strong>Sin grupo</strong><small>${ungroupedMembers.length} usuario${ungroupedMembers.length === 1 ? "" : "s"}</small></div>
-      </div>
+      ${groupAvatar("Sin grupo", "group-avatar role-group-avatar")}
+      <div class="role-group-head"><strong>Sin grupo</strong><small>${ungroupedMembers.length} usuario${ungroupedMembers.length === 1 ? "" : "s"}</small></div>
       <div class="role-group-members">${
 				ungroupedMembers.length
 					? ungroupedMembers
-							.map(
-								(member) =>
-									`<span class="role-member">${userAvatar(member.username, member.icon, "role-member-avatar")}<span class="role-member-name">${esc(member.username)}</span>${roleBadges(member.roles, member.role)}</span>`,
-							)
+							.map((member) => {
+								const roles = (member.roles || [member.role]).map(roleLabel).join(", ");
+								return `<span class="role-member" title="${esc(roles)}">${esc(member.username)}</span>`;
+							})
 							.join("")
 					: '<span class="role-group-empty">Todos tienen grupo</span>'
 			}</div>
     </div>`;
-
 
 	const body = `
 ${adminTabs("users", user.role)}
@@ -2813,7 +2809,7 @@ ${adminTabs("users", user.role)}
   </ol>
   <div class="role-groups">
     <div class="section-title-row"><h3>Grupos y miembros</h3><span class="hint">Quién pertenece a cada grupo</span></div>
-    <div class="role-groups-grid">${groupCards}${ungroupedCard}</div>
+    <div class="role-group-list">${groupCards}${ungroupedCard}</div>
   </div>
   <p class="hint">Tu rol actual: <strong>${esc(roleLabel(user.role))}</strong>.</p>
 </div>
