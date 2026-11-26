@@ -496,7 +496,7 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .monitor-meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:10.5px;margin-top:8px}
 .monitor-streams{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
 .monitor-stream{font-family:"JetBrains Mono",monospace;font-size:10px;border:1px solid #2f4a6b;border-radius:999px;padding:3px 7px;color:#93c5fd;background:rgba(59,130,246,.08);max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.monitor-actions{margin-top:9px;display:flex;justify-content:flex-end}
+.monitor-actions{margin-top:9px;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .monitor-online{color:#86efac;border-color:#166534;background:#0d2115}
 .monitor-offline{color:#94a7bd;border-color:var(--border);background:rgba(0,0,0,.12)}
 .monitor-recent td:first-child{white-space:nowrap}
@@ -2322,13 +2322,15 @@ export function adminPage({
   <div class="actions">
     <a class="small" href="/admin/activity?user=${encodeURIComponent(u.username)}">Ver actividad</a>
     <a class="small" href="/admin/sessions?user=${encodeURIComponent(u.username)}">Ver sesiones</a>
-    ${
-			u.sessionCount
-				? `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/logout" onsubmit="return confirm('¿Echar a ${esc(u.username)} ahora? Se cerrarán todas sus sesiones y pestañas inmediatamente.')">
-      <button class="small danger" type="submit"${self ? " disabled title='Usa Salir para cerrar tu propia sesión'" : " title='Cierra sus sesiones y pestañas al instante'"}>Echar ahora</button>
-    </form>`
-				: ""
-		}
+    <form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/logout" onsubmit="return confirm('¿Echar a ${esc(u.username)} ahora? Se cerrarán todas sus sesiones y pestañas inmediatamente.')">
+      <button class="small danger" type="submit"${
+				self
+					? " disabled title='Usa Salir para cerrar tu propia sesión'"
+					: u.sessionCount
+						? " title='Cierra sus sesiones y pestañas al instante'"
+						: " disabled title='Sin sesiones activas'"
+			}>Echar ahora</button>
+    </form>
     ${blockForm}
   </div>
   ${details}
@@ -2918,6 +2920,7 @@ export function monitorPage({ user, snapshot = {} } = {}) {
 	const stats = snapshot.stats || {};
 	const userCard = (entry) => {
 		const current = entry.current;
+		const canKick = String(entry.username).toLowerCase() !== String(user.username).toLowerCase();
 		const streams = (entry.streams || [])
 			.map((stream) => `<span class="monitor-stream" title="${esc(stream.host)}:${esc(stream.port)}">${esc(stream.host)}:${esc(stream.port)}</span>`)
 			.join("");
@@ -2939,7 +2942,10 @@ export function monitorPage({ user, snapshot = {} } = {}) {
   </div>
   <div class="monitor-meta"><span>${esc((entry.ips || []).join(" · ") || "IP desconocida")}</span><span>${esc(entry.sessions)} sesión${entry.sessions === 1 ? "" : "es"}</span><span title="${esc(entry.userAgent || "")}">${esc((entry.userAgent || "").slice(0, 60))}</span></div>
   ${streams ? `<div class="monitor-streams">${streams}</div>` : ""}
-  <div class="monitor-actions"><a class="small" href="/admin/activity?user=${encodeURIComponent(entry.username)}">Ver historial</a></div>
+  <div class="monitor-actions">
+    <a class="small" href="/admin/activity?user=${encodeURIComponent(entry.username)}">Ver historial</a>
+    ${canKick ? `<button class="small danger" type="button" data-kick="${esc(entry.username)}" title="Cierra sus sesiones y pestañas al instante">Echar ahora</button>` : ""}
+  </div>
 </div>`;
 	};
 	const recentRow = (entry) => `<tr>
@@ -2961,7 +2967,7 @@ ${adminTabs("monitor", user.role)}
     <div class="stat"><div class="k">Actividad 24 h</div><div class="v" id="monitor-recent">${esc(stats.recent || 0)}</div></div>
   </div>
   <h2>Usuarios con sesión <small id="monitor-user-count">${users.length}</small></h2>
-  <div class="monitor-grid" id="monitor-users">${users.map(userCard).join("") || '<p class="empty">No hay sesiones activas.</p>'}</div>
+  <div class="monitor-grid" id="monitor-users" data-current-user="${esc(user.username)}">${users.map(userCard).join("") || '<p class="empty">No hay sesiones activas.</p>'}</div>
 </div>
 <div class="card">
   <h2>Actividad reciente</h2>

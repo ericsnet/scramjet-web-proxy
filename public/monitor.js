@@ -1,6 +1,7 @@
 (() => {
 	const usersBox = document.getElementById("monitor-users");
 	if (!usersBox) return;
+	const currentUser = String(usersBox.dataset.currentUser || "").toLowerCase();
 	let inFlight = false;
 	let stopped = false;
 
@@ -34,6 +35,7 @@
 	};
 	const renderUser = (entry) => {
 		const current = entry.current;
+		const canKick = String(entry.username || "").toLowerCase() !== currentUser;
 		const streams = (entry.streams || [])
 			.map(
 				(stream) =>
@@ -60,7 +62,10 @@
   </div>
   <div class="monitor-meta"><span>${esc((entry.ips || []).join(" · ") || "IP desconocida")}</span><span>${esc(entry.sessions)} sesión${entry.sessions === 1 ? "" : "es"}</span><span title="${esc(entry.userAgent || "")}">${esc((entry.userAgent || "").slice(0, 60))}</span></div>
   ${streams ? `<div class="monitor-streams">${streams}</div>` : ""}
-  <div class="monitor-actions"><a class="small" href="/admin/activity?user=${encodeURIComponent(entry.username)}">Ver historial</a></div>
+  <div class="monitor-actions">
+    <a class="small" href="/admin/activity?user=${encodeURIComponent(entry.username)}">Ver historial</a>
+    ${canKick ? `<button class="small danger" type="button" data-kick="${esc(entry.username)}" title="Cierra sus sesiones y pestañas al instante">Echar ahora</button>` : ""}
+  </div>
 </div>`;
 	};
 	const renderRecent = (entry) =>
@@ -119,6 +124,34 @@
 			inFlight = false;
 		}
 	}
+
+	usersBox.addEventListener("click", async (event) => {
+		const button = event.target.closest("[data-kick]");
+		if (!button) return;
+		const username = button.getAttribute("data-kick");
+		if (!username) return;
+		if (!confirm(`¿Echar a ${username} ahora? Se cerrarán todas sus sesiones y pestañas inmediatamente.`)) return;
+		const original = button.textContent;
+		button.disabled = true;
+		button.textContent = "Echando…";
+		try {
+			const response = await fetch(`/api/admin/users/${encodeURIComponent(username)}/logout`, {
+				method: "POST",
+				cache: "no-store",
+				headers: {
+					Accept: "application/json",
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+			});
+			if (!response.ok) throw new Error("kick failed");
+			button.textContent = "Echado";
+		} catch {
+			button.disabled = false;
+			button.textContent = original;
+			alert("No se pudo echar al usuario.");
+		}
+		setTimeout(refresh, 350);
+	});
 
 	document.addEventListener("visibilitychange", () => {
 		if (!document.hidden) refresh();

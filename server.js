@@ -4438,6 +4438,9 @@ app.post("/api/admin/users/:username/logout", requireStaff, sameOrigin, (req, re
 	closeUserConnections(target.username);
 	const notified = notifyUserLogout(target.username, "forced");
 	audit(req, "user.logout", target.username, `${count} sesiones, ${notified} pestañas`);
+	if (String(req.get("accept") || "").includes("application/json")) {
+		return res.json({ ok: true, count, notified });
+	}
 	res.redirect(303, "/admin?ok=logout");
 });
 
