@@ -23,6 +23,8 @@ administración.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto), reacciones, encuestas, menciones y presencia por conversación. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
 - **Chat de clase automático**: cada grupo de usuarios tiene su propio canal interno, visible solo para sus miembros y sincronizado cuando alguien entra o sale del grupo.
+- **Acuses de lectura en el chat**: los mensajes propios muestran **Visto / No visto** en privados y **Visto por N** en grupos; se actualiza cuando el otro miembro lee el canal.
+- **Escala de privilegios con grupos**: en Administración se muestran los grupos y los nombres de sus miembros, además de los usuarios sin grupo.
 - **Bóveda de contraseñas privada**: cifrada en el navegador con AES-GCM y PBKDF2; el servidor solo guarda blobs cifrados y nunca recibe la contraseña maestra. Incluye generador, búsqueda, copia, bloqueo automático y **autocompletado/guardado en webs abiertas por el proxy**.
 - **Botón de pánico**: abajo a la izquierda; activa durante 5 minutos la redirección automática de ese dispositivo a `classroom.google.com`.
 - **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.

@@ -257,6 +257,8 @@ import {
 	markChatRead,
 	deleteChatMessage,
 	deleteChatMessagesByUser,
+	getChatSeen,
+	getChannelReadSeqs,
 	clearChat,
 	flushChat,
 } from "./chat.js";
@@ -985,6 +987,7 @@ function enrichChatMessage(message, user, meta) {
 				own),
 		canEdit: ownAndRecent,
 		canPin: moderator,
+		seen: getChatSeen(message, user?.username),
 	};
 }
 
@@ -2507,6 +2510,7 @@ app.get("/chat", (req, res) => {
 	let revision = 0;
 	let pinned = [];
 	let readSeq = 0;
+	let readSeqs = {};
 	let hasMore = false;
 	if (settings.chatEnabled) {
 		const result = listChat({
@@ -2521,6 +2525,7 @@ app.get("/chat", (req, res) => {
 			revision = result.revision;
 			pinned = chatEnriched(result.pinned || [], req.user, roles);
 			readSeq = result.readSeq || 0;
+			readSeqs = getChannelReadSeqs(currentChannel);
 			hasMore = !!result.hasMore;
 		}
 	}
@@ -2532,6 +2537,7 @@ app.get("/chat", (req, res) => {
 			messages,
 			pinned,
 			readSeq,
+			readSeqs,
 			hasMore,
 			latestSeq,
 			revision,
@@ -2707,6 +2713,7 @@ app.get("/api/chat/messages", (req, res) => {
 		...result,
 		messages: chatEnriched(result.messages, req.user, roles),
 		pinned: chatEnriched(result.pinned || [], req.user, roles),
+		readSeqs: getChannelReadSeqs(channelId),
 		typing: typingUsers(channelId, req.user.username),
 		online,
 		onlineIcons: chatOnlineIcons(online || []),

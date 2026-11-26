@@ -82,6 +82,37 @@ function channelFor(username, channelId) {
 	return channel.members.some((member) => member.toLowerCase() === lower) ? channel : null;
 }
 
+export function getChatSeen(message, username) {
+	if (!message || !message.channelId) return null;
+	const channel = channels.find((item) => item.id === message.channelId);
+	if (!channel || channel.type === "public") return null;
+	const author = String(message.username || "").toLowerCase();
+	if (author !== String(username || "").toLowerCase()) return null;
+	const others = (channel.members || []).filter(
+		(member) => String(member).toLowerCase() !== author,
+	);
+	if (!others.length) return null;
+	const readers = others.filter(
+		(member) =>
+			(reads[String(member).toLowerCase()]?.[channel.id] || 0) >= message.seq,
+	);
+	return {
+		count: readers.length,
+		total: others.length,
+		all: readers.length >= others.length,
+	};
+}
+
+export function getChannelReadSeqs(channelId) {
+	const wanted = String(channelId || GENERAL);
+	const out = {};
+	for (const [name, values] of Object.entries(reads)) {
+		const seq = Number(values?.[wanted]) || 0;
+		if (seq > 0) out[name] = seq;
+	}
+	return out;
+}
+
 function channelMessages(channelId) {
 	return messages.filter((message) => message.channelId === channelId);
 }

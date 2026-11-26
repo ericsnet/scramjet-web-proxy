@@ -43,6 +43,13 @@
 	let cooldownUntil = 0;
 	let channelsCache = [];
 	let onlineUsers = [];
+	let readSeqs = (() => {
+		try {
+			return JSON.parse(box.dataset.readSeqs || "{}");
+		} catch {
+			return {};
+		}
+	})();
 	let forceScroll = false;
 	let replyTarget = null;
 	let editTarget = null;
@@ -357,6 +364,42 @@
 		}
 		return avatar;
 	}
+	function seenLabel(count, total) {
+		if (!total) return "";
+		if (total === 1) return count ? "Visto" : "No visto";
+		return count ? `Visto por ${count}` : "No visto";
+	}
+
+	function updateSeenLabels() {
+		const channel = channelsCache.find((item) => item.id === channelId);
+		const articles = box.querySelectorAll(".chat-message.own[data-chat-id]");
+		if (!channel || channel.type === "public") {
+			for (const article of articles) article.querySelector(".chat-seen")?.remove();
+			return;
+		}
+		const others = (channel.members || []).filter(
+			(member) => String(member).toLowerCase() !== currentUser.toLowerCase(),
+		);
+		if (!others.length) {
+			for (const article of articles) article.querySelector(".chat-seen")?.remove();
+			return;
+		}
+		for (const article of articles) {
+			const seq = Number(article.dataset.chatSeq) || 0;
+			const count = others.filter(
+				(name) => (Number(readSeqs[String(name).toLowerCase()]) || 0) >= seq,
+			).length;
+			let label = article.querySelector(".chat-seen");
+			if (!label) {
+				label = document.createElement("span");
+				label.className = "chat-seen";
+				article.querySelector(".chat-meta")?.appendChild(label);
+			}
+			label.textContent = seenLabel(count, others.length);
+			label.classList.toggle("unseen", count === 0);
+		}
+	}
+
 	function makeMessage(message, grouped = false) {
 		const article = document.createElement("article");
 		const own = String(message.username).toLowerCase() === currentUser.toLowerCase();
@@ -405,6 +448,15 @@
 			edited.title = `Editado ${timeText(message.editedAt)}`;
 			edited.textContent = "editado";
 			meta.appendChild(edited);
+		}
+		if (own) {
+			const seen = document.createElement("span");
+			seen.className = "chat-seen";
+			seen.textContent = message.seen
+				? seenLabel(message.seen.count, message.seen.total)
+				: "";
+			if (!message.seen || !message.seen.all) seen.classList.add("unseen");
+			meta.appendChild(seen);
 		}
 		bubble.appendChild(meta);
 		if (message.text) {
@@ -629,6 +681,10 @@
 			hasMore = !!data.hasMore;
 			if (loadOlderButton) loadOlderButton.hidden = !hasMore;
 			updateOnline(data.online, data.onlineIcons);
+			if (data.readSeqs) {
+				readSeqs = data.readSeqs;
+				updateSeenLabels();
+			}
 			if (Number(data.maxLength) > 0) maxLength = Number(data.maxLength);
 			if (input && Number(input.maxLength) !== maxLength) input.maxLength = maxLength;
 			if (counter) counter.textContent = String((input?.value || "").length);
@@ -741,6 +797,7 @@
 		renderChannelList();
 		syncMobileChannels();
 		updateHeader();
+		updateSeenLabels();
 	}
 	function switchChannel(value) {
 		channelId = value || "general";

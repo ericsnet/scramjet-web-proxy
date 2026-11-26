@@ -486,6 +486,20 @@ dialog h2{margin-top:0}
 .role-scale li.role-creator strong{color:#fde68a}
 .role-scale span{display:block}
 .role-scale b{color:#fde68a}
+.role-groups{margin-top:20px;padding-top:18px;border-top:1px solid var(--border)}
+.role-groups-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:10px;margin-top:12px}
+.role-group{border:1px solid var(--border);border-radius:12px;padding:11px;background:rgba(255,255,255,.015);min-width:0}
+.role-group-unassigned{border-style:dashed}
+.role-group-head{display:flex;align-items:center;gap:9px;min-width:0}
+.role-group-avatar{width:40px;height:40px;flex:0 0 40px;border-radius:12px;font-size:13px;margin:0}
+.role-group-head strong{display:block;font-size:13px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-group-head small{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
+.role-group-members{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;max-height:150px;overflow-y:auto}
+.role-member{display:inline-flex;align-items:center;gap:5px;max-width:100%;border:1px solid var(--border);border-radius:999px;padding:3px 7px 3px 3px;font-size:11px;color:#cbd9e8;background:rgba(0,0,0,.1)}
+.role-member-avatar{width:18px;height:18px;flex:0 0 18px;border-radius:6px;font-size:8px}
+.role-member-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.role-member .badge{font-size:8.5px;padding:2px 4px;margin:0}
+.role-group-empty{font-size:11px;color:var(--muted);padding:2px 0}
 .traffic-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .traffic-live{display:inline-flex;align-items:center;gap:7px;color:#86efac;font-size:12px;font-weight:600;padding:6px 10px;border:1px solid rgba(74,222,128,.3);border-radius:999px;background:rgba(74,222,128,.07)}
 .traffic-live i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 4px rgba(74,222,128,.12);animation:trafficPulse 1.8s infinite}
@@ -579,6 +593,10 @@ h2 small{font-size:11px;font-weight:400;color:var(--muted);margin-left:4px}
 .chat-channel-text strong{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-channel-text small{display:block;font-size:10.5px;color:#6f8197;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-channel-presence{color:#86efac}
+.chat-seen{color:#86efac;font-size:10.5px;white-space:nowrap}
+.chat-seen.unseen{color:#8fa4bb}
+.chat-message.own .chat-seen{color:#dbeafe}
+.chat-message.own .chat-seen.unseen{color:#bfdbfe;opacity:.72}
 .chat-unread{min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#3b82f6;color:#fff;
   font-size:10.5px;font-weight:700;line-height:19px;text-align:center}
 .chat-online-users{display:flex;flex-direction:column;gap:5px;padding:0 4px;overflow-y:auto;max-height:155px}
@@ -1977,6 +1995,7 @@ export function chatPage({
 	messages = [],
 	pinned = [],
 	readSeq = 0,
+	readSeqs = {},
 	hasMore = false,
 	latestSeq = 0,
 	revision = 0,
@@ -2129,6 +2148,11 @@ export function chatPage({
 			.map((value) => `<span class="badge role-${esc(value)}">${esc(roleLabel(value))}</span>`)
 			.join(" ");
 	};
+	const seenText = (seen) => {
+		if (!seen) return "";
+		if (seen.total === 1) return seen.all ? "Visto" : "No visto";
+		return seen.count ? `Visto por ${seen.count}` : "No visto";
+	};
 
 	const rows = messages
 		.map((m) => {
@@ -2170,6 +2194,9 @@ export function chatPage({
 			const edited = m.editedAt
 				? `<span class="chat-edited" title="Editado ${esc(fmtDate(m.editedAt))}">editado</span>`
 				: "";
+			const seen = m.seen
+				? `<span class="chat-seen${m.seen.all ? "" : " unseen"}">${esc(seenText(m.seen))}</span>`
+				: "";
 			const pinBadge = m.pinned ? '<span class="chat-pin-badge" title="Mensaje fijado">📌</span>' : "";
 			const tools = `<div class="chat-msg-tools">
         <button type="button" class="chat-tool" data-chat-reply="${esc(m.id)}" title="Responder">↩</button>
@@ -2187,6 +2214,7 @@ export function chatPage({
       ${pinBadge}
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
       ${edited}
+      ${seen}
     </div>
     ${m.text ? `<p class="chat-text">${formatText(m.text)}</p>` : ""}
     ${attachment}
@@ -2257,6 +2285,7 @@ export function chatPage({
       data-channel="${esc(currentChannel)}"
       data-last-seq="${esc(latestSeq)}"
       data-read-seq="${esc(readSeq)}"
+      data-read-seqs="${esc(JSON.stringify(readSeqs))}"
       data-has-more="${hasMore ? "1" : "0"}"
       data-revision="${esc(revision)}"
       data-current-user="${esc(current)}"
@@ -2366,7 +2395,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126f" defer></script>` : `
+<script src="/chat.js?v=20261126g" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
@@ -2724,6 +2753,51 @@ export function adminPage({
 		})
 		.join("\n");
 
+	const visibleUsers =
+		user.role === "creator" ? users : users.filter((entry) => entry.role !== "creator");
+	const visibleGroupIds = new Set(groups.map((group) => group.id));
+	const groupCards = groups
+		.map((group) => {
+			const members = visibleUsers.filter((entry) => entry.group === group.id);
+			return `<div class="role-group">
+      <div class="role-group-head">
+        ${groupAvatar(group.name, "group-avatar role-group-avatar")}
+        <div><strong>${esc(group.name)}</strong><small>${members.length} usuario${members.length === 1 ? "" : "s"}</small></div>
+      </div>
+      <div class="role-group-members">${
+				members.length
+					? members
+							.map(
+								(member) =>
+									`<span class="role-member">${userAvatar(member.username, member.icon, "role-member-avatar")}<span class="role-member-name">${esc(member.username)}</span>${roleBadges(member.roles, member.role)}</span>`,
+							)
+							.join("")
+					: '<span class="role-group-empty">Sin miembros</span>'
+			}</div>
+    </div>`;
+		})
+		.join("");
+	const ungroupedMembers = visibleUsers.filter(
+		(entry) => !entry.group || !visibleGroupIds.has(entry.group),
+	);
+	const ungroupedCard = `<div class="role-group role-group-unassigned">
+      <div class="role-group-head">
+        ${groupAvatar("Sin grupo", "group-avatar role-group-avatar")}
+        <div><strong>Sin grupo</strong><small>${ungroupedMembers.length} usuario${ungroupedMembers.length === 1 ? "" : "s"}</small></div>
+      </div>
+      <div class="role-group-members">${
+				ungroupedMembers.length
+					? ungroupedMembers
+							.map(
+								(member) =>
+									`<span class="role-member">${userAvatar(member.username, member.icon, "role-member-avatar")}<span class="role-member-name">${esc(member.username)}</span>${roleBadges(member.roles, member.role)}</span>`,
+							)
+							.join("")
+					: '<span class="role-group-empty">Todos tienen grupo</span>'
+			}</div>
+    </div>`;
+
+
 	const body = `
 ${adminTabs("users", user.role)}
 <div class="card" style="margin-bottom:22px">
@@ -2737,6 +2811,10 @@ ${adminTabs("users", user.role)}
     <li class="role-admin"><strong>Administrador</strong><span>Gestiona usuarios y moderadores, ajustes, seguridad y copias; no puede gestionar a otros administradores ni al creador.</span></li>
     <li class="role-creator"><strong>Creador</strong><span>Acceso total y cuenta protegida. <b>Único</b> que puede crear, ascender, degradar, resetear o eliminar administradores.</span></li>
   </ol>
+  <div class="role-groups">
+    <div class="section-title-row"><h3>Grupos y miembros</h3><span class="hint">Quién pertenece a cada grupo</span></div>
+    <div class="role-groups-grid">${groupCards}${ungroupedCard}</div>
+  </div>
   <p class="hint">Tu rol actual: <strong>${esc(roleLabel(user.role))}</strong>.</p>
 </div>
 <div class="card" style="margin-bottom:22px">
