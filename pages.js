@@ -213,7 +213,7 @@ textarea{width:100%;background:linear-gradient(180deg,#141e29,#111923);border:1p
 textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.13)}
 .check{display:flex;align-items:center;gap:9px;margin:14px 0;color:var(--muted);font-size:14px}
 .check input{width:16px;height:16px;accent-color:var(--accent)}
-.role-picker{border:0;padding:0;margin:12px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:8px}
+.role-picker{border:0;padding:0;margin:12px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
 .role-picker legend{padding:0 0 8px;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.03em}
 .role-option{position:relative;display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(180deg,rgba(21,30,41,.72),rgba(15,23,42,.55));cursor:pointer;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease,transform .16s ease}
 .role-option:hover{border-color:#34506f;background:rgba(30,44,62,.78);transform:translateY(-1px)}
@@ -224,15 +224,12 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,130,246,.
 .role-option-icon{display:grid;place-items:center;width:32px;height:32px;flex:0 0 32px;border-radius:9px;background:rgba(148,163,184,.09);border:1px solid rgba(148,163,184,.12);font-size:16px}
 .role-option.selected .role-option-icon{background:rgba(59,130,246,.22);border-color:rgba(96,165,250,.28)}
 .role-option-text{min-width:0;display:flex;flex-direction:column;gap:1px}
-.role-option-text strong{font-size:12.5px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.role-option-text small{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-option-text strong{font-size:12px;color:var(--text);font-weight:600;white-space:normal;line-height:1.25}
+.role-option-text small{font-size:10.5px;color:var(--muted);white-space:normal;line-height:1.3}
 .role-option::after{content:"";margin-left:auto;flex:0 0 18px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:rgba(2,6,23,.25)}
 .role-option.selected::after{content:"✓";display:grid;place-items:center;background:var(--accent);border-color:var(--accent);color:#fff;font-size:11px;font-weight:700}
-.role-picker-vertical{display:flex;flex-direction:column;gap:7px}
-.role-picker-vertical .role-option{width:100%}
-.role-picker-vertical .role-option-text small{white-space:normal}
-.role-form{flex:1 0 100%;width:100%}
-.role-form .role-picker-vertical{width:min(100%,460px);margin:4px 0 0}
+.role-form{flex:1 0 100%;width:100%;display:block!important}
+.role-form .role-picker{width:100%;margin:4px 0 0}
 .role-form .hint{margin:6px 0 8px}
 .tool-tabs{margin:0 0 16px}
 .report-status-open{color:#fecaca;border-color:#7f1d1d;background:#2a0b0b}
@@ -2203,7 +2200,7 @@ export function adminPage({
 				.join("");
 			const currentRoles = Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role];
 			const roleForm = `<form method="post" action="/api/admin/users/${encodeURIComponent(u.username)}/role" class="role-form">
-        <fieldset class="role-picker role-picker-vertical">
+        <fieldset class="role-picker">
           <legend>Roles de ${esc(u.username)}</legend>
           ${assignableRoles.map((role) => roleOption(role, currentRoles.includes(role))).join("")}
         </fieldset>
