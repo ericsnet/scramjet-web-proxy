@@ -232,6 +232,83 @@ export function listChatChannels(username) {
 		});
 }
 
+function removeChannelMessages(channelId) {
+	for (const message of messages.filter((item) => item.channelId === channelId)) {
+		removeFile(message);
+	}
+	messages = messages.filter((item) => item.channelId !== channelId);
+	for (const value of Object.values(reads)) {
+		if (value && typeof value === "object") delete value[channelId];
+	}
+}
+
+export function syncClassChannels(groups = []) {
+	const list = Array.isArray(groups) ? groups : [];
+	const wanted = new Set();
+	let changed = false;
+	for (const group of list) {
+		const groupId = String(group?.id || "").trim();
+		if (!groupId) continue;
+		const channelId = `class-${groupId}`;
+		wanted.add(channelId);
+		const name = String(group.name || "Grupo").trim().slice(0, 40) || "Grupo";
+		const members = [
+			...new Map(
+				(Array.isArray(group.members) ? group.members : [])
+					.map((member) => String(member || "").trim())
+					.filter(Boolean)
+					.map((member) => [member.toLowerCase(), member]),
+			).values(),
+		];
+		let channel = channels.find(
+			(item) => item.id === channelId || (item.type === "class" && item.groupId === groupId),
+		);
+		if (!channel) {
+			channel = {
+				id: channelId,
+				name,
+				type: "class",
+				groupId,
+				members,
+				createdBy: "sistema",
+				createdAt: new Date().toISOString(),
+			};
+			channels.push(channel);
+			changed = true;
+			continue;
+		}
+		const previousMembers = (channel.members || []).map((member) => String(member).toLowerCase()).sort().join(",");
+		const nextMembers = members.map((member) => member.toLowerCase()).sort().join(",");
+		if (channel.name !== name) {
+			channel.name = name;
+			changed = true;
+		}
+		if (channel.groupId !== groupId) {
+			channel.groupId = groupId;
+			changed = true;
+		}
+		if (channel.type !== "class") {
+			channel.type = "class";
+			changed = true;
+		}
+		if (previousMembers !== nextMembers) {
+			channel.members = members;
+			changed = true;
+		}
+	}
+	for (const channel of [...channels]) {
+		if (channel.type !== "class" || wanted.has(channel.id)) continue;
+		removeChannelMessages(channel.id);
+		channels = channels.filter((item) => item.id !== channel.id);
+		changed = true;
+	}
+	if (changed) {
+		dirty = true;
+		saveNow();
+	}
+	return { channels: channels.filter((channel) => channel.type === "class").map((channel) => ({ ...channel })) };
+}
+
 export function createGroupChannel(username, name, members) {
 	const cleanName = String(name || "").trim().slice(0, 40);
 	if (cleanName.length < 2) return { error: "invalid-name" };

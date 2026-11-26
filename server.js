@@ -245,6 +245,7 @@ import {
 	editChatMessage,
 	pinChatMessage,
 	createGroupChannel,
+	syncClassChannels,
 	getOrCreateDmChannel,
 	saveChatUpload,
 	getChatAttachment,
@@ -2191,6 +2192,7 @@ app.post("/api/account/group", sameOrigin, (req, res) => {
 	}
 	setUserGroup(user.username, group.id);
 	closeUserConnections(user.username);
+	syncClassChats();
 	audit(req, "group.self", group.name);
 	res.redirect(303, next);
 });
@@ -4726,6 +4728,7 @@ app.post("/api/admin/groups", requireAdmin, sameOrigin, (req, res) => {
 	const result = createGroup(req.body.name, req.user.username);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
 	audit(req, "group.create", result.group.name, result.group.id);
+	syncClassChats();
 	res.redirect(303, "/admin?ok=group-created");
 });
 
@@ -4736,6 +4739,7 @@ app.post("/api/admin/groups/:id/delete", requireAdmin, sameOrigin, (req, res) =>
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
 	closeGroupConnections(group.id);
 	const cleared = clearGroupAssignments(group.id);
+	syncClassChats();
 	audit(req, "group.delete", group.name, `${cleared} usuarios sin grupo`);
 	res.redirect(303, "/admin?ok=group-deleted");
 });
@@ -4748,6 +4752,19 @@ function closeGroupConnections(groupId) {
 		count++;
 	}
 	return count;
+}
+
+function syncClassChats() {
+	const users = listUsers();
+	syncClassChannels(
+		listGroups().map((group) => ({
+			id: group.id,
+			name: group.name,
+			members: users
+				.filter((member) => member.group === group.id)
+				.map((member) => member.username),
+		})),
+	);
 }
 
 app.get("/admin/groups/:id", requireStaff, (req, res) => {
@@ -4880,6 +4897,7 @@ app.post("/api/admin/groups/:id/bulk", requireStaff, sameOrigin, (req, res) => {
 		}
 		applied++;
 	}
+	if (action === "assign" || action === "remove") syncClassChats();
 	audit(
 		req,
 		"group.bulk",
@@ -4906,6 +4924,7 @@ app.post("/api/admin/users/:username/group", requireStaff, sameOrigin, (req, res
 			: ["on", "1", "true"].includes(String(req.body.groupRules));
 	setUserGroupRules(target.username, applyGroupRules);
 	closeUserConnections(target.username);
+	syncClassChats();
 	audit(
 		req,
 		"user.group",
@@ -5083,6 +5102,7 @@ app.post("/api/admin/users/:username/delete", requireAdmin, sameOrigin, (req, re
 	deleteVault(target);
 	closeUserConnections(target);
 	notifyUserLogout(target, "deleted");
+	syncClassChats();
 	audit(req, "user.delete", target);
 	res.redirect(303, "/admin?ok=deleted");
 });
@@ -5269,6 +5289,8 @@ server.on("upgrade", (req, socket, head) => {
 		},
 	});
 });
+
+syncClassChats();
 
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT) || 3030;

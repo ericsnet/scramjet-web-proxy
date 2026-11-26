@@ -2014,7 +2014,13 @@ export function chatPage({
 	const outgoingEntries = outgoingRequests.map(entryFor);
 	const pendingCount = incomingEntries.length;
 	const channelIcon = (channel) =>
-		channel.type === "public" ? "#" : channel.type === "group" ? "◆" : channel.name.slice(0, 1).toUpperCase();
+		channel.type === "public"
+			? "#"
+			: channel.type === "class"
+				? "🏫"
+				: channel.type === "group"
+					? "◆"
+					: channel.name.slice(0, 1).toUpperCase();
 	const onlineSet = new Set(
 		(Array.isArray(onlineUsers) ? onlineUsers : []).map((name) =>
 			String(name).toLowerCase(),
@@ -2025,7 +2031,7 @@ export function chatPage({
 		if (channel.type === "public") {
 			return `${onlineSet.size} en línea`;
 		}
-		if (channel.type === "group") {
+		if (channel.type === "group" || channel.type === "class") {
 			const count = (channel.members || []).filter((member) =>
 				onlineSet.has(String(member).toLowerCase()),
 			).length;
@@ -2039,7 +2045,7 @@ export function chatPage({
 		.map(
 			(channel) => `<button type="button" class="chat-channel-item${channel.id === currentChannel ? " active" : ""}" data-channel-id="${esc(channel.id)}">
   <span class="chat-channel-avatar" style="background:${avatarColor(channel.name)}">${esc(channelIcon(channel))}</span>
-  <span class="chat-channel-text"><strong>${esc(channel.name)}</strong><small>${channel.type === "public" ? "Sala general" : channel.type === "group" ? "Grupo" : "Privado"}${channelPresence(channel) ? ` · <span class="chat-channel-presence">${esc(channelPresence(channel))}</span>` : ""}</small></span>
+  <span class="chat-channel-text"><strong>${esc(channel.name)}</strong><small>${channel.type === "public" ? "Sala general" : channel.type === "class" ? "Grupo de clase" : channel.type === "group" ? "Grupo" : "Privado"}${channelPresence(channel) ? ` · <span class="chat-channel-presence">${esc(channelPresence(channel))}</span>` : ""}</small></span>
   ${channel.unread ? `<span class="chat-unread">${channel.unread > 99 ? "99+" : channel.unread}</span>` : ""}
 </button>`,
 		)
@@ -2048,9 +2054,11 @@ export function chatPage({
 	const channelMeta =
 		currentInfo.type === "public"
 			? "Sala pública"
-			: currentInfo.type === "group"
-				? `Grupo · ${currentInfo.members?.length || 0} miembros`
-				: "Chat privado";
+			: currentInfo.type === "class"
+				? `Grupo de clase · ${currentInfo.members?.length || 0} miembros`
+				: currentInfo.type === "group"
+					? `Grupo · ${currentInfo.members?.length || 0} miembros`
+					: "Chat privado";
 	const channelOptions = channels
 		.map(
 			(channel) =>
@@ -2358,7 +2366,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126e" defer></script>` : `
+<script src="/chat.js?v=20261126f" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>

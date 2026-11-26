@@ -63,7 +63,13 @@
 		return `hsl(${hash} 42% 32%)`;
 	};
 	const channelIcon = (channel) =>
-		channel.type === "public" ? "#" : channel.type === "group" ? "◆" : String(channel.name || "?").slice(0, 1).toUpperCase();
+		channel.type === "public"
+			? "#"
+			: channel.type === "class"
+				? "🏫"
+				: channel.type === "group"
+					? "◆"
+					: String(channel.name || "?").slice(0, 1).toUpperCase();
 
 	function showError(text) {
 		if (!errorEl) return;
@@ -537,7 +543,7 @@
 		if (!showOnline) return "";
 		const set = onlineSet || new Set(onlineUsers.map((name) => String(name).toLowerCase()));
 		if (channel.type === "public") return `${set.size} en línea`;
-		if (channel.type === "group") {
+		if (channel.type === "group" || channel.type === "class") {
 			const count = (channel.members || []).filter((member) =>
 				set.has(String(member).toLowerCase()),
 			).length;
@@ -651,9 +657,11 @@
 			channelMeta.textContent =
 				channel.type === "public"
 					? "Sala pública"
-					: channel.type === "group"
-						? `Grupo · ${channel.members?.length || 0} miembros`
-						: "Chat privado";
+					: channel.type === "class"
+						? `Grupo de clase · ${channel.members?.length || 0} miembros`
+						: channel.type === "group"
+							? `Grupo · ${channel.members?.length || 0} miembros`
+							: "Chat privado";
 		}
 	}
 	function syncMobileChannels() {
@@ -686,7 +694,13 @@
 			title.textContent = channel.name;
 			const kind = document.createElement("small");
 			const baseKind =
-				channel.type === "public" ? "Sala general" : channel.type === "group" ? "Grupo" : "Privado";
+				channel.type === "public"
+					? "Sala general"
+					: channel.type === "class"
+						? "Grupo de clase"
+						: channel.type === "group"
+							? "Grupo"
+							: "Privado";
 			const presenceText = channelPresence(channel);
 			kind.textContent = `${baseKind}${presenceText ? ` · ${presenceText}` : ""}`;
 			if (presenceText) {
