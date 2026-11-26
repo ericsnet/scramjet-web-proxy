@@ -99,6 +99,8 @@ import {
 	activityCounts,
 	clearActivity,
 	clearActivityExcept,
+	getActivityById,
+	deleteActivity,
 	deleteActivityRange,
 	trimActivity,
 	exportActivity,
@@ -2951,8 +2953,15 @@ app.get("/history", (req, res) => {
 					? "Historial vaciado."
 					: req.query.ok === "range"
 						? "Rango del historial eliminado."
+						: req.query.ok === "deleted"
+							? "Entrada del historial eliminada."
+							: "",
+			error:
+				req.query.error === "range"
+					? "El rango de fechas no es válido."
+					: req.query.error === "entry"
+						? "No se pudo borrar esa entrada."
 						: "",
-			error: req.query.error === "range" ? "El rango de fechas no es válido." : "",
 		}),
 	);
 });
@@ -2979,6 +2988,27 @@ app.get("/history.csv", (req, res) => {
 		`attachment; filename="historial-${new Date().toISOString().slice(0, 10)}.csv"`,
 	);
 	res.send(lines.join("\n"));
+});
+
+app.post("/api/account/history/:id/delete", sameOrigin, (req, res) => {
+	if (!getSettings().allowUserHistoryClear) {
+		return res.status(403).type("text/plain").send("No autorizado.");
+	}
+	const result = deleteActivity(req.user.username, String(req.params.id || ""));
+	const next = safeNext(String(req.body.next || ""));
+	let target = "/history?ok=deleted";
+	if (next.startsWith("/history")) {
+		try {
+			const url = new URL(next, "http://local.invalid");
+			url.searchParams.set("ok", result.error ? "entry" : "deleted");
+			url.searchParams.delete("error");
+			target = `${url.pathname}?${url.searchParams.toString()}`;
+		} catch {}
+	} else if (result.error) {
+		target = "/history?error=entry";
+	}
+	if (!result.error) audit(req, "activity.delete-entry", String(req.params.id || "").slice(0, 64));
+	res.redirect(303, target);
 });
 
 app.post("/api/account/history/delete-range", sameOrigin, (req, res) => {
@@ -3620,7 +3650,18 @@ app.get("/admin/activity", requireStaff, (req, res) => {
 	)
 		? wanted
 		: "";
-	const notice = req.query.ok === "cleared" ? "Historial vaciado." : "";
+	const notice =
+		req.query.ok === "cleared"
+			? "Historial vaciado."
+			: req.query.ok === "deleted"
+				? "Entrada eliminada."
+				: "";
+	const error =
+		req.query.error === "forbidden"
+			? "No puedes borrar la actividad del creador."
+			: req.query.error === "notfound"
+				? "Esa entrada ya no existe."
+				: "";
 	const settings = getSettings();
 	const counts = activityCounts();
 	if (req.user.role !== "creator") {
@@ -3645,8 +3686,24 @@ app.get("/admin/activity", requireStaff, (req, res) => {
 			retention: settings.activityPerUser,
 			activityEnabled: settings.activityEnabled,
 			canManage: isAdminRole(req.user.role),
+			notice,
+			error,
 		}),
 	);
+});
+
+app.post("/api/admin/activity/:id/delete", requireAdmin, sameOrigin, (req, res) => {
+	const entry = getActivityById(String(req.params.id || ""));
+	const wanted = String(req.body.user || "").trim();
+	const suffix = wanted ? `&user=${encodeURIComponent(wanted)}` : "";
+	if (!entry) return res.redirect(303, `/admin/activity?error=notfound${suffix}`);
+	if (getUser(entry.username)?.role === "creator" && req.user.role !== "creator") {
+		return res.redirect(303, `/admin/activity?error=forbidden${suffix}`);
+	}
+	const result = deleteActivity(entry.username, entry.id);
+	if (result.error) return res.redirect(303, `/admin/activity?error=notfound${suffix}`);
+	audit(req, "activity.delete", entry.username, entry.url || entry.query || entry.id);
+	res.redirect(303, `/admin/activity?ok=deleted${suffix}`);
 });
 
 app.post("/api/admin/activity/clear", requireAdmin, sameOrigin, (req, res) => {

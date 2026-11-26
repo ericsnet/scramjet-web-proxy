@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,6 +79,7 @@ export function recordActivity(username, { url, query } = {}) {
 	}
 
 	entries.push({
+		id: crypto.randomBytes(8).toString("hex"),
 		username,
 		url: cleanUrl,
 		query: cleanQuery,
@@ -167,6 +169,27 @@ export function countActivity({ username = "", search = "", from = 0, to = 0, ty
 	return count;
 }
 
+export function getActivityById(id) {
+	const target = String(id || "").slice(0, 64);
+	if (!target) return null;
+	return entries.find((entry) => String(entry.id) === target) || null;
+}
+
+export function deleteActivity(username, id) {
+	const wanted = String(username || "").toLowerCase();
+	const target = String(id || "").slice(0, 64);
+	if (!wanted || !target) return { error: "invalid-id" };
+	const before = entries.length;
+	entries = entries.filter(
+		(entry) =>
+			!(String(entry.username).toLowerCase() === wanted && String(entry.id) === target),
+	);
+	if (entries.length === before) return { error: "notfound" };
+	dirty = true;
+	saveNow();
+	return { ok: true, removed: before - entries.length };
+}
+
 export function deleteActivityRange(username, from, to) {
 	const wanted = String(username || "").toLowerCase();
 	const start = Number(from) || 0;
@@ -216,3 +239,19 @@ export function flushActivity() {
 }
 
 load();
+
+function ensureActivityIds() {
+	let changed = false;
+	for (const entry of entries) {
+		if (!entry.id || typeof entry.id !== "string") {
+			entry.id = crypto.randomBytes(8).toString("hex");
+			changed = true;
+		}
+	}
+	if (changed) {
+		dirty = true;
+		saveNow();
+	}
+}
+
+ensureActivityIds();

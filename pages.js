@@ -124,7 +124,8 @@ td{padding:12px 10px;border-top:1px solid var(--border);vertical-align:middle}
 .activity li:first-child{border-top:0}
 .activity .when{color:var(--muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .activity .who{color:var(--accent);font-size:12.5px;font-weight:600;white-space:nowrap}
-.activity .what{min-width:0;word-break:break-all}
+.activity .what{flex:1;min-width:0;word-break:break-all}
+.activity .entry-delete{flex:0 0 auto;margin-left:auto;align-self:center}
 .activity .query{color:var(--ok);font-size:12.5px;display:block}
 .filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
 .filter select{width:auto;min-width:180px}
@@ -1339,6 +1340,7 @@ export function errorPage({
   <div class="error-actions">
     <a class="small primary-small" href="/">Volver al inicio</a>
     ${user ? '<a class="small" href="/account">Mi cuenta</a>' : '<a class="small" href="/login">Iniciar sesión</a>'}
+    ${code >= 500 ? '<button class="small" type="button" onclick="location.reload()">Reintentar</button>' : ""}
     <button class="small" type="button" onclick="history.back()">Volver atrás</button>
   </div>
   ${code >= 500 ? '<p class="hint">Si el problema continúa, contacta con el administrador.</p>' : ""}
@@ -1578,17 +1580,6 @@ export function historyPage({
 	notice = "",
 	error = "",
 } = {}) {
-	const items = activity
-		.map(
-			(e) => `<li>
-  <span class="when">${esc(fmtDate(e.at))}</span>
-  <span class="what">
-    ${e.query ? `<span class="query">Búsqueda: ${esc(e.query)}</span>` : ""}
-    ${e.url ? `<span class="url">${esc(e.url)}</span>` : ""}
-  </span>
-</li>`,
-		)
-		.join("");
 	const params = new URLSearchParams();
 	if (search) params.set("q", search);
 	if (type) params.set("type", type);
@@ -1597,6 +1588,28 @@ export function historyPage({
 	const filterQuery = params.toString();
 	const pageQuery = filterQuery ? `&${filterQuery}` : "";
 	const csvQuery = filterQuery ? `?${filterQuery}` : "";
+	const returnParams = new URLSearchParams(params);
+	if (page > 1) returnParams.set("page", String(page));
+	const returnTo = `/history${returnParams.size ? `?${returnParams.toString()}` : ""}`;
+	const items = activity
+		.map((e) => {
+			const remove =
+				canClear && e.id
+					? `<form method="post" action="/api/account/history/${encodeURIComponent(e.id)}/delete" class="entry-delete" onsubmit="return confirm('¿Borrar esta entrada del historial?')">
+      <input type="hidden" name="next" value="${esc(returnTo)}">
+      <button class="small danger" type="submit" title="Borrar esta entrada">Borrar</button>
+    </form>`
+					: "";
+			return `<li>
+  <span class="when">${esc(fmtDate(e.at))}</span>
+  <span class="what">
+    ${e.query ? `<span class="query">Búsqueda: ${esc(e.query)}</span>` : ""}
+    ${e.url ? `<span class="url">${esc(e.url)}</span>` : ""}
+  </span>
+  ${remove}
+</li>`;
+		})
+		.join("");
 	const hasFilters = Boolean(search || type || fromDate || toDate);
 	const body = `
 <div class="card">
@@ -2432,6 +2445,7 @@ export function activityPage({
 	retention = 500,
 	activityEnabled = true,
 	canManage = false,
+	error = "",
 } = {}) {
 	const options = users
 		.map(
@@ -2443,16 +2457,24 @@ export function activityPage({
 		.join("");
 
 	const items = activity
-		.map(
-			(e) => `<li>
+		.map((e) => {
+			const remove =
+				canManage && e.id
+					? `<form method="post" action="/api/admin/activity/${encodeURIComponent(e.id)}/delete" class="entry-delete" onsubmit="return confirm('¿Borrar esta entrada de la actividad?')">
+      <input type="hidden" name="user" value="${esc(filter)}">
+      <button class="small danger" type="submit" title="Borrar esta entrada">Borrar</button>
+    </form>`
+					: "";
+			return `<li>
   <span class="when">${esc(fmtDate(e.at))}</span>
   ${filter ? "" : `<span class="who">${esc(e.username)}</span>`}
   <span class="what">
     ${e.query ? `<span class="query">Búsqueda: ${esc(e.query)}</span>` : ""}
     ${e.url ? `<span class="url">${esc(e.url)}</span>` : ""}
   </span>
-</li>`,
-		)
+  ${remove}
+</li>`;
+		})
 		.join("\n");
 
 	const body = `
@@ -2479,6 +2501,7 @@ ${adminTabs("activity", user.role)}
     <button class="small danger" type="submit">Vaciar ${filter ? `historial de ${esc(filter)}` : "todo el historial"}</button>
   </form>` : ""}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
   ${
 		items
 			? `<ul class="activity">${items}</ul>`
