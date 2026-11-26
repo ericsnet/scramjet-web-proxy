@@ -247,7 +247,8 @@ Botón rápido en `/admin` y ajuste en `Ajustes`:
 - Título y mensaje de bienvenida personalizables; se puede activar/desactivar y
   mostrar u ocultar el número de usuarios conectados.
 - Cada usuario puede borrar sus propios mensajes si el administrador lo permite.
-  Administradores y moderadores pueden borrar cualquiera y vaciar la sala.
+  **Los moderadores no pueden borrar mensajes**; pueden editar y fijar. Solo
+  administradores y creador pueden borrar cualquiera o vaciar la sala.
 - Los mensajes se eliminan al borrar la cuenta del autor y se incluyen en las
   copias de seguridad.
 

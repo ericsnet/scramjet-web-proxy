@@ -1,5 +1,5 @@
 import { countOpenAlerts } from "./security.js";
-import { canAssignRole, canManageRole, isAdminRole, isReportsRole } from "./roles.js";
+import { canAssignRole, canManageRole, isAdminRole, isReportsRole, isStaffRole } from "./roles.js";
 
 export function esc(value) {
 	return String(value ?? "")
@@ -1963,6 +1963,7 @@ export function chatPage({
 	outgoingRequests = [],
 	requestableUsers = [],
 	canModerate = false,
+	canDelete = false,
 	notice = "",
 	error = "",
 } = {}) {
@@ -2084,7 +2085,9 @@ export function chatPage({
 		.map((m) => {
 			const role = String(m.role || "user");
 			const own = String(m.username).toLowerCase() === current.toLowerCase();
-			const canDelete = enabled && (canModerate || (allowDelete && own));
+			const canDeleteMessage =
+				enabled &&
+				(canDelete || (!isStaffRole(user?.role) && allowDelete && own));
 			const attachment = m.attachment
 				? m.attachment.type?.startsWith("image/")
 					? `<a class="chat-attachment" href="/api/chat/files/${esc(m.attachment.id)}" target="_blank" rel="noopener"><img src="/api/chat/files/${esc(m.attachment.id)}" alt="${esc(m.attachment.name)}" loading="lazy"></a>`
@@ -2123,7 +2126,7 @@ export function chatPage({
         <button type="button" class="chat-tool" data-chat-reply="${esc(m.id)}" title="Responder">↩</button>
         ${m.canEdit ? `<button type="button" class="chat-tool" data-chat-edit="${esc(m.id)}" title="Editar">✎</button>` : ""}
         ${m.canPin ? `<button type="button" class="chat-tool" data-chat-pin="${esc(m.id)}" data-pinned="${m.pinned ? "1" : "0"}" title="${m.pinned ? "Desfijar" : "Fijar"}">📌</button>` : ""}
-        ${canDelete ? `<button type="button" class="chat-tool danger" data-chat-delete="${esc(m.id)}" title="Eliminar">🗑</button>` : ""}
+        ${canDeleteMessage ? `<button type="button" class="chat-tool danger" data-chat-delete="${esc(m.id)}" title="Eliminar">🗑</button>` : ""}
       </div>`;
 			return `<article class="chat-message${own ? " own" : ""}${m.pinned ? " pinned" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
   ${own ? "" : userAvatar(m.username, m.icon, "chat-msg-avatar")}

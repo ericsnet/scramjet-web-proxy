@@ -976,7 +976,11 @@ function enrichChatMessage(message, user, meta) {
 		role: entry.role || "user",
 		roles: entry.roles || [entry.role || "user"],
 		icon: entry.icon || null,
-		canDelete: moderator || (!!getSettings().chatAllowUserDelete && own),
+		canDelete:
+			isAdminRole(user?.role) ||
+			(!isStaffRole(user?.role) &&
+				!!getSettings().chatAllowUserDelete &&
+				own),
 		canEdit: moderator || ownAndRecent,
 		canPin: moderator,
 	};
@@ -2538,6 +2542,7 @@ app.get("/chat", (req, res) => {
 			outgoingRequests: friendState.outgoing,
 			requestableUsers,
 			canModerate,
+			canDelete: isAdminRole(req.user.role),
 			notice,
 			error,
 		}),
@@ -2913,7 +2918,9 @@ app.post("/api/chat/messages/:id/delete", sameOrigin, (req, res) => {
 		return res.status(404).json({ error: "notfound", message: CHAT_ERRORS.notfound });
 	}
 	const own = String(message.username).toLowerCase() === String(req.user.username).toLowerCase();
-	const allowed = isChatModerator(req.user) || (!!settings.chatAllowUserDelete && own);
+	const allowed =
+		isAdminRole(req.user.role) ||
+		(!isStaffRole(req.user.role) && !!settings.chatAllowUserDelete && own);
 	if (!allowed) {
 		if (!json) return res.redirect(303, "/chat?error=forbidden");
 		return res.status(403).json({ error: "forbidden", message: CHAT_ERRORS.forbidden });
