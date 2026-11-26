@@ -432,7 +432,7 @@ dialog h2{margin-top:0}
 .chat-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;
   background:linear-gradient(180deg,rgba(21,30,41,.65),rgba(13,20,28,.65));overflow:hidden}
 .chat-messages{height:min(58vh,560px);min-height:220px;overflow-y:auto;padding:12px 14px;scroll-behavior:auto;
-  display:flex;flex-direction:column;gap:8px}
+  overflow-anchor:none;display:flex;flex-direction:column;gap:8px}
 .chat-message{display:flex;justify-content:flex-start;padding:0;border:0;background:none!important}
 .chat-message.own{justify-content:flex-end}
 .chat-bubble{max-width:min(80%,560px);min-width:110px;padding:8px 11px 9px;border-radius:14px 14px 14px 4px;
@@ -2541,7 +2541,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126k" defer></script>` : `
+<script src="/chat.js?v=20261126l" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>

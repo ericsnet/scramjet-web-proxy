@@ -60,6 +60,8 @@
 		}
 	})();
 	let forceScroll = false;
+	let stickToBottom = true;
+	let pinFrame = 0;
 	let replyTarget = null;
 	let editTarget = null;
 	let readSeq = Number(box.dataset.readSeq) || 0;
@@ -110,11 +112,52 @@
 		box.appendChild(empty);
 	}
 	function nearBottom() {
-		return box.scrollHeight - box.scrollTop - box.clientHeight < 90;
+		return box.scrollHeight - box.scrollTop - box.clientHeight < 60;
 	}
 	function scrollBottom(force = false) {
-		if (force || nearBottom()) box.scrollTop = box.scrollHeight;
+		if (force) stickToBottom = true;
+		if (!stickToBottom) return;
+		const pin = () => {
+			box.scrollTop = box.scrollHeight;
+		};
+		pin();
+		if (pinFrame) cancelAnimationFrame(pinFrame);
+		pinFrame = requestAnimationFrame(() => {
+			pinFrame = 0;
+			pin();
+		});
 	}
+	box.addEventListener(
+		"scroll",
+		() => {
+			stickToBottom = nearBottom();
+		},
+		{ passive: true },
+	);
+	const messageResizeObserver =
+		typeof ResizeObserver === "function"
+			? new ResizeObserver(() => {
+					if (stickToBottom) scrollBottom();
+				})
+			: null;
+	if (messageResizeObserver) {
+		for (const child of box.children) messageResizeObserver.observe(child);
+	}
+	const messageListObserver =
+		typeof MutationObserver === "function"
+			? new MutationObserver((mutations) => {
+					for (const mutation of mutations) {
+						for (const node of mutation.addedNodes) {
+							if (node.nodeType === 1) messageResizeObserver?.observe(node);
+						}
+						for (const node of mutation.removedNodes) {
+							if (node.nodeType === 1) messageResizeObserver?.unobserve(node);
+						}
+					}
+					if (stickToBottom) scrollBottom();
+				})
+			: null;
+	messageListObserver?.observe(box, { childList: true });
 	function timeText(value) {
 		try {
 			return new Date(value).toLocaleString("es-ES", {
@@ -802,6 +845,7 @@
 		const first = box.querySelector("[data-chat-message]");
 		const oldest = Number(first?.dataset.chatSeq) || 0;
 		if (!oldest) return;
+		stickToBottom = false;
 		loadingOlder = true;
 		if (loadOlderButton) loadOlderButton.disabled = true;
 		const previousHeight = box.scrollHeight;
@@ -918,8 +962,6 @@
 	async function refresh() {
 		if (inFlight || stopped || document.hidden) return;
 		inFlight = true;
-		const stick = forceScroll || nearBottom();
-		forceScroll = false;
 		const previousTop = box.scrollTop;
 		let rebuilt = false;
 		try {
@@ -952,7 +994,9 @@
 			if (input && Number(input.maxLength) !== maxLength) input.maxLength = maxLength;
 			if (counter) counter.textContent = String((input?.value || "").length);
 			if (rebuilt) insertUnreadDivider();
-			if (stick) scrollBottom(true);
+			const shouldStick = forceScroll || stickToBottom;
+			forceScroll = false;
+			if (shouldStick) scrollBottom(true);
 			else if (rebuilt) box.scrollTop = previousTop;
 			markRead();
 			readSeq = Math.max(readSeq, lastSeq);
@@ -1085,6 +1129,7 @@
 		for (const el of box.querySelectorAll("[data-chat-message]")) el.remove();
 		ensureEmpty();
 		clearError();
+		stickToBottom = true;
 		forceScroll = true;
 		refresh();
 	}
@@ -1651,7 +1696,7 @@
 			}
 			const text = input.value.trim();
 			if (!text && !selectedFile) return;
-			const stick = nearBottom();
+			stickToBottom = true;
 			clearError();
 			if (send) send.disabled = true;
 			try {
@@ -1664,7 +1709,7 @@
 				if (data.message) replaceMessage(data.message);
 				await refresh();
 				await refreshChannels();
-				if (stick) scrollBottom(true);
+				scrollBottom(true);
 			} catch (error) {
 				showError(error.message);
 				if (error.data?.retryAfter) {
