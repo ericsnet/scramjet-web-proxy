@@ -1136,7 +1136,7 @@ const ADMIN_TABS = [
 
 function adminTabs(active, role = "admin") {
 	const visible = ["admin", "creator"].includes(role)
-		? ADMIN_TABS
+		? ADMIN_TABS.filter(([key]) => role === "creator" || key !== "reports")
 		: ADMIN_TABS.filter(([key]) => !["overview", "settings", "system", "security", "traffic", "monitor", "reports"].includes(key));
 	const separators = new Set(["security", "activity", "settings"]);
 	const links = visible
@@ -2816,6 +2816,7 @@ export function overviewPage({ user, data = {} } = {}) {
 		["Peticiones/min", stats.requestsPerMinute, "/admin/traffic"],
 		["Streams Wisp", stats.streams, "/admin/traffic"],
 	]
+		.filter(([, value]) => value !== undefined)
 		.map(
 			([label, value, href]) => `<a class="overview-stat" href="${href}"><span>${esc(label)}</span><strong>${esc(value ?? 0)}</strong></a>`,
 		)

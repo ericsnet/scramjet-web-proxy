@@ -690,6 +690,13 @@ function requireAdmin(req, res, next) {
 	next();
 }
 
+function requireCreator(req, res, next) {
+	if (!req.user || req.user.role !== "creator") {
+		return sendHttpError(req, res, 403, "Acceso restringido", "Solo el creador puede acceder a esta sección.");
+	}
+	next();
+}
+
 function requireStaff(req, res, next) {
 	if (!req.user || !isStaffRole(req.user.role)) {
 		return sendHttpError(req, res, 403, "Acceso restringido", "Solo administradores o moderadores.");
@@ -2631,7 +2638,7 @@ app.post("/api/reports", requireReportsAccess, sameOrigin, (req, res) => {
 	res.redirect(303, "/reports?ok=created");
 });
 
-app.get("/admin/reports", requireAdmin, (req, res) => {
+app.get("/admin/reports", requireCreator, (req, res) => {
 	const status = String(req.query.status || "");
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
@@ -2645,7 +2652,7 @@ app.get("/admin/reports", requireAdmin, (req, res) => {
 	);
 });
 
-app.post("/api/admin/reports/:id", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/reports/:id", requireCreator, sameOrigin, (req, res) => {
 	const result = updateReport(req.params.id, {
 		status: req.body.status,
 		adminNote: req.body.note,
@@ -2974,7 +2981,7 @@ function adminOverviewData(req) {
 			alerts: security.open || 0,
 			requests: countPendingRequests(),
 			backups: backupCount(),
-			reports: countOpenReports(),
+			reports: req.user.role === "creator" ? countOpenReports() : undefined,
 			requestsPerMinute: traffic.http.lastMinute || 0,
 			streams: traffic.wisp.activeStreams || 0,
 		},
@@ -2982,7 +2989,9 @@ function adminOverviewData(req) {
 			{ label: "Vigilancia en vivo", detail: "Ver qué están haciendo ahora", href: "/admin/monitor", icon: "👁" },
 			{ label: "Gestionar usuarios", detail: "Roles, bloqueos y permisos", href: "/admin", icon: "👥" },
 			{ label: "Revisar seguridad", detail: `${security.open || 0} alertas abiertas`, href: "/admin/security", icon: "🛡" },
-			{ label: "Revisar informes", detail: `${countOpenReports()} informes abiertos`, href: "/admin/reports", icon: "📝" },
+			...(req.user.role === "creator"
+				? [{ label: "Revisar informes", detail: `${countOpenReports()} informes abiertos`, href: "/admin/reports", icon: "📝" }]
+				: []),
 			{ label: "Ajustes del proxy", detail: "Chat, acceso, portada y copias", href: "/admin/settings", icon: "⚙" },
 		],
 		recent,
