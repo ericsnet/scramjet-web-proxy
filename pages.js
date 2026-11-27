@@ -1633,7 +1633,7 @@ export function chatPage({
 				.join("")
 		: '<p class="chat-detail-empty">No hay mensajes fijados en este canal.</p>';
 	const body = enabled ? `
-<div class="chat-app" data-show-online="${settings.chatShowOnline ? "1" : "0"}">
+<div class="chat-app details-hidden" data-show-online="${settings.chatShowOnline ? "1" : "0"}">
   <button type="button" class="chat-backdrop" id="chat-backdrop" aria-label="Cerrar panel" tabindex="-1"></button>
   <aside class="chat-sidebar">
     <div class="chat-sidebar-head">
