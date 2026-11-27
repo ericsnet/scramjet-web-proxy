@@ -51,7 +51,7 @@ export function recordHttp(req, res, startedAt) {
 	const pathname = String(req.path || req.originalUrl || "").split("?")[0];
 	if (!pathname || SKIP_PATH.test(pathname)) return;
 	// No registrar el propio polling del panel ni su JavaScript.
-	if (pathname === "/api/session/events" || pathname === "/api/admin/traffic" || pathname === "/api/admin/monitor" || pathname === "/api/chat/notifications" || pathname === "/traffic.js" || pathname === "/monitor.js") return;
+	if (pathname === "/api/session/events" || pathname === "/api/chat/presence" || pathname === "/api/admin/traffic" || pathname === "/api/admin/monitor" || pathname === "/api/chat/notifications" || pathname === "/traffic.js" || pathname === "/monitor.js") return;
 	const now = Date.now();
 	const entry = {
 		at: new Date(now).toISOString(),

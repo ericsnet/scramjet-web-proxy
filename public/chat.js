@@ -74,6 +74,7 @@
 	let readSeq = Number(box.dataset.readSeq) || 0;
 	let hasMore = box.dataset.hasMore === "1";
 	let lastTypingAt = 0;
+	let lastPresenceAt = 0;
 	let lastRenderedAt = "";
 	let lastRenderedUser = "";
 	let loadingOlder = false;
@@ -987,6 +988,16 @@
 			headers: { "Content-Type": "application/json", Accept: "application/json" },
 			body: JSON.stringify({ channel: channelId, seq: lastSeq }),
 			keepalive: true,
+		}).catch(() => {});
+	}
+	function markChatPresence(force = false) {
+		if (document.hidden) return;
+		const now = Date.now();
+		if (!force && now - lastPresenceAt < 60_000) return;
+		lastPresenceAt = now;
+		fetch("/api/chat/presence", {
+			cache: "no-store",
+			headers: { Accept: "application/json" },
 		}).catch(() => {});
 	}
 	async function refresh() {
@@ -2177,12 +2188,17 @@
 		}
 	});
 
+	document.addEventListener("pointerdown", () => markChatPresence(), { passive: true });
+	document.addEventListener("wheel", () => markChatPresence(), { passive: true });
+	document.addEventListener("keydown", () => markChatPresence());
 	document.addEventListener("visibilitychange", () => {
 		if (!document.hidden) {
+			markChatPresence(true);
 			refresh();
 			markRead();
 		}
 	});
+	markChatPresence(true);
 	setInterval(refresh, 5000);
 	setInterval(refreshChannels, 15000);
 	insertUnreadDivider();

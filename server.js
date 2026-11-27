@@ -2495,6 +2495,12 @@ app.post("/api/invite/accept", sameOrigin, (req, res) => {
 
 app.use(requireAuth);
 
+app.get("/api/chat/presence", (req, res) => {
+	// getSession actualiza lastActiveAt solo con actividad real, no con el
+	// polling periódico del chat.
+	res.set("Cache-Control", "no-store").status(204).end();
+});
+
 const INVITE_NOTICES = {
 	created: "Enlace de invitación creado.",
 	revoked: "Invitación revocada.",
@@ -2841,7 +2847,7 @@ function chatOnlineUsers() {
 	const cutoff = Date.now() - 5 * 60 * 1000;
 	const names = new Map();
 	for (const session of listSessions()) {
-		const seen = new Date(session.lastSeenAt).getTime();
+		const seen = new Date(session.lastActiveAt || session.lastSeenAt).getTime();
 		if (Number.isFinite(seen) && seen >= cutoff) {
 			names.set(String(session.username).toLowerCase(), session.username);
 		}

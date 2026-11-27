@@ -31,9 +31,9 @@ const SKIP_PATH =
 // Endpoints que el propio panel consulta periódicamente. No son navegación
 // humana y no deben contar como ráfaga ni como intervalos automatizados.
 const ROUTINE_PATH =
-	/^(?:\/api\/(?:chat\/(?:unread|channels|read|messages|files|notifications)|me|lang|config|admin\/(?:traffic|monitor))|\/(?:design|pentest|qa|reports))$/;
+	/^(?:\/api\/(?:chat\/(?:unread|channels|read|messages|files|notifications|presence)|me|lang|config|admin\/(?:traffic|monitor))|\/(?:design|pentest|qa|reports))$/;
 const ROUTINE_ANY_METHOD =
-	/^\/(?:api\/(?:chat\/(?:read|unread|channels)|me|lang|session\/events|admin\/(?:traffic|monitor)))$/;
+	/^\/(?:api\/(?:chat\/(?:read|unread|channels|presence)|me|lang|session\/events|admin\/(?:traffic|monitor)))$/;
 
 const BOT_UA =
 	/curl|wget|python-requests|python-urllib|aiohttp|httpx|scrapy|headlesschrome|phantomjs|puppeteer|playwright|selenium|go-http-client|okhttp|java\/|node-fetch|axios|bot\b|spider|crawler/i;
