@@ -129,7 +129,7 @@ ${topbar ? appSidebar(user) : ""}
 </div>`}
 ${topbar ? '<button type="button" class="nav-backdrop" id="nav-backdrop" aria-label="Cerrar menú" tabindex="-1"></button>' : ""}
 ${topbar ? `<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">⚠ Pánico</button></form>` : ""}
-${topbar && chatFab ? `<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js?v=20261127a" defer></script>` : ""}
+${topbar && chatFab ? `<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="${asset("chat-notify.js")}" defer></script>` : ""}
 <script>
 (() => {
   const bar = document.getElementById("page-progress");
@@ -1844,7 +1844,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261127a" defer></script>` : `
+<script src="${asset("chat.js")}" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
