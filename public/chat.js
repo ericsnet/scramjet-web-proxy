@@ -2203,11 +2203,25 @@
 		setChatPanel(chatApp?.classList.contains("sidebar-open") ? "" : "sidebar");
 	});
 	document.getElementById("chat-sidebar-close")?.addEventListener("click", () => setChatPanel(""));
+	const setDetailsHidden = (hidden) => {
+		if (!chatApp) return;
+		chatApp.classList.toggle("details-hidden", hidden);
+		chatApp.classList.remove("details-open");
+		if (!hidden) chatApp.classList.add("details-open");
+	};
 	document.getElementById("chat-details-open")?.addEventListener("click", () => {
-		setChatPanel(chatApp?.classList.contains("details-open") ? "" : "details");
+		if (!chatApp) return;
+		const narrow = window.matchMedia("(max-width: 1120px)").matches;
+		const open = chatApp.classList.contains("details-open");
+		const hidden = chatApp.classList.contains("details-hidden");
+		if (narrow) setDetailsHidden(open);
+		else setDetailsHidden(!hidden);
 	});
-	document.getElementById("chat-details-close")?.addEventListener("click", () => setChatPanel(""));
-	document.getElementById("chat-backdrop")?.addEventListener("click", () => setChatPanel(""));
+	document.getElementById("chat-details-close")?.addEventListener("click", () => setDetailsHidden(true));
+	document.getElementById("chat-backdrop")?.addEventListener("click", () => {
+		if (chatApp?.classList.contains("details-open")) setDetailsHidden(true);
+		else setChatPanel("");
+	});
 	document.getElementById("chat-channel-list")?.addEventListener("click", () => setChatPanel(""));
 	document.querySelectorAll("[data-details-tab]").forEach((tab) => {
 		tab.addEventListener("click", () => {
@@ -2223,7 +2237,9 @@
 		});
 	});
 	document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape") setChatPanel("");
+		if (event.key !== "Escape") return;
+		if (chatApp?.classList.contains("details-open")) setDetailsHidden(true);
+		setChatPanel("");
 	});
 	document.addEventListener("visibilitychange", () => {
 		if (!document.hidden) {
