@@ -1107,8 +1107,8 @@ function userAvatar(name, icon, className = "user-avatar") {
 	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${image}</span>`;
 }
 
-function profileLink(name, className = "profile-link") {
-	return `<a class="${esc(className)}" href="/u/${encodeURIComponent(name)}" onclick="event.stopPropagation()">${esc(name)}</a>`;
+function profileLink(name, className = "profile-link", label = name) {
+	return `<a class="${esc(className)}" href="/u/${encodeURIComponent(name)}" onclick="event.stopPropagation()">${esc(label)}</a>`;
 }
 
 function groupAvatar(name, className = "group-avatar") {
@@ -1144,7 +1144,7 @@ ${topbar}
 <main class="wrap${wide ? " wide" : ""}${full ? " full" : ""}">${body}</main>
 <footer>Proxy Web</footer>
 ${topbar ? `<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">⚠ Pánico</button></form>` : ""}
-${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js?v=20261126e" defer></script>' : ""}
+${topbar && chatFab ? '<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="/chat-notify.js?v=20261126f" defer></script>' : ""}
 <script>
 (() => {
   const bar = document.getElementById("page-progress");
@@ -2190,7 +2190,7 @@ export function chatPage({
 			).length;
 			return `${count} en línea`;
 		}
-		return onlineSet.has(String(channel.name).toLowerCase())
+		return onlineSet.has(String(channel.presenceName || channel.name).toLowerCase())
 			? "en línea"
 			: "desconectado";
 	};
@@ -2212,6 +2212,14 @@ export function chatPage({
 				: currentInfo.type === "group"
 					? `Grupo · ${currentInfo.members?.length || 0} miembros`
 					: "Chat privado";
+	const currentAliasTarget =
+		currentInfo.type === "dm"
+			? currentInfo.aliasTarget ||
+				(currentInfo.members || []).find(
+					(member) => String(member).toLowerCase() !== current.toLowerCase(),
+				) ||
+				""
+			: "";
 	const channelOptions = channels
 		.map(
 			(channel) =>
@@ -2327,7 +2335,7 @@ export function chatPage({
 				)
 				.join("")}</div></details>`;
 			const replyQuote = m.replyTo
-				? `<div class="chat-reply-quote"><strong>@${profileLink(m.replyTo.username)}</strong><span>${esc((m.replyTo.text || "").slice(0, 140) || attachmentLabel(m.replyTo.attachment))}</span></div>`
+				? `<div class="chat-reply-quote"><strong>@${profileLink(m.replyTo.username, "profile-link", m.replyTo.displayName || m.replyTo.username)}</strong><span>${esc((m.replyTo.text || "").slice(0, 140) || attachmentLabel(m.replyTo.attachment))}</span></div>`
 				: "";
 			const edited = m.editedAt
 				? `<span class="chat-edited" title="Editado ${esc(fmtDate(m.editedAt))}">editado</span>`
@@ -2343,11 +2351,11 @@ export function chatPage({
         ${canDeleteMessage ? `<button type="button" class="chat-tool danger" data-chat-delete="${esc(m.id)}" title="Eliminar">🗑</button>` : ""}
       </div>`;
 			return `<article class="chat-message${own ? " own" : ""}${m.pinned ? " pinned" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
-  ${own ? "" : userAvatar(m.username, m.icon, "chat-msg-avatar")}
+  ${own ? "" : userAvatar(m.displayName || m.username, m.icon, "chat-msg-avatar")}
   <div class="chat-bubble">
     ${replyQuote}
     <div class="chat-meta">
-      ${own ? "" : `<a class="chat-author profile-link" href="/u/${encodeURIComponent(m.username)}">${esc(m.username)}</a>`}
+      ${own ? "" : `<a class="chat-author profile-link" href="/u/${encodeURIComponent(m.username)}">${esc(m.displayName || m.username)}</a>`}
       ${roleBadge(role, m.roles)}
       ${pinBadge}
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
@@ -2369,7 +2377,7 @@ export function chatPage({
 				.slice(0, 3)
 				.map(
 					(message) =>
-						`<button type="button" class="chat-pin-chip" data-chat-jump="${esc(message.id)}" title="${esc(message.text || "")}"><span>📌</span><strong>${esc(message.username)}</strong><small>${esc((message.text || "").slice(0, 80) || attachmentLabel(message.attachment))}</small></button>`,
+						`<button type="button" class="chat-pin-chip" data-chat-jump="${esc(message.id)}" title="${esc(message.text || "")}"><span>📌</span><strong>${esc(message.displayName || message.username)}</strong><small>${esc((message.text || "").slice(0, 80) || attachmentLabel(message.attachment))}</small></button>`,
 				)
 				.join("")
 		: "";
@@ -2393,6 +2401,9 @@ export function chatPage({
       </div>
       <select id="chat-mobile-channel" class="chat-mobile-channel" aria-label="Canal">${channelOptions}</select>
       <div class="chat-header-actions">
+        <button class="chat-action" type="button" id="chat-alias-open" title="Poner un apodo privado"${currentInfo.type === "dm" ? "" : " hidden"}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Apodo</span>
+        </button>
         <button class="chat-action" type="button" id="chat-search-open" title="Buscar mensajes">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Buscar</span>
         </button>
@@ -2515,6 +2526,20 @@ export function chatPage({
     </div>
   </form>
 </dialog>
+<dialog id="chat-alias-dialog" class="chat-dialog">
+  <form method="dialog">
+    <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
+    <h2>Apodo privado</h2>
+    <p class="muted">Solo tú verás este nombre. No cambia el nombre real de la otra persona ni cómo te ve ella a ti.</p>
+    <label for="chat-alias-input">Apodo para ${esc(currentAliasTarget || currentInfo.name)}</label>
+    <input id="chat-alias-input" maxlength="32" value="${esc(currentInfo.alias || "")}" placeholder="Escribe un apodo…" autocomplete="off">
+    <input type="hidden" id="chat-alias-target" value="${esc(currentAliasTarget)}">
+    <div class="dialog-actions">
+      <button class="small" type="button" id="chat-alias-clear">Quitar apodo</button>
+      <button class="small primary-small" type="button" id="chat-alias-save">Guardar apodo</button>
+    </div>
+  </form>
+</dialog>
 <dialog id="chat-friends-dialog" class="chat-dialog friend-dialog">
   <button type="button" class="dialog-x" data-close-dialog aria-label="Cerrar">×</button>
     <h2>Amigos</h2>
@@ -2545,7 +2570,7 @@ export function chatPage({
     <div id="chat-search-results" class="chat-search-results"></div>
   </form>
 </dialog>
-<script src="/chat.js?v=20261126m" defer></script>` : `
+<script src="/chat.js?v=20261126o" defer></script>` : `
 <div class="card">
   <div class="chat-disabled">
     <p class="muted">El chat está desactivado por la administración.</p>
@@ -2557,7 +2582,7 @@ export function chatPage({
 		chatFab: false,
 		wide: true,
 		full: true,
-		head: '<link rel="stylesheet" href="/chat.css?v=20261126a">',
+		head: '<link rel="stylesheet" href="/chat.css?v=20261126b">',
 	});
 }
 

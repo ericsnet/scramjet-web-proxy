@@ -260,6 +260,8 @@ import {
 	deleteChatMessagesByUser,
 	getChatSeen,
 	getChannelReadSeqs,
+	getChatAlias,
+	setChatAlias,
 	clearChat,
 	flushChat,
 } from "./chat.js";
@@ -976,8 +978,19 @@ function enrichChatMessage(message, user, meta) {
 	const ownAndRecent =
 		own && Date.now() - new Date(message.at).getTime() <= 15 * 60 * 1000;
 	const moderator = isChatModerator(user);
+	const displayName = getChatAlias(user?.username, message.username) || message.username;
+	const replyTo = message.replyTo
+		? {
+				...message.replyTo,
+				displayName:
+					getChatAlias(user?.username, message.replyTo.username) ||
+					message.replyTo.username,
+			}
+		: message.replyTo;
 	return {
 		...message,
+		displayName,
+		replyTo,
 		role: entry.role || "user",
 		roles: entry.roles || [entry.role || "user"],
 		icon: entry.icon || null,
@@ -2715,7 +2728,9 @@ app.get("/api/chat/messages", (req, res) => {
 		messages: chatEnriched(result.messages, req.user, roles),
 		pinned: chatEnriched(result.pinned || [], req.user, roles),
 		readSeqs: getChannelReadSeqs(channelId),
-		typing: typingUsers(channelId, req.user.username),
+		typing: typingUsers(channelId, req.user.username).map(
+			(name) => getChatAlias(req.user.username, name) || name,
+		),
 		online,
 		onlineIcons: chatOnlineIcons(online || []),
 		canModerate: isChatModerator(req.user),
@@ -2830,6 +2845,37 @@ app.get("/api/chat/search", (req, res) => {
 	res.set("Cache-Control", "no-store");
 	res.json({
 		messages: chatEnriched(result.messages, req.user, chatUserMeta()),
+		channels: listChatChannels(req.user.username),
+	});
+});
+
+app.post("/api/chat/alias", sameOrigin, (req, res) => {
+	if (!getSettings().chatEnabled) {
+		return res.status(403).json({ error: "disabled", message: "El chat está desactivado." });
+	}
+	const target = getUser(String(req.body.username || ""));
+	if (!target || target.username.toLowerCase() === req.user.username.toLowerCase()) {
+		return res.status(400).json({ error: "invalid-user", message: "Usuario no válido." });
+	}
+	const hasDm = listChatChannels(req.user.username).some(
+		(channel) =>
+			channel.type === "dm" &&
+			String(channel.aliasTarget || "").toLowerCase() === target.username.toLowerCase(),
+	);
+	if (!hasDm) {
+		return res
+			.status(400)
+			.json({ error: "not-contact", message: "Solo puedes poner apodo en un chat privado." });
+	}
+	const result = setChatAlias(req.user.username, target.username, req.body.alias);
+	if (result.error) {
+		return res.status(400).json({ error: result.error, message: "No se pudo guardar el apodo." });
+	}
+	res.set("Cache-Control", "no-store");
+	res.json({
+		ok: true,
+		username: target.username,
+		alias: result.alias,
 		channels: listChatChannels(req.user.username),
 	});
 });

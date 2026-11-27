@@ -33,6 +33,7 @@ const MIME_EXT = {
 let messages = [];
 let channels = [];
 let reads = {};
+let aliases = {};
 let uploads = {};
 let nextSeq = 1;
 let generation = 1;
@@ -59,7 +60,11 @@ function saveNow() {
 		const tmp = `${FILE}.tmp`;
 		fs.writeFileSync(
 			tmp,
-			JSON.stringify({ messages, channels, reads, uploads, nextSeq, generation, revision }, null, 2),
+			JSON.stringify(
+				{ messages, channels, reads, aliases, uploads, nextSeq, generation, revision },
+				null,
+				2,
+			),
 			{ mode: 0o600 },
 		);
 		fs.renameSync(tmp, FILE);
@@ -196,6 +201,20 @@ function load() {
 					typeof value === "object" && value !== null ? value : { [GENERAL]: Number(value) || 0 };
 			}
 		}
+		aliases = {};
+		if (data.aliases && typeof data.aliases === "object") {
+			for (const [owner, map] of Object.entries(data.aliases)) {
+				if (!map || typeof map !== "object") continue;
+				const clean = {};
+				for (const [target, value] of Object.entries(map)) {
+					const alias = String(value || "").trim().slice(0, 32);
+					if (alias) clean[String(target || "").toLowerCase()] = alias;
+				}
+				if (Object.keys(clean).length) {
+					aliases[String(owner || "").toLowerCase()] = clean;
+				}
+			}
+		}
 		uploads = data.uploads && typeof data.uploads === "object" ? data.uploads : {};
 		nextSeq = Math.max(
 			Number(data.nextSeq) || 1,
@@ -207,6 +226,7 @@ function load() {
 		messages = [];
 		channels = [generalChannel()];
 		reads = {};
+		aliases = {};
 		uploads = {};
 		nextSeq = 1;
 		generation = 1;
@@ -231,6 +251,42 @@ function mentionsIn(text) {
 	return [...new Set([...String(text).matchAll(/@([A-Za-z0-9._-]{3,32})/g)].map((m) => m[1]))];
 }
 
+function aliasKey(value) {
+	return String(value || "").toLowerCase();
+}
+
+export function getChatAlias(owner, target) {
+	const ownerAliases = aliases[aliasKey(owner)];
+	return ownerAliases?.[aliasKey(target)] || "";
+}
+
+export function getChatAliases(owner) {
+	return { ...(aliases[aliasKey(owner)] || {}) };
+}
+
+export function setChatAlias(owner, target, value) {
+	const ownerKey = aliasKey(owner);
+	const targetKey = aliasKey(target);
+	if (!ownerKey || !targetKey || ownerKey === targetKey) {
+		return { error: "invalid-user" };
+	}
+	const alias = cleanText(value).replace(/\s+/g, " ").slice(0, 32);
+	if (!alias) {
+		if (aliases[ownerKey]) {
+			delete aliases[ownerKey][targetKey];
+			if (!Object.keys(aliases[ownerKey]).length) delete aliases[ownerKey];
+			dirty = true;
+			scheduleSave();
+		}
+		return { ok: true, alias: "" };
+	}
+	aliases[ownerKey] = aliases[ownerKey] || {};
+	aliases[ownerKey][targetKey] = alias;
+	dirty = true;
+	scheduleSave();
+	return { ok: true, alias };
+}
+
 export function listChatChannels(username) {
 	const lower = String(username || "").toLowerCase();
 	return channels
@@ -248,14 +304,21 @@ export function listChatChannels(username) {
 					message.seq > read &&
 					message.username.toLowerCase() !== lower,
 			).length;
+			const other =
+				channel.type === "dm"
+					? channel.members.find((member) => member.toLowerCase() !== lower) ||
+						channel.members[0] ||
+						"Privado"
+					: "";
+			const alias = channel.type === "dm" ? getChatAlias(username, other) : "";
 			return {
 				id: channel.id,
-				name:
-					channel.type === "dm"
-						? channel.members.find((member) => member.toLowerCase() !== lower) || "Privado"
-						: channel.name,
+				name: channel.type === "dm" ? alias || other : channel.name,
 				type: channel.type,
 				members: channel.members,
+				presenceName: channel.type === "dm" ? other : channel.name,
+				alias,
+				aliasTarget: other,
 				latestSeq: last?.seq || 0,
 				lastAt: last?.at || null,
 				readSeq: read,

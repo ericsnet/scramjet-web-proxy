@@ -173,15 +173,16 @@
 			const mentioned = Array.isArray(message.mentions) &&
 				message.mentions.some((name) => String(name).toLowerCase() === currentUser.toLowerCase());
 			const audio = String(message.attachment?.type || "").startsWith("audio/");
+			const displayName = message.displayName || message.username;
 			showToast({
-				title: mentioned ? `${message.username} te mencionó` : message.username,
+				title: mentioned ? `${displayName} te mencionó` : displayName,
 				text: String(
 					message.text ||
 						(audio ? "🎤 Audio" : message.attachment ? "Archivo adjunto" : ""),
 				).slice(0, 180),
 				tone: mentioned ? "mention" : "",
 				icon: message.icon?.url || "",
-				name: message.username,
+				name: displayName,
 				href: `/chat?channel=${encodeURIComponent(message.channelId || "general")}`,
 			});
 		}

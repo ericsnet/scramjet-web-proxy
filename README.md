@@ -22,6 +22,7 @@ administración.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto/audio), notas de voz grabadas, reacciones, encuestas, menciones y presencia por conversación. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
+- **Apodos privados en chats**: en un chat privado puedes poner un apodo a la otra persona. Solo tú lo ves, en la cabecera, en la lista de conversaciones y en los mensajes; no cambia su nombre real ni lo que ella ve de ti.
 - **Chat de clase automático**: cada grupo de usuarios tiene su propio canal interno, visible solo para sus miembros y sincronizado cuando alguien entra o sale del grupo.
 - **Acuses de lectura en el chat**: los mensajes propios muestran **Visto / No visto** en privados y **Visto por N** en grupos; se actualiza cuando el otro miembro lee el canal.
 - **Escala de privilegios con personas**: en Administración, cada rol muestra de forma compacta los usuarios que lo tienen (Usuario, Diseñador gráfico, Pentester, QA, Moderador, Administrador y Creador).

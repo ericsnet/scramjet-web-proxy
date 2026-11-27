@@ -22,6 +22,12 @@
 	const recStop = document.getElementById("chat-rec-stop");
 	const recSend = document.getElementById("chat-rec-send");
 	const recCancel = document.getElementById("chat-rec-cancel");
+	const aliasOpen = document.getElementById("chat-alias-open");
+	const aliasDialog = document.getElementById("chat-alias-dialog");
+	const aliasInput = document.getElementById("chat-alias-input");
+	const aliasTargetInput = document.getElementById("chat-alias-target");
+	const aliasSave = document.getElementById("chat-alias-save");
+	const aliasClear = document.getElementById("chat-alias-clear");
 	const typingEl = document.getElementById("chat-typing");
 	const pinnedBar = document.getElementById("chat-pinned-bar");
 	const pinnedList = document.getElementById("chat-pinned-list");
@@ -228,7 +234,7 @@
 		const quote = document.createElement("div");
 		quote.className = "chat-reply-quote";
 		const author = document.createElement("strong");
-		author.textContent = `@${message.replyTo.username}`;
+		author.textContent = `@${message.replyTo.displayName || message.replyTo.username}`;
 		const text = document.createElement("span");
 		text.textContent =
 			String(message.replyTo.text || "").slice(0, 140) ||
@@ -277,7 +283,7 @@
 			const icon = document.createElement("span");
 			icon.textContent = "📌";
 			const author = document.createElement("strong");
-			author.textContent = message.username;
+			author.textContent = message.displayName || message.username;
 			const text = document.createElement("small");
 			text.textContent = String(
 				message.text || attachmentLabel(message.attachment),
@@ -307,11 +313,12 @@
 			replyTarget = {
 				id: message.id,
 				username: message.username,
+				displayName: message.displayName || message.username,
 				text: message.text || "",
 				attachment: message.attachment || null,
 			};
 			editTarget = null;
-			contextLabel.textContent = `Respondiendo a ${message.username}`;
+			contextLabel.textContent = `Respondiendo a ${replyTarget.displayName}`;
 			contextText.textContent = String(
 				message.text || attachmentLabel(message.attachment),
 			).slice(0, 120);
@@ -728,7 +735,13 @@
 		messageStore.set(String(message.id), message);
 
 		if (!own && !grouped) {
-			article.appendChild(makeUserAvatar(message.username, message.icon, "chat-msg-avatar"));
+			article.appendChild(
+				makeUserAvatar(
+					message.displayName || message.username,
+					message.icon,
+					"chat-msg-avatar",
+				),
+			);
 		} else if (!own) {
 			const spacer = document.createElement("span");
 			spacer.className = "chat-msg-avatar-spacer";
@@ -745,7 +758,7 @@
 			const author = document.createElement("a");
 			author.className = "chat-author profile-link";
 			author.href = `/u/${encodeURIComponent(message.username)}`;
-			author.textContent = String(message.username);
+			author.textContent = String(message.displayName || message.username);
 			meta.appendChild(author);
 		}
 		const badge = roleBadge(message.role, message.roles);
@@ -923,7 +936,9 @@
 			).length;
 			return `${count} en línea`;
 		}
-		return set.has(String(channel.name).toLowerCase()) ? "en línea" : "desconectado";
+		return set.has(String(channel.presenceName || channel.name).toLowerCase())
+			? "en línea"
+			: "desconectado";
 	}
 
 	function updateChannelPresence() {
@@ -1032,6 +1047,28 @@
 			inFlight = false;
 		}
 	}
+	function currentAliasTarget(channel) {
+		if (!channel || channel.type !== "dm") return "";
+		return (
+			channel.aliasTarget ||
+			(channel.members || []).find(
+				(member) => String(member).toLowerCase() !== currentUser.toLowerCase(),
+			) ||
+			""
+		);
+	}
+	function syncAliasUi() {
+		const channel = channelsCache.find((item) => item.id === channelId);
+		if (!channel) return;
+		const isDm = channel.type === "dm";
+		if (aliasOpen) aliasOpen.hidden = !isDm;
+		if (aliasTargetInput) aliasTargetInput.value = isDm ? currentAliasTarget(channel) : "";
+		if (aliasInput) aliasInput.value = isDm ? channel.alias || "" : "";
+		const label = aliasDialog?.querySelector('label[for="chat-alias-input"]');
+		if (label && isDm) {
+			label.textContent = `Apodo para ${currentAliasTarget(channel)}`;
+		}
+	}
 	function updateHeader() {
 		const channel = channelsCache.find((item) => item.id === channelId);
 		if (!channel) return;
@@ -1046,6 +1083,7 @@
 							? `Grupo · ${channel.members?.length || 0} miembros`
 							: "Chat privado";
 		}
+		syncAliasUi();
 	}
 	function orderedChannels() {
 		const rank = (channel) =>
@@ -1129,6 +1167,7 @@
 	function switchChannel(value) {
 		cancelRecording();
 		pauseActiveAudio();
+		aliasDialog?.close();
 		channelId = value || "general";
 		clearContext();
 		messageStore.clear();
@@ -1758,7 +1797,13 @@
 				(article?.classList.contains("own") ? currentUser : "");
 			const text =
 				stored?.text || article?.querySelector(".chat-text")?.textContent || "";
-			setContext("reply", { id, username, text, attachment: stored?.attachment || null });
+			setContext("reply", {
+				id,
+				username,
+				displayName: stored?.displayName || username,
+				text,
+				attachment: stored?.attachment || null,
+			});
 			input?.focus();
 			return;
 		}
@@ -1871,6 +1916,43 @@
 	bindDialog("chat-new-group", "chat-group-dialog");
 	bindDialog("chat-new-poll", "chat-poll-dialog");
 	bindDialog("chat-friends", "chat-friends-dialog");
+	bindDialog("chat-alias-open", "chat-alias-dialog");
+	aliasOpen?.addEventListener("click", () => {
+		syncAliasUi();
+		setTimeout(() => aliasInput?.focus(), 30);
+	});
+	async function saveAlias(value) {
+		const target = String(aliasTargetInput?.value || "").trim();
+		if (!target) return;
+		if (aliasSave) aliasSave.disabled = true;
+		if (aliasClear) aliasClear.disabled = true;
+		try {
+			const data = await request("/api/chat/alias", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ username: target, alias: value }),
+			});
+			channelsCache = data.channels || channelsCache;
+			renderChannelList();
+			syncMobileChannels();
+			updateHeader();
+			aliasDialog?.close();
+			revision = "0";
+			lastSeq = 0;
+			stickToBottom = true;
+			await refresh();
+		} catch (error) {
+			showError(error.message);
+		} finally {
+			if (aliasSave) aliasSave.disabled = false;
+			if (aliasClear) aliasClear.disabled = false;
+		}
+	}
+	aliasSave?.addEventListener("click", () => saveAlias(aliasInput?.value || ""));
+	aliasClear?.addEventListener("click", () => {
+		if (aliasInput) aliasInput.value = "";
+		saveAlias("");
+	});
 	const friendSearch = document.getElementById("friend-search");
 	const friendResults = document.getElementById("friend-results");
 	const friendSearchHint = document.getElementById("friend-search-hint");
@@ -1939,7 +2021,7 @@
 				const head = document.createElement("div");
 				head.className = "chat-search-result-head";
 				const author = document.createElement("strong");
-				author.textContent = message.username;
+				author.textContent = message.displayName || message.username;
 				const channel = document.createElement("span");
 				channel.className = "badge";
 				channel.textContent =
