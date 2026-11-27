@@ -276,14 +276,14 @@ export function setChatAlias(owner, target, value) {
 			delete aliases[ownerKey][targetKey];
 			if (!Object.keys(aliases[ownerKey]).length) delete aliases[ownerKey];
 			dirty = true;
-			scheduleSave();
+			saveNow();
 		}
 		return { ok: true, alias: "" };
 	}
 	aliases[ownerKey] = aliases[ownerKey] || {};
 	aliases[ownerKey][targetKey] = alias;
 	dirty = true;
-	scheduleSave();
+	saveNow();
 	return { ok: true, alias };
 }
 

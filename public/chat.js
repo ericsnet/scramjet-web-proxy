@@ -58,6 +58,7 @@
 	let activeAudio = null;
 	let cooldownUntil = 0;
 	let channelsCache = [];
+	let channelsRequest = 0;
 	let onlineUsers = [];
 	let readSeqs = (() => {
 		try {
@@ -1166,8 +1167,9 @@
 		}
 	}
 	async function refreshChannels() {
+		const requestId = ++channelsRequest;
 		const data = await request("/api/chat/channels").catch(() => null);
-		if (!data) return;
+		if (!data || requestId !== channelsRequest) return;
 		channelsCache = data.channels || [];
 		updateOnline(data.online, data.onlineIcons);
 		renderChannelList();
@@ -1943,6 +1945,7 @@
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ username: target, alias: value }),
 			});
+			channelsRequest += 1;
 			channelsCache = data.channels || channelsCache;
 			renderChannelList();
 			syncMobileChannels();
@@ -2191,6 +2194,37 @@
 	document.addEventListener("pointerdown", () => markChatPresence(), { passive: true });
 	document.addEventListener("wheel", () => markChatPresence(), { passive: true });
 	document.addEventListener("keydown", () => markChatPresence());
+	const setChatPanel = (panel = "") => {
+		if (!chatApp) return;
+		chatApp.classList.toggle("sidebar-open", panel === "sidebar");
+		chatApp.classList.toggle("details-open", panel === "details");
+	};
+	document.getElementById("chat-sidebar-open")?.addEventListener("click", () => {
+		setChatPanel(chatApp?.classList.contains("sidebar-open") ? "" : "sidebar");
+	});
+	document.getElementById("chat-sidebar-close")?.addEventListener("click", () => setChatPanel(""));
+	document.getElementById("chat-details-open")?.addEventListener("click", () => {
+		setChatPanel(chatApp?.classList.contains("details-open") ? "" : "details");
+	});
+	document.getElementById("chat-details-close")?.addEventListener("click", () => setChatPanel(""));
+	document.getElementById("chat-backdrop")?.addEventListener("click", () => setChatPanel(""));
+	document.getElementById("chat-channel-list")?.addEventListener("click", () => setChatPanel(""));
+	document.querySelectorAll("[data-details-tab]").forEach((tab) => {
+		tab.addEventListener("click", () => {
+			const name = tab.dataset.detailsTab;
+			document.querySelectorAll("[data-details-tab]").forEach((item) => {
+				const active = item === tab;
+				item.classList.toggle("active", active);
+				item.setAttribute("aria-selected", active ? "true" : "false");
+			});
+			document.querySelectorAll("[data-details-panel]").forEach((panel) => {
+				panel.classList.toggle("active", panel.dataset.detailsPanel === name);
+			});
+		});
+	});
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") setChatPanel("");
+	});
 	document.addEventListener("visibilitychange", () => {
 		if (!document.hidden) {
 			markChatPresence(true);

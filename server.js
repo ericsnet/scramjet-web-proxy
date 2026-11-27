@@ -45,6 +45,7 @@ import {
 	setUserSchedule,
 	isWithinSchedule,
 	setUserLanguage,
+	setUserTheme,
 	addUnblockOverride,
 	recordLoginSuccess,
 	listUserChatMeta,
@@ -2498,6 +2499,17 @@ app.post("/api/invite/accept", sameOrigin, (req, res) => {
 	res.redirect(303, "/");
 });
 
+app.use("/css", express.static(path.join(__dirname, "public/css"), { maxAge: "1h" }));
+app.use("/fonts", express.static(path.join(__dirname, "public/fonts"), { maxAge: "30d", immutable: true }));
+app.get("/theme.js", (req, res) => {
+	res.set("Cache-Control", "no-cache");
+	res.type("application/javascript").sendFile(path.join(__dirname, "public/theme.js"));
+});
+app.get("/password-manager.css", (req, res) => {
+	res.set("Cache-Control", "public, max-age=3600");
+	res.type("text/css").sendFile(path.join(__dirname, "public/password-manager.css"));
+});
+
 app.use(requireAuth);
 
 app.get("/api/chat/presence", (req, res) => {
@@ -3895,6 +3907,16 @@ app.post("/api/account/history/delete-range", sameOrigin, (req, res) => {
 	if (result.error) return res.redirect(303, "/history?error=range");
 	audit(req, "activity.delete-range", "", `${req.body.from} → ${req.body.to}`);
 	res.redirect(303, "/history?ok=range");
+});
+
+app.post("/api/account/theme", sameOrigin, (req, res) => {
+	const theme = req.body?.theme === "light" ? "light" : "dark";
+	setUserTheme(req.user.username, theme);
+	res.setHeader(
+		"Set-Cookie",
+		`pw_theme=${theme}; Path=/; SameSite=Lax; Max-Age=31536000${req.secure ? "; Secure" : ""}`,
+	);
+	res.set("Cache-Control", "no-store").status(204).end();
 });
 
 app.post("/api/account/language", sameOrigin, (req, res) => {

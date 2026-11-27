@@ -26,7 +26,7 @@ let dirty = false;
 const trackers = new Map();
 
 const SKIP_PATH =
-	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|chat\.css|global-search\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|monitor\.js|session-guard\.js|password-manager\.(?:js|css)|error-503\.html|invite|avatar)/;
+	/^\/(?:scramjet|controller|libcurl|favicon|page-i18n\.js|chat-notify\.js|chat\.js|chat\.css|global-search\.js|index\.js|index\.css|sw\.js|healthz|robots\.txt|admin\/error-preview|account-icon\.js|monitor\.js|session-guard\.js|password-manager\.(?:js|css)|error-503\.html|invite|avatar|css|fonts|theme\.js)/;
 
 // Endpoints que el propio panel consulta periódicamente. No son navegación
 // humana y no deben contar como ráfaga ni como intervalos automatizados.

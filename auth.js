@@ -141,6 +141,7 @@ function migrateUsers() {
 			siteMessages: {},
 			unblockOverrides: [],
 			lang: "",
+			theme: "",
 			schedule: null,
 			group: "",
 			groupOnboarded: false,
@@ -570,6 +571,15 @@ export function setUserBlockedSites(username, input) {
 		blockedSites: db.users[user.username].blockedSites,
 		siteMessages: db.users[user.username].siteMessages,
 	};
+}
+
+export function setUserTheme(username, theme) {
+	const user = getUser(username);
+	if (!user) return { error: "notfound" };
+	const value = theme === "light" ? "light" : theme === "dark" ? "dark" : "";
+	db.users[user.username].theme = value;
+	save();
+	return { ok: true };
 }
 
 export function setUserLanguage(username, lang) {
