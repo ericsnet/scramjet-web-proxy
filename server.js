@@ -182,7 +182,7 @@ import {
 import { count as metric, metricsSnapshot } from "./metrics.js";
 import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
 import { normalizeIp } from "./ip.js";
-import { isAdHost } from "./adblock.js";
+import { isAdHost, adblockStats, updateBlocklist } from "./adblock.js";
 import { activatePanic, panicUntil, flushPanic, CLASSROOM_URL } from "./panic.js";
 import { handleHtcpcp } from "./htcpcp.js";
 import {
@@ -1705,6 +1705,7 @@ const ADMIN_OK = {
 	saved: "Ajustes guardados.",
 	reset_settings: "Ajustes restablecidos.",
 	chat_cleared: "Chat vaciado.",
+	adblock: "Lista de anuncios actualizada.",
 };
 
 /* --------------------------- rutas públicas --------------------------- */
@@ -4423,6 +4424,23 @@ app.post("/api/admin/templates/:id/delete", requireAdmin, sameOrigin, (req, res)
 	res.redirect(303, "/admin/templates?ok=deleted");
 });
 
+app.post("/api/admin/adblock/update", requireAdmin, sameOrigin, async (req, res) => {
+	const result = await updateBlocklist({ force: true });
+	audit(
+		req,
+		"adblock.update",
+		"",
+		result.ok ? `${result.count} dominios` : result.error || "error",
+	);
+	if (result.error) {
+		return res.redirect(
+			303,
+			`/admin/settings?error=${encodeURIComponent("No se pudo actualizar la lista de anuncios.")}`,
+		);
+	}
+	res.redirect(303, "/admin/settings?ok=adblock");
+});
+
 app.get("/admin/settings", requireAdmin, (req, res) => {
 	const notice = ADMIN_OK[req.query.ok] || "";
 	const error = req.query.error ? String(req.query.error) : "";
@@ -5430,8 +5448,35 @@ server.on("upgrade", (req, socket, head) => {
 
 syncClassChats();
 
+const ADBLOCK_REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function ensureAdblockFresh() {
+	const stats = adblockStats();
+	if (
+		stats.count &&
+		stats.updatedAt &&
+		Date.now() - new Date(stats.updatedAt).getTime() < ADBLOCK_REFRESH_MS
+	) {
+		return;
+	}
+	try {
+		const result = await updateBlocklist();
+		if (result.ok && !result.skipped) {
+			console.log(`[adblock] Lista actualizada: ${result.count} dominios`);
+		} else if (result.error) {
+			console.error(`[adblock] No se pudo actualizar: ${result.detail || result.error}`);
+		}
+	} catch (err) {
+		console.error("[adblock] Error actualizando la lista:", err.message);
+	}
+}
+
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT) || 3030;
 server.listen(PORT, HOST, () => {
 	console.log(`Proxy web escuchando en http://${HOST}:${PORT}`);
+	const stats = adblockStats();
+	console.log(`[adblock] ${stats.count} dominios en la lista real`);
+	ensureAdblockFresh().catch(() => {});
+	setInterval(() => ensureAdblockFresh().catch(() => {}), 12 * 60 * 60 * 1000).unref();
 });

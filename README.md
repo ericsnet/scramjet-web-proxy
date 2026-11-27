@@ -17,7 +17,7 @@ administración.
 - **Resumen de administración**: estado rápido de usuarios, sesiones, alertas, tráfico, copias y acciones rápidas.
 - **Vigilancia en vivo**: usuarios conectados, última web visitada, destinos Wisp y actividad reciente, con actualización automática y botón **“Echar ahora”** en cada usuario. La presencia usa actividad humana, no el polling de fondo.
 - **Límites de rendimiento por usuario**: ancho de banda (por defecto 8 Mbps), hasta 64 streams Wisp (64 por host) y conexiones simultáneas, con búfer de descarga. Los logs internos de Wisp quedan silenciados salvo errores; se puede depurar con `WISP_LOG_LEVEL=debug` en systemd.
-- **Bloqueo de anuncios y rastreadores**: activado por defecto para acelerar webs pesadas como Poki y TikTok. Bloquea DoubleClick, Google Ads, Amazon Ads, PubMatic, Criteo, Prebid, redes de identidad, analítica innecesaria, telemetría de Poki y métricas de TikTok, sin tocar sus CDN, APIs ni el vídeo. Se puede desactivar en **Ajustes → Rendimiento**. La caché DNS de Wisp dura 10 minutos.
+- **Bloqueo de anuncios y rastreadores**: activado por defecto para acelerar webs pesadas como Poki y TikTok. Usa una lista real de más de 290.000 dominios combinando **StevenBlack/hosts**, **BlocklistProject/Lists** y **AdAway**, con lista de excepciones para APIs y CDN esenciales. Se actualiza automáticamente cada 7 días o desde **Ajustes → Rendimiento**. Se puede desactivar en **Ajustes → Rendimiento**. La caché DNS de Wisp dura 10 minutos.
 - **Carga diferida en todas las webs**: las imágenes fuera de pantalla se marcan como `lazy` y `async` dentro del proxy, para que no saturen los streams al abrir la página.
 - **Reescritura más ligera**: Scramjet ya no genera sourcemaps de las webs reescritas en producción, lo que reduce CPU del servidor y bytes enviados al navegador.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
@@ -317,6 +317,10 @@ usuario puede vaciar su propio historial.
 - `data/panic.json`: dispositivos con modo pánico activo y su caducidad.
 - `data/avatars/`: iconos de usuario validados por contenido y servidos solo con sesión iniciada.
 - `data/security.json`: alertas, bloqueos e historial reciente de logins.
+- `data/adblock-hosts.txt` y `data/adblock-meta.json`: lista real de dominios
+  publicitarios descargada de StevenBlack, BlocklistProject y AdAway, con su
+  fecha de actualización. Licencias originales: StevenBlack (MIT),
+  BlocklistProject (dominio público) y AdAway (CC BY 3.0).
 - `/var/backups/proxy/`: copias cifradas (`BACKUP_DIR`; en Docker `backups/`).
 - Clave de cifrado: `BACKUP_KEY_FILE` (`/etc/webproxy/backup.key` en producción).
 

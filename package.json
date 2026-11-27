@@ -10,7 +10,8 @@
 		"security:unban": "node scripts/security-unban.mjs",
 		"postinstall": "node scripts/patch-wisp.mjs",
 		"mfa:reset": "node scripts/mfa-reset.mjs",
-		"audit:rebuild": "node scripts/audit-rebuild.mjs"
+		"audit:rebuild": "node scripts/audit-rebuild.mjs",
+		"adblock:update": "node scripts/update-adblock.mjs --force"
 	},
 	"keywords": [],
 	"author": "",

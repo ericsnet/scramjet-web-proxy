@@ -1,4 +1,5 @@
 import { countOpenAlerts } from "./security.js";
+import { adblockStats } from "./adblock.js";
 import { canAssignRole, canManageRole, isAdminRole, isReportsRole, isStaffRole } from "./roles.js";
 
 export function esc(value) {
@@ -3639,7 +3640,13 @@ ${adminTabs("monitor", user.role)}
 	return shell("Vigilancia · Administración", body, { topbar: topbar(user), wide: true });
 }
 
-export function settingsPage({ user, settings, notice = "", error = "" } = {}) {
+export function settingsPage({
+	user,
+	settings,
+	notice = "",
+	error = "",
+	adblock = adblockStats(),
+} = {}) {
 	const linkRows = settings.quickLinks
 		.map(
 			(link) => `<div class="link-row">
@@ -3761,6 +3768,10 @@ ${adminTabs("settings")}
     </div>
     <label class="check"><input type="checkbox" name="blockAds"${settings.blockAds ? " checked" : ""}> Bloquear anuncios y rastreadores (mejora Poki y webs con mucha publicidad)</label>
     <p class="hint">El límite de ancho de banda es por usuario y suma subida y bajada; 8000 Kbps ≈ 8 Mbps. Un stream es una conexión de red de la web (imágenes, vídeo, juegos…). Si hay muchos usuarios, baja el ancho de banda o los streams antes que el búfer.</p>
+    <p class="hint">Lista real de bloqueo: <b>${esc(adblock.count || 0)}</b> dominios${adblock.updatedAt ? ` · actualizada ${esc(fmtDate(adblock.updatedAt))}` : " · pendiente de descargar"}.</p>
+    <form method="post" action="/api/admin/adblock/update" style="margin-top:8px">
+      <button class="small" type="submit">Actualizar lista de anuncios</button>
+    </form>
   </div>
 
   <div class="section settings-block" id="settings-chat" data-settings-search="chat mensajes usuarios grupos privados retención adjuntos">
