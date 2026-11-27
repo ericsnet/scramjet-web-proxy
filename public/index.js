@@ -309,7 +309,7 @@ function createLazyImagesPlugin() {
 		plugin.tap(frame.hooks.init.pre, ({ window }) => {
 			try {
 				const href = String(window.location.href || "");
-				if (!/(poki\.com|tiktok\.com)/i.test(href)) return;
+				if (!/^https?:/i.test(href)) return;
 				const doc = window.document;
 				if (!doc) return;
 				const enhance = (root) => {
@@ -317,7 +317,12 @@ function createLazyImagesPlugin() {
 						? [root]
 						: root.querySelectorAll?.("img") || [];
 					for (const image of images) {
-						if (!image.hasAttribute("loading")) image.setAttribute("loading", "lazy");
+						if (
+							!image.hasAttribute("loading") &&
+							image.getAttribute("fetchpriority") !== "high"
+						) {
+							image.setAttribute("loading", "lazy");
+						}
 						if (!image.hasAttribute("decoding")) image.setAttribute("decoding", "async");
 					}
 				};
@@ -414,6 +419,13 @@ async function init() {
 	controller = new $scramjetController.Controller({
 		serviceworker,
 		transport,
+		// Los sourcemaps de las webs reescritas no aportan nada en producción y
+		// añaden CPU y bytes a cada recurso.
+		scramjetConfig: {
+			flags: {
+				sourcemaps: false,
+			},
+		},
 	});
 	await controller.wait();
 
