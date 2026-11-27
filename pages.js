@@ -2019,7 +2019,7 @@ ${
     </div>
   </div>
   <p class="muted">
-    <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a> · <a href="/vault">Bóveda de contraseñas</a> · <a href="/u/${encodeURIComponent(user.username)}">Ver mi perfil</a>
+    <a href="/bookmarks">Favoritos</a> · <a href="/history">Historial</a> · <a href="/vault">Bóveda de contraseñas</a>${canCreateInvites(user) ? ' · <a href="/invites">Invitaciones</a>' : ""} · <a href="/u/${encodeURIComponent(user.username)}">Ver mi perfil</a>
   </p>
   ${
 		allowPasswordChange || forced
