@@ -521,6 +521,11 @@ h1 span {
 	border-color: var(--border-strong);
 }
 
+.toolbar .home:disabled {
+	opacity: .35;
+	cursor: not-allowed;
+}
+
 #sj-frame-wrapper.immersive {
 	padding: 0;
 	gap: 0;
@@ -669,6 +674,10 @@ dialog input:focus {
 	justify-content: flex-end;
 	gap: 8px;
 	margin-top: 18px;
+}
+
+.dialog-actions[hidden] {
+	display: none !important;
 }
 
 .dialog-actions button {

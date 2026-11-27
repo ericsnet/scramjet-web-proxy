@@ -13,6 +13,9 @@ const exitFullscreenButton = document.getElementById("exit-fullscreen-btn");
 const homeButton = document.getElementById("home-btn");
 const error = document.getElementById("sj-error");
 const errorCode = document.getElementById("sj-error-code");
+const errorActions = document.getElementById("sj-error-actions");
+const retryButton = document.getElementById("sj-retry");
+const errorHomeButton = document.getElementById("sj-error-home");
 const backButton = document.getElementById("back-btn");
 const forwardButton = document.getElementById("forward-btn");
 const reloadButton = document.getElementById("reload-btn");
@@ -36,7 +39,9 @@ const landingTabList = document.getElementById("landing-tab-list");
 const landingTabBar = document.getElementById("landing-tab-bar");
 const landingNewTabButton = document.getElementById("landing-new-tab-btn");
 
-let tabs = [{ id: 1, url: "", label: "Nueva pestaña" }];
+let tabs = [
+	{ id: 1, url: "", label: "Nueva pestaña", history: [], historyIndex: -1 },
+];
 let activeTab = 1;
 let nextTabId = 2;
 let readerMode = false;
@@ -331,6 +336,56 @@ function createLazyImagesPlugin() {
 	return plugin;
 }
 
+function createNewTabPlugin() {
+	const ManagedPlugin = globalThis.$scramjetController?.ManagedPlugin;
+	if (typeof ManagedPlugin !== "function") return null;
+	const plugin = new ManagedPlugin("new-tabs", []);
+	plugin.install = (frame) => {
+		plugin.tap(frame.hooks.init.pre, ({ window }) => {
+			try {
+				const doc = window.document;
+				const openTab = (url) => {
+					if (!url || !/^https?:/i.test(url)) return;
+					try {
+						window.parent.postMessage({ type: "pw-open-tab", url }, "*");
+					} catch {}
+				};
+				doc.addEventListener(
+					"click",
+					(event) => {
+						const link = event.target.closest?.("a[href]");
+						if (!link || link.hasAttribute("download")) return;
+						const target = String(link.target || "").toLowerCase();
+						const modifier = event.ctrlKey || event.metaKey || event.shiftKey;
+						if (target !== "_blank" && !modifier) return;
+						const href = link.href;
+						if (!/^https?:/i.test(href)) return;
+						event.preventDefault();
+						event.stopPropagation();
+						openTab(href);
+					},
+					true,
+				);
+				doc.addEventListener(
+					"auxclick",
+					(event) => {
+						if (event.button !== 1) return;
+						const link = event.target.closest?.("a[href]");
+						if (!link || link.hasAttribute("download")) return;
+						const href = link.href;
+						if (!/^https?:/i.test(href)) return;
+						event.preventDefault();
+						event.stopPropagation();
+						openTab(href);
+					},
+					true,
+				);
+			} catch {}
+		});
+	};
+	return plugin;
+}
+
 async function init() {
 	if (controller) return;
 	if (!navigator.serviceWorker) {
@@ -374,6 +429,8 @@ async function init() {
 	const plugins = [urlWatcher, catchEscapedLinks];
 	const lazyImages = createLazyImagesPlugin();
 	if (lazyImages) plugins.push(lazyImages);
+	const newTabs = createNewTabPlugin();
+	if (newTabs) plugins.push(newTabs);
 	frame = controller.createFrame(frameElement, {
 		plugins,
 	});
@@ -495,6 +552,7 @@ function recoverNavigation(url) {
 		showErrorScreen(
 			"No se pudo abrir esta web: el proxy ha detectado una redirección anidada. Prueba con otra web.",
 			"",
+			url,
 		);
 		landing.style.display = "flex";
 		frameWrapper.style.display = "none";
@@ -566,17 +624,56 @@ function handleFrameUrl(url) {
 	}
 }
 
-function showErrorScreen(message, details) {
+let lastFailedUrl = "";
+
+function classifyProxyError(error) {
+	const raw = String(error?.message || error || "Error desconocido");
+	const lower = raw.toLowerCase();
+	if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("etimedout")) {
+		return { message: "La web tardó demasiado en responder.", details: raw };
+	}
+	if (lower.includes("enotfound") || lower.includes("getaddrinfo") || lower.includes("dns")) {
+		return { message: "No se pudo encontrar el dominio de esa web.", details: raw };
+	}
+	if (lower.includes("econnrefused") || lower.includes("connection refused")) {
+		return { message: "La web rechazó la conexión.", details: raw };
+	}
+	if (lower.includes("certificate") || lower.includes("certificado") || lower.includes("tls") || lower.includes("ssl")) {
+		return { message: "El certificado de seguridad de la web no es válido.", details: raw };
+	}
+	if (lower.includes("451")) {
+		return { message: "La web no está disponible por restricciones legales (451).", details: raw };
+	}
+	if (lower.includes("403")) {
+		return { message: "La web bloqueó el acceso (403).", details: raw };
+	}
+	if (lower.includes("404")) {
+		return { message: "La página no existe (404).", details: raw };
+	}
+	if (lower.includes("service worker") || lower.includes("serviceworker")) {
+		return {
+			message: "El navegador no pudo activar el motor del proxy.",
+			details: raw,
+		};
+	}
+	return { message: "No se pudo abrir esta web.", details: raw };
+}
+
+function showErrorScreen(message, details, retryUrl = "") {
 	if (frameWrapper.classList.contains("immersive")) exitFullscreen();
 	frameWrapper.style.display = "none";
 	error.textContent = message;
 	errorCode.textContent = details || "";
+	lastFailedUrl = retryUrl;
+	if (errorActions) errorActions.hidden = !retryUrl;
 	landing.style.display = "flex";
 }
 
 function hideError() {
 	error.textContent = "";
 	errorCode.textContent = "";
+	lastFailedUrl = "";
+	if (errorActions) errorActions.hidden = true;
 	if (blockedRequest) blockedRequest.hidden = true;
 	blockedUrl = "";
 }
@@ -602,7 +699,14 @@ function saveTabs() {
 	try {
 		localStorage.setItem(
 			"pw_tabs",
-			JSON.stringify(tabs.map((t) => ({ url: t.url, label: t.label }))),
+			JSON.stringify(
+				tabs.map((t) => ({
+					url: t.url,
+					label: t.label,
+					history: t.history,
+					historyIndex: t.historyIndex,
+				})),
+			),
 		);
 		localStorage.setItem("pw_active_tab", String(tabs.findIndex((t) => t.id === activeTab)));
 	} catch {}
@@ -632,16 +736,43 @@ function renderTabsInto(container) {
 	}
 }
 
+function updateNavButtons() {
+	const tab = tabs.find((t) => t.id === activeTab);
+	if (backButton) backButton.disabled = !tab || tab.historyIndex <= 0;
+	if (forwardButton) {
+		forwardButton.disabled = !tab || tab.historyIndex >= tab.history.length - 1;
+	}
+}
+
 function renderTabs() {
 	renderTabsInto(tabList);
 	renderTabsInto(landingTabList);
 	if (landingTabBar) landingTabBar.hidden = tabs.length <= 1;
+	updateNavButtons();
 	saveTabs();
 }
 
-function updateActiveTab(url) {
+function updateActiveTab(url, { push = true } = {}) {
 	const tab = tabs.find((t) => t.id === activeTab);
 	if (!tab) return;
+	tab.history = Array.isArray(tab.history) ? tab.history : [];
+	if (!url) {
+		tab.url = "";
+		tab.label = "Nueva pestaña";
+		renderTabs();
+		return;
+	}
+	if (push && tab.history[tab.historyIndex] !== url) {
+		tab.history = tab.history.slice(0, tab.historyIndex + 1);
+		tab.history.push(url);
+		if (tab.history.length > 60) tab.history.shift();
+		tab.historyIndex = tab.history.length - 1;
+	} else if (!push && !tab.history.length) {
+		tab.history = [url];
+		tab.historyIndex = 0;
+	} else if (!push && tab.history[tab.historyIndex] !== url) {
+		tab.history[tab.historyIndex] = url;
+	}
 	tab.url = url;
 	tab.label = tabLabel(url);
 	renderTabs();
@@ -651,18 +782,31 @@ async function switchTab(id) {
 	const tab = tabs.find((t) => t.id === id);
 	if (!tab) return;
 	activeTab = id;
-	renderTabs();
 	hideError();
+	renderTabs();
+	if (!tab.url && tab.history.length && tab.historyIndex >= 0) {
+		tab.url = tab.history[tab.historyIndex];
+	}
 	if (tab.url) {
-		await navigate(tab.url, { silent: true, log: false });
+		if (tab.historyIndex >= 0 && tab.history[tab.historyIndex]) {
+			tab.url = tab.history[tab.historyIndex];
+		}
+		await navigate(tab.url, { silent: true, log: false, recordHistory: false });
 	} else {
+		renderTabs();
 		goHome();
 	}
 }
 
 function createTab() {
 	if (tabs.length >= 5) return;
-	const tab = { id: nextTabId++, url: "", label: "Nueva pestaña" };
+	const tab = {
+		id: nextTabId++,
+		url: "",
+		label: "Nueva pestaña",
+		history: [],
+		historyIndex: -1,
+	};
 	tabs.push(tab);
 	activeTab = tab.id;
 	renderTabs();
@@ -672,12 +816,51 @@ function createTab() {
 	address.focus();
 }
 
+async function openInNewTab(url) {
+	if (!url) return;
+	if (tabs.length >= 5) {
+		await navigate(url);
+		return;
+	}
+	const tab = {
+		id: nextTabId++,
+		url: "",
+		label: "Nueva pestaña",
+		history: [],
+		historyIndex: -1,
+	};
+	tabs.push(tab);
+	activeTab = tab.id;
+	renderTabs();
+	hideError();
+	address.value = url;
+	await navigate(url);
+}
+
+window.addEventListener("message", (event) => {
+	if (event.origin !== location.origin) return;
+	if (!event.data || event.data.type !== "pw-open-tab") return;
+	if (frameElement && event.source !== frameElement.contentWindow) return;
+	const raw = String(event.data.url || "");
+	const info = proxyInfo(raw);
+	const target = info.depth >= 1 ? info.url : externalUrl(raw);
+	if (target && /^https?:\/\//i.test(target)) {
+		openInNewTab(target).catch(() => {});
+	}
+});
+
 function closeTab(id) {
 	const index = tabs.findIndex((t) => t.id === id);
 	if (index < 0) return;
 	tabs.splice(index, 1);
 	if (!tabs.length) {
-		tabs.push({ id: nextTabId++, url: "", label: "Nueva pestaña" });
+		tabs.push({
+			id: nextTabId++,
+			url: "",
+			label: "Nueva pestaña",
+			history: [],
+			historyIndex: -1,
+		});
 	}
 	if (activeTab === id) {
 		const next = tabs[Math.max(0, index - 1)];
@@ -693,11 +876,26 @@ landingNewTabButton?.addEventListener("click", createTab);
 try {
 	const saved = JSON.parse(localStorage.getItem("pw_tabs") || "[]");
 	if (Array.isArray(saved) && saved.length) {
-		tabs = saved.slice(0, 5).map((t, i) => ({
-			id: i + 1,
-			url: typeof t.url === "string" ? t.url : "",
-			label: t.label || tabLabel(t.url || ""),
-		}));
+		tabs = saved.slice(0, 5).map((t, i) => {
+			const url = typeof t.url === "string" ? t.url : "";
+			const history = Array.isArray(t.history)
+				? t.history.filter((entry) => typeof entry === "string" && entry).slice(-60)
+				: [];
+			if (url && history[history.length - 1] !== url) history.push(url);
+			let historyIndex = Number.isInteger(t.historyIndex)
+				? t.historyIndex
+				: history.length - 1;
+			if (historyIndex < 0 || historyIndex >= history.length) {
+				historyIndex = history.length - 1;
+			}
+			return {
+				id: i + 1,
+				url,
+				label: t.label || tabLabel(url),
+				history,
+				historyIndex,
+			};
+		});
 		const savedActive = Number(localStorage.getItem("pw_active_tab"));
 		activeTab = tabs[Number.isInteger(savedActive) && savedActive >= 0 && savedActive < tabs.length ? savedActive : 0].id;
 		nextTabId = tabs.length + 1;
@@ -705,10 +903,11 @@ try {
 } catch {}
 renderTabs();
 
-async function navigate(url, { silent = false, log = true } = {}) {
+async function navigate(url, { silent = false, log = true, recordHistory = true } = {}) {
 	const rawInput = typeof url === "string" ? url.trim() : "";
 	url = normalize(url);
 	if (!url) return;
+	lastFailedUrl = "";
 	const policy = await checkPolicy(url);
 	if (policy?.blocked) {
 		showBlocked(url, policy.message);
@@ -726,17 +925,21 @@ async function navigate(url, { silent = false, log = true } = {}) {
 		frameUrl.textContent = url;
 		// El título de la pestaña no debe revelar el sitio visitado.
 		document.title = "Inici - Classroom";
-		updateActiveTab(url);
+		updateActiveTab(url, { push: recordHistory });
 		landing.style.display = "none";
 		frameWrapper.style.display = "flex";
 	} catch (err) {
 		stopLoading();
-		if (!silent) showErrorScreen(err.message, err.stack);
+		if (!silent) {
+			const friendly = classifyProxyError(err);
+			showErrorScreen(friendly.message, friendly.details, url);
+		}
 	}
 }
 
 function goHome() {
 	stopLoading();
+	hideError();
 	if (frameWrapper.classList.contains("immersive")) exitFullscreen();
 	frameWrapper.style.display = "none";
 	landing.style.display = "flex";
@@ -964,16 +1167,18 @@ blockedRequestBtn?.addEventListener("click", async () => {
 });
 
 backButton?.addEventListener("click", () => {
-	startLoading();
-	try {
-		frame?.back();
-	} catch {}
+	const tab = tabs.find((item) => item.id === activeTab);
+	if (!tab || tab.historyIndex <= 0) return;
+	tab.historyIndex -= 1;
+	tab.url = tab.history[tab.historyIndex];
+	navigate(tab.url, { silent: true, log: false, recordHistory: false });
 });
 forwardButton?.addEventListener("click", () => {
-	startLoading();
-	try {
-		frame?.forward();
-	} catch {}
+	const tab = tabs.find((item) => item.id === activeTab);
+	if (!tab || tab.historyIndex >= tab.history.length - 1) return;
+	tab.historyIndex += 1;
+	tab.url = tab.history[tab.historyIndex];
+	navigate(tab.url, { silent: true, log: false, recordHistory: false });
 });
 reloadButton?.addEventListener("click", () => {
 	startLoading();
@@ -981,6 +1186,13 @@ reloadButton?.addEventListener("click", () => {
 		frame?.reload();
 	} catch {}
 });
+retryButton?.addEventListener("click", () => {
+	if (!lastFailedUrl) return;
+	const url = lastFailedUrl;
+	hideError();
+	navigate(url).catch(() => {});
+});
+errorHomeButton?.addEventListener("click", goHome);
 for (const input of [address, frameAddress]) {
 	input?.addEventListener("focus", loadSuggestions);
 }
@@ -1004,6 +1216,12 @@ window.addEventListener("keydown", (event) => {
 	} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
 		event.preventDefault();
 		(frameWrapper.style.display === "flex" ? frameAddress : address).focus();
+	} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "t") {
+		event.preventDefault();
+		createTab();
+	} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "w") {
+		event.preventDefault();
+		closeTab(activeTab);
 	} else if (event.key === "/" && !typing) {
 		event.preventDefault();
 		(frameWrapper.style.display === "flex" ? frameAddress : address).focus();
@@ -1060,7 +1278,10 @@ if (goto) {
 		}
 	} catch {}
 	if (!alreadyOpened) {
-		navigate(goto).catch((err) => showErrorScreen(err.message, err.stack));
+		navigate(goto).catch((err) => {
+			const friendly = classifyProxyError(err);
+			showErrorScreen(friendly.message, friendly.details, goto);
+		});
 	}
 } else if (address) {
 	// Evita que el navegador restaure la última URL y la envíe sin querer.
