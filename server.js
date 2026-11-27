@@ -22,6 +22,7 @@ import {
 	verifyUserPassword,
 	recordFailedLogin,
 	clearFailedLogins,
+	validateUsername,
 	validatePassword,
 	listUsers,
 	getUser,
@@ -68,6 +69,8 @@ import {
 	mfaPage,
 	mfaSetupPage,
 	mfaRecoveryPage,
+	invitePage,
+	invitesPage,
 	accountPage,
 	profilePage,
 	errorPage,
@@ -172,6 +175,15 @@ import {
 	deleteGroup,
 } from "./groups.js";
 import {
+	createInvite,
+	findInviteByToken,
+	inviteStatus,
+	listInvites,
+	consumeInvite,
+	revokeInvite,
+	flushInvites,
+} from "./invites.js";
+import {
 	createBackup,
 	listBackups,
 	backupPath,
@@ -180,7 +192,7 @@ import {
 	backupCount,
 } from "./backup.js";
 import { count as metric, metricsSnapshot } from "./metrics.js";
-import { avatarFile, deleteAvatar, saveAvatar } from "./avatars.js";
+import { avatarFile, deleteAvatar, saveAvatar, avatarType } from "./avatars.js";
 import { normalizeIp } from "./ip.js";
 import { isAdHost, adblockStats, updateBlocklist } from "./adblock.js";
 import { activatePanic, panicUntil, flushPanic, CLASSROOM_URL } from "./panic.js";
@@ -207,6 +219,7 @@ import {
 	highestRole,
 	canManageRole,
 	canAssignRole,
+	canCreateInvites,
 	SPECIALIST_ROLES,
 } from "./roles.js";
 import {
@@ -887,6 +900,19 @@ function requireAuth(req, res, next) {
 function requireAdmin(req, res, next) {
 	if (!req.user || !isAdminRole(req.user.role)) {
 		return sendHttpError(req, res, 403, "Acceso restringido", "Solo administradores.");
+	}
+	next();
+}
+
+function requireInviter(req, res, next) {
+	if (!canCreateInvites(req.user)) {
+		return sendHttpError(
+			req,
+			res,
+			403,
+			"Acceso restringido",
+			"No puedes crear invitaciones con este rol.",
+		);
 	}
 	next();
 }
@@ -1632,11 +1658,19 @@ function ensureCsrf(req, res) {
 	return token;
 }
 
-function validCsrf(req) {
+function validCsrfValue(req, provided) {
 	const token = cookieValue(req, HOST_CSRF_COOKIE) || cookieValue(req, CSRF_COOKIE);
-	const provided = String(req.body.csrf || "");
-	if (!/^[a-f0-9]{48}$/.test(token) || !/^[a-f0-9]{48}$/.test(provided)) return false;
-	return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(provided));
+	const value = String(provided || "");
+	if (!/^[a-f0-9]{48}$/.test(token) || !/^[a-f0-9]{48}$/.test(value)) return false;
+	return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(value));
+}
+
+function validCsrf(req) {
+	return validCsrfValue(req, req.body?.csrf);
+}
+
+function validCsrfHeader(req) {
+	return validCsrfValue(req, req.headers["x-csrf-token"]);
 }
 
 const ACCOUNT_ERRORS = {
@@ -2183,7 +2217,343 @@ app.post("/api/login/mfa", sameOrigin, async (req, res) => {
 
 /* --------------------------- a partir de aquí, login --------------------------- */
 
+const INVITE_AVATAR_DIR = path.join(__dirname, "data", "invite-avatars");
+const inviteAvatarBuckets = new Map();
+
+function inviteAvatarPath(tokenHash) {
+	return path.join(INVITE_AVATAR_DIR, `${String(tokenHash || "").replace(/[^a-f0-9]/gi, "")}.bin`);
+}
+
+function cleanupInviteAvatars() {
+	try {
+		if (!fs.existsSync(INVITE_AVATAR_DIR)) return;
+		const cutoff = Date.now() - 60 * 60 * 1000;
+		for (const name of fs.readdirSync(INVITE_AVATAR_DIR)) {
+			const full = path.join(INVITE_AVATAR_DIR, name);
+			try {
+				if (fs.statSync(full).mtimeMs < cutoff) fs.rmSync(full, { force: true });
+			} catch {}
+		}
+	} catch {}
+}
+
+function allowInviteAvatar(ip) {
+	const key = String(ip || "unknown");
+	const now = Date.now();
+	const bucket = (inviteAvatarBuckets.get(key) || []).filter((at) => now - at < 60_000);
+	if (bucket.length >= 10) {
+		inviteAvatarBuckets.set(key, bucket);
+		return false;
+	}
+	bucket.push(now);
+	inviteAvatarBuckets.set(key, bucket);
+	if (inviteAvatarBuckets.size > 2000) {
+		for (const [entry, values] of inviteAvatarBuckets) {
+			if (!values.some((at) => now - at < 60_000)) inviteAvatarBuckets.delete(entry);
+		}
+	}
+	return true;
+}
+
+function inviteProblem(res, status, title, message) {
+	res.status(status)
+		.set("Cache-Control", "no-store")
+		.set("Referrer-Policy", "no-referrer")
+		.type("html")
+		.send(errorPage({ status, title, message, user: null }));
+}
+
+function activeInvite(token) {
+	const invite = findInviteByToken(token);
+	if (!invite) return { status: 404, title: "Invitación no válida", message: "Este enlace no existe." };
+	const creator = getUser(invite.createdBy);
+	if (!creator || creator.effectivelyBlocked) {
+		return {
+			status: 410,
+			title: "Invitación no disponible",
+			message: "La cuenta que creó esta invitación ya no está disponible.",
+		};
+	}
+	const status = inviteStatus(invite);
+	if (status === "expired") {
+		return {
+			status: 410,
+			title: "Invitación caducada",
+			message: "Este enlace ha caducado. Pide uno nuevo.",
+		};
+	}
+	if (status === "used") {
+		return {
+			status: 410,
+			title: "Invitación ya utilizada",
+			message: "Este enlace ya se ha usado. Pide uno nuevo.",
+		};
+	}
+	if (status === "revoked") {
+		return {
+			status: 403,
+			title: "Invitación revocada",
+			message: "Este enlace ya no es válido.",
+		};
+	}
+	if (status !== "active") {
+		return { status: 404, title: "Invitación no válida", message: "Este enlace no es válido." };
+	}
+	return { invite, creator };
+}
+
+app.get("/invite/:token", (req, res) => {
+	const token = String(req.params.token || "");
+	const checked = activeInvite(token);
+	if (checked.status) {
+		return inviteProblem(res, checked.status, checked.title, checked.message);
+	}
+	const settings = getSettings();
+	if (settings.quarantineMode || settings.maintenanceMode) {
+		return inviteProblem(
+			res,
+			503,
+			"Registro no disponible",
+			"El servicio está en mantenimiento. Inténtalo más tarde.",
+		);
+	}
+	if (getSession(req)) {
+		return inviteProblem(
+			res,
+			400,
+			"Ya has iniciado sesión",
+			"Cierra sesión para usar esta invitación con una cuenta nueva.",
+		);
+	}
+	const csrf = ensureCsrf(req, res);
+	res.set("Cache-Control", "no-store");
+	res.set("Referrer-Policy", "no-referrer");
+	res.type("html").send(
+		invitePage({
+			token,
+			csrf,
+			groups: listGroups(),
+		}),
+	);
+});
+
+app.post(
+	"/api/invite/avatar",
+	sameOrigin,
+	express.raw({
+		type: ["image/png", "image/jpeg", "image/webp", "application/octet-stream"],
+		limit: "2mb",
+	}),
+	(req, res) => {
+		if (!validCsrfHeader(req)) {
+			return res.status(403).json({ error: "csrf", message: "Token de seguridad no válido." });
+		}
+		const checked = activeInvite(String(req.headers["x-invite-token"] || ""));
+		if (checked.status) {
+			return res.status(checked.status).json({
+				error: "invite",
+				message: checked.message,
+			});
+		}
+		if (!allowInviteAvatar(clientIp(req))) {
+			return res.status(429).json({ error: "rate", message: "Espera un minuto antes de subir otra foto." });
+		}
+		const type = avatarType(req.body);
+		if (!type) {
+			return res.status(400).json({
+				error: "invalid_type",
+				message: "La foto debe ser PNG, JPG o WebP.",
+			});
+		}
+		try {
+			fs.mkdirSync(INVITE_AVATAR_DIR, { recursive: true, mode: 0o700 });
+			const target = inviteAvatarPath(checked.invite.tokenHash);
+			const tmp = `${target}.tmp`;
+			fs.writeFileSync(tmp, req.body, { mode: 0o600 });
+			fs.renameSync(tmp, target);
+			cleanupInviteAvatars();
+			res.set("Cache-Control", "no-store").json({ ok: true });
+		} catch (err) {
+			console.error("No se pudo guardar la foto de invitación:", err.message);
+			res.status(500).json({ error: "save_failed", message: "No se pudo guardar la foto." });
+		}
+	},
+);
+
+app.post("/api/invite/accept", sameOrigin, (req, res) => {
+	const settings = getSettings();
+	if (settings.quarantineMode || settings.maintenanceMode) {
+		return inviteProblem(
+			res,
+			503,
+			"Registro no disponible",
+			"El servicio está en mantenimiento. Inténtalo más tarde.",
+		);
+	}
+	if (getSession(req)) {
+		return inviteProblem(
+			res,
+			400,
+			"Ya has iniciado sesión",
+			"Cierra sesión para usar esta invitación con una cuenta nueva.",
+		);
+	}
+	if (!validCsrf(req)) {
+		return inviteProblem(
+			res,
+			403,
+			"Token de seguridad no válido",
+			"Recarga la página y vuelve a intentarlo.",
+		);
+	}
+	const token = String(req.body.token || "");
+	const checked = activeInvite(token);
+	if (checked.status) {
+		return inviteProblem(res, checked.status, checked.title, checked.message);
+	}
+	const username = normalizeUsername(req.body.username);
+	const password = String(req.body.password || "");
+	const confirm = String(req.body.confirm || "");
+	const groupId = String(req.body.group || "").trim();
+	const group = groupId ? getGroup(groupId) : null;
+	const values = { username, group: groupId };
+	const fail = (message, status = 400) => {
+		const csrf = ensureCsrf(req, res);
+		res.status(status)
+			.set("Cache-Control", "no-store")
+			.set("Referrer-Policy", "no-referrer")
+			.type("html")
+			.send(
+				invitePage({
+					token,
+					csrf,
+					groups: listGroups(),
+					error: message,
+					values,
+				}),
+			);
+	};
+	if (!validateUsername(username)) {
+		return fail("El usuario debe tener entre 3 y 32 caracteres y solo puede usar letras, números, punto, guion o guion bajo.");
+	}
+	if (!validatePassword(password)) {
+		return fail("La contraseña debe tener entre 8 y 128 caracteres.");
+	}
+	if (password !== confirm) return fail("Las contraseñas no coinciden.");
+	if (!group) return fail("Elige un grupo de clase válido.");
+
+	const created = createUser(username, password, "user");
+	if (created.error) {
+		return fail(
+			created.error === "exists"
+				? "Ese nombre de usuario ya existe."
+				: created.error === "invalid-password"
+					? "La contraseña debe tener entre 8 y 128 caracteres."
+					: "No se pudo crear la cuenta.",
+		);
+	}
+	const actualName = created.user?.username || username;
+	setUserGroup(actualName, group.id);
+	syncClassChats();
+	const consumed = consumeInvite(token, actualName);
+	if (consumed.error) {
+		try {
+			deleteUser(actualName);
+		} catch {}
+		return inviteProblem(
+			res,
+			410,
+			"Invitación no disponible",
+			"Este enlace ya no se puede usar.",
+		);
+	}
+	try {
+		const avatar = inviteAvatarPath(checked.invite.tokenHash);
+		if (fs.existsSync(avatar)) {
+			saveAvatar(actualName, fs.readFileSync(avatar));
+			fs.rmSync(avatar, { force: true });
+		}
+	} catch (err) {
+		console.error("No se pudo aplicar la foto de invitación:", err.message);
+	}
+	const session = createSession(actualName, {
+		ip: clientIp(req),
+		userAgent: clientUa(req),
+	});
+	recordLoginSuccess(actualName, clientIp(req));
+	addAudit({
+		actor: actualName,
+		action: "invite.accept",
+		target: checked.invite.id,
+		detail: group.name,
+		ip: clientIp(req),
+		userAgent: clientUa(req),
+	});
+	res.setHeader("Set-Cookie", sessionCookie(req, session.token, session.expires));
+	res.redirect(303, "/");
+});
+
 app.use(requireAuth);
+
+const INVITE_NOTICES = {
+	created: "Enlace de invitación creado.",
+	revoked: "Invitación revocada.",
+};
+
+app.get("/invites", requireInviter, (req, res) => {
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		invitesPage({
+			user: req.user,
+			invites: listInvites(req.user.username),
+			notice: INVITE_NOTICES[req.query.ok] || "",
+			error: req.query.error ? String(req.query.error).slice(0, 200) : "",
+		}),
+	);
+});
+
+app.post("/api/invites", requireInviter, sameOrigin, (req, res) => {
+	const result = createInvite(req.user.username);
+	if (result.error) {
+		res.set("Cache-Control", "no-store");
+		return res.status(400).type("html").send(
+			invitesPage({
+				user: req.user,
+				invites: listInvites(req.user.username),
+				error:
+					result.error === "limit"
+						? `Has alcanzado el límite de ${result.limit} invitaciones activas.`
+						: "No se pudo crear la invitación.",
+			}),
+		);
+	}
+	audit(req, "invite.create", result.invite.id, "1 uso / 7 días");
+	const origin = `${req.protocol}://${req.get("host")}`;
+	const link = new URL(`/invite/${result.token}`, origin).href;
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		invitesPage({
+			user: req.user,
+			invites: listInvites(req.user.username),
+			newLink: link,
+			notice: "Enlace creado. Cópialo ahora: no se volverá a mostrar.",
+		}),
+	);
+});
+
+app.post("/api/invites/:id/revoke", requireInviter, sameOrigin, (req, res) => {
+	const result = revokeInvite(req.params.id, req.user.username, {
+		admin: isAdminRole(req.user.role),
+	});
+	if (result.error) {
+		return res.redirect(
+			303,
+			`/invites?error=${encodeURIComponent("No se pudo revocar la invitación.")}`,
+		);
+	}
+	audit(req, "invite.revoke", result.invite.id);
+	res.redirect(303, "/invites?ok=revoked");
+});
 
 app.get("/welcome", (req, res) => {
 	const user = getUser(req.user.username);
@@ -5370,6 +5740,7 @@ function shutdown() {
 	flushSessions();
 	flushUsers();
 	flushAttempts();
+	flushInvites();
 	flushChat();
 	flushFriends();
 	flushPanic();
@@ -5479,4 +5850,6 @@ server.listen(PORT, HOST, () => {
 	console.log(`[adblock] ${stats.count} dominios en la lista real`);
 	ensureAdblockFresh().catch(() => {});
 	setInterval(() => ensureAdblockFresh().catch(() => {}), 12 * 60 * 60 * 1000).unref();
+	cleanupInviteAvatars();
+	setInterval(cleanupInviteAvatars, 30 * 60 * 1000).unref();
 });

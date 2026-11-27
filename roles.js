@@ -81,6 +81,16 @@ export function isReportsRole(input) {
 	return hasAnyRole(input, ["designer", "pentester", "qa", "creator"]);
 }
 
+export function canCreateInvites(input) {
+	const roles =
+		Array.isArray(input?.roles) && input.roles.length
+			? input.roles.map(String).filter(Boolean)
+			: input?.role
+				? [String(input.role)]
+				: [];
+	return roles.length > 0 && !roles.includes("user");
+}
+
 export function canAssignRole(actorRole, role) {
 	const target = String(role || "");
 	if (target === "creator") return false;

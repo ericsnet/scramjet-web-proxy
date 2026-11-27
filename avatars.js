@@ -52,6 +52,10 @@ function detect(buffer) {
 	return TYPES.find((entry) => entry.match(buffer)) || null;
 }
 
+export function avatarType(buffer) {
+	return detect(buffer);
+}
+
 export function avatarInfo(username) {
 	if (!username) return null;
 	const cacheKey = String(username).toLowerCase();

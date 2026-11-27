@@ -28,6 +28,7 @@ administración.
 - **Chat de clase automático**: cada grupo de usuarios tiene su propio canal interno, visible solo para sus miembros y sincronizado cuando alguien entra o sale del grupo.
 - **Acuses de lectura en el chat**: los mensajes propios muestran **Visto / No visto** en privados y **Visto por N** en grupos; se actualiza cuando el otro miembro lee el canal.
 - **Escala de privilegios con personas**: en Administración, cada rol muestra de forma compacta los usuarios que lo tienen (Usuario, Diseñador gráfico, Pentester, QA, Moderador, Administrador y Creador).
+- **Invitaciones de registro**: las cuentas que no tengan el rol `user` pueden crear enlaces de un solo uso, válidos 7 días, para que otra persona cree su cuenta eligiendo usuario, contraseña, grupo y foto opcional. La cuenta nueva siempre es usuario normal; el formulario usa POST nativo para que el gestor de contraseñas del navegador ofrezca guardar las credenciales.
 - **Bóveda de contraseñas privada**: cifrada en el navegador con AES-GCM y PBKDF2; el servidor solo guarda blobs cifrados y nunca recibe la contraseña maestra. Incluye generador, búsqueda, copia, bloqueo automático y **autocompletado/guardado en webs abiertas por el proxy**.
 - **Botón de pánico**: abajo a la izquierda; activa durante 5 minutos la redirección automática de ese dispositivo a `classroom.google.com`.
 - **Iconos de usuario**: cada cuenta puede subir su propio PNG/JPG/WebP desde Mi cuenta; se muestra en la barra, el chat y la lista de usuarios.
@@ -317,6 +318,9 @@ usuario puede vaciar su propio historial.
 - `data/panic.json`: dispositivos con modo pánico activo y su caducidad.
 - `data/avatars/`: iconos de usuario validados por contenido y servidos solo con sesión iniciada.
 - `data/security.json`: alertas, bloqueos e historial reciente de logins.
+- `data/invites.json`: invitaciones de registro; solo se guardan hashes de los
+  tokens, no los enlaces.
+- `data/invite-avatars/`: fotos temporales de invitaciones pendientes de usar.
 - `data/adblock-hosts.txt` y `data/adblock-meta.json`: lista real de dominios
   publicitarios descargada de StevenBlack, BlocklistProject y AdAway, con su
   fecha de actualización. Licencias originales: StevenBlack (MIT),

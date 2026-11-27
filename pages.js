@@ -1,6 +1,13 @@
 import { countOpenAlerts } from "./security.js";
 import { adblockStats } from "./adblock.js";
-import { canAssignRole, canManageRole, isAdminRole, isReportsRole, isStaffRole } from "./roles.js";
+import {
+	canAssignRole,
+	canCreateInvites,
+	canManageRole,
+	isAdminRole,
+	isReportsRole,
+	isStaffRole,
+} from "./roles.js";
 
 export function esc(value) {
 	return String(value ?? "")
@@ -179,6 +186,26 @@ body::before{display:none}
 h1{letter-spacing:-.03em}
 .login-card{max-width:430px;margin:0 auto;text-align:center}
 .login-card form{text-align:left}
+.invite-card{max-width:620px;margin:0 auto;text-align:left}
+.invite-card h1{margin-top:0}
+.invite-link-box{margin:16px 0;padding:12px;border:1px solid #2f5b8a;border-radius:11px;background:rgba(59,130,246,.09)}
+.invite-link-box label{display:block;margin-bottom:6px;color:#bfdbfe;font-size:12px}
+.invite-link-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.invite-link-row input{flex:1;min-width:220px;margin:0;font-family:"JetBrains Mono",monospace;font-size:12px}
+.invite-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.invite-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.018)}
+.invite-row-main{min-width:0}
+.invite-row strong{display:block;font-size:13px}
+.invite-row small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.invite-status{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;
+  padding:2px 7px;font-size:10px;color:var(--muted);margin-left:6px}
+.invite-status.active{color:#86efac;border-color:rgba(74,222,128,.35)}
+.invite-status.used,.invite-status.expired{color:#fcd34d;border-color:rgba(251,191,36,.35)}
+.invite-status.revoked{color:#fca5a5;border-color:rgba(248,113,113,.35)}
+.invite-avatar-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
+.invite-avatar-preview{width:54px;height:54px;border-radius:15px;object-fit:cover;border:1px solid var(--border);display:none}
+.invite-avatar-preview.visible{display:block}
 .login-logo{width:58px;height:58px;margin:0 auto 16px;border-radius:14px;overflow:hidden;
   border:1px solid var(--border)}
 .login-logo svg{display:block;width:100%;height:100%}
@@ -1189,6 +1216,7 @@ function topbar(user) {
 	const roles = Array.isArray(user?.roles) && user.roles.length ? user.roles : [user?.role];
 	const staff = roles.some((role) => ["admin", "creator", "moderator"].includes(role));
 	const admin = staff ? '<a href="/admin">Administración</a>' : "";
+	const invites = canCreateInvites(user) ? '<a href="/invites">Invitaciones</a>' : "";
 	const alertCount = roles.some((role) => ["admin", "creator"].includes(role))
 		? countOpenAlerts()
 		: 0;
@@ -1212,6 +1240,7 @@ function topbar(user) {
   <div class="brand"><span class="brand-icon">${LOGO}</span>Proxy <span>Web</span></div>
   <a href="/">Proxy</a>
   <a href="/chat">Chat</a>
+  ${invites}
   <a href="/bookmarks">Favoritos</a>
   <a href="/history">Historial</a>
   <a href="/vault">Bóveda</a>
@@ -1396,6 +1425,136 @@ export function loginPage({ next = "/", error = "", notice = "", maintenance = "
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
 </div>`;
 	return shell("Inici - Classroom", body);
+}
+
+export function invitePage({
+	token = "",
+	csrf = "",
+	groups = [],
+	error = "",
+	values = {},
+} = {}) {
+	const options = groups
+		.map(
+			(group) =>
+				`<option value="${esc(group.id)}"${values.group === group.id ? " selected" : ""}>${esc(group.name)}</option>`,
+		)
+		.join("");
+	const noGroups = !groups.length;
+	const body = `<div class="card invite-card">
+  <div class="login-logo">${LOGO}</div>
+  <h1>Crear cuenta</h1>
+  <p class="muted">Te han invitado a Inici - Classroom. Elige tu usuario, contraseña y grupo de clase.</p>
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  ${
+		noGroups
+			? '<p class="warn">No hay grupos disponibles. Pide a un administrador que cree uno antes de usar la invitación.</p>'
+			: ""
+	}
+  <form id="invite-form" method="post" action="/api/invite/accept">
+    <input type="hidden" name="token" value="${esc(token)}">
+    <input type="hidden" name="csrf" value="${esc(csrf)}">
+    <label for="invite-username">Usuario</label>
+    <input id="invite-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" value="${esc(values.username || "")}" required autofocus>
+    <label for="invite-password">Contraseña</label>
+    <input id="invite-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+    <label for="invite-confirm">Repetir contraseña</label>
+    <input id="invite-confirm" name="confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
+    <label for="invite-group">Grupo de clase</label>
+    <select id="invite-group" name="group" required${noGroups ? " disabled" : ""}>
+      <option value="">Elige tu grupo…</option>
+      ${options}
+    </select>
+    <div class="invite-avatar-row">
+      <img id="invite-avatar-preview" class="invite-avatar-preview" alt="">
+      <div>
+        <label for="invite-avatar">Foto de perfil (opcional)</label>
+        <input id="invite-avatar" type="file" accept="image/png,image/jpeg,image/webp">
+        <div id="invite-avatar-msg" class="hint">PNG, JPG o WebP · máximo 2 MB</div>
+      </div>
+    </div>
+    <button class="primary" type="submit" id="invite-submit"${noGroups ? " disabled" : ""}>Crear cuenta</button>
+  </form>
+  <p class="hint">La cuenta se creará con rol de usuario normal. El navegador puede ofrecerte guardar el usuario y la contraseña.</p>
+</div>
+<script src="/invite.js?v=1" defer></script>`;
+	return shell("Crear cuenta · Proxy Web", body, { chatFab: false });
+}
+
+export function invitesPage({
+	user,
+	invites = [],
+	newLink = "",
+	notice = "",
+	error = "",
+} = {}) {
+	const statusLabel = {
+		active: "Activa",
+		used: "Usada",
+		expired: "Caducada",
+		revoked: "Revocada",
+	};
+	const rows = invites
+		.map((invite) => {
+			const status = invite.status || "invalid";
+			const used = invite.usedBy?.length
+				? ` · usada por ${invite.usedBy.map((name) => esc(name)).join(", ")}`
+				: "";
+			return `<div class="invite-row">
+  <div class="invite-row-main">
+    <strong>Invitación <span class="invite-status ${esc(status)}">${esc(statusLabel[status] || "No válida")}</span></strong>
+    <small>creada ${esc(fmtDate(invite.createdAt))} · caduca ${esc(fmtDate(invite.expiresAt))} · ${invite.uses}/${invite.maxUses} usos${used}</small>
+  </div>
+  ${
+		status === "active"
+			? `<form method="post" action="/api/invites/${encodeURIComponent(invite.id)}/revoke">
+    <button class="small danger" type="submit">Revocar</button>
+  </form>`
+			: ""
+	}
+</div>`;
+		})
+		.join("");
+	const linkBox = newLink
+		? `<div class="invite-link-box">
+  <label for="invite-new-link">Enlace recién creado: cópialo ahora, no se volverá a mostrar</label>
+  <div class="invite-link-row">
+    <input id="invite-new-link" value="${esc(newLink)}" readonly>
+    <button class="small" type="button" data-copy-invite>Copiar</button>
+  </div>
+</div>`
+		: "";
+	const body = `<div class="card invite-card">
+  <h1>Invitaciones</h1>
+  <p class="muted">Crea un enlace para que otra persona se registre. El enlace es de un solo uso y caduca en 7 días.</p>
+  ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+  ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+  <form method="post" action="/api/invites">
+    <button class="primary" type="submit">Crear enlace de invitación</button>
+  </form>
+  ${linkBox}
+  <h2>Mis invitaciones</h2>
+  <div class="invite-list">${rows || '<p class="muted">Todavía no has creado ninguna invitación.</p>'}</div>
+  <p class="hint">Solo pueden crear invitaciones las cuentas que no tengan el rol de usuario.</p>
+</div>
+<script>
+document.querySelector("[data-copy-invite]")?.addEventListener("click", async () => {
+  const input = document.getElementById("invite-new-link");
+  if (!input) return;
+  try {
+    await navigator.clipboard.writeText(input.value);
+    const button = document.querySelector("[data-copy-invite]");
+    if (button) button.textContent = "Copiado";
+  } catch {
+    input.select();
+    document.execCommand("copy");
+  }
+});
+</script>`;
+	return shell("Invitaciones · Proxy Web", body, {
+		topbar: topbar(user),
+		chatFab: false,
+	});
 }
 
 export function mfaPage({ next = "/", error = "", csrf = "" } = {}) {
