@@ -293,8 +293,13 @@ window.addEventListener("keydown", (event) => {
 
 function createLazyImagesPlugin() {
 	const PluginClass = globalThis.$scramjet?.Plugin;
-	if (typeof PluginClass !== "function") return null;
-	const plugin = new PluginClass("lazy-images");
+	const ManagedPlugin = globalThis.$scramjetController?.ManagedPlugin;
+	if (typeof PluginClass !== "function" && typeof ManagedPlugin !== "function") return null;
+	const plugin =
+		typeof ManagedPlugin === "function"
+			? new ManagedPlugin("lazy-images", [])
+			: new PluginClass("lazy-images");
+	if (!Array.isArray(plugin.dependencies)) plugin.dependencies = [];
 	plugin.install = (frame) => {
 		plugin.tap(frame.hooks.init.pre, ({ window }) => {
 			try {
