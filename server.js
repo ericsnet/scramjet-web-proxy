@@ -2226,6 +2226,14 @@ app.use((req, res, next) => {
 	const accept = String(req.get("accept") || "");
 	if (!accept.includes("text/html")) return next();
 	const user = getUser(req.user.username);
+	// Si debe cambiar la contraseña, /account tiene prioridad. Si no, el aviso de
+	// onboarding lo devolvería a /welcome y /welcome volvería a /account.
+	if (
+		req.user.mustChangePassword &&
+		(req.path === "/account" || req.path.startsWith("/account/"))
+	) {
+		return next();
+	}
 	if (!needsGroupOnboarding(user)) return next();
 	const nextUrl = req.originalUrl || "/";
 	return res.redirect(303, `/welcome?next=${encodeURIComponent(nextUrl)}`);
