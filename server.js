@@ -1058,6 +1058,11 @@ function sameOrigin(req, res, next) {
 	}
 	const origin = req.headers.origin;
 	if (!origin || origin === "null") {
+		// Algunos navegadores no envían Origin en formularios same-origin,
+		// especialmente si la página usa Referrer-Policy: no-referrer (como la
+		// invitación, para no filtrar el token). Sec-Fetch-Site lo pone el
+		// navegador y no puede falsificarse desde JavaScript.
+		if (site === "same-origin") return next();
 		const referer = req.headers.referer;
 		if (referer) {
 			try {
