@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AVATAR_DIR = path.join(__dirname, "data", "avatars");
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const infoCache = new Map();
 
 const TYPES = [
 	{
@@ -53,19 +54,27 @@ function detect(buffer) {
 
 export function avatarInfo(username) {
 	if (!username) return null;
+	const cacheKey = String(username).toLowerCase();
+	if (infoCache.has(cacheKey)) {
+		const cached = infoCache.get(cacheKey);
+		return cached ? { ...cached } : null;
+	}
 	for (const entry of TYPES) {
 		const file = fileFor(username, entry.ext);
 		try {
 			const stat = fs.statSync(file);
 			if (!stat.isFile()) continue;
 			const version = Math.floor(stat.mtimeMs);
-			return {
+			const info = {
 				url: `/avatar/${encodeURIComponent(String(username))}?v=${version}`,
 				type: entry.type,
 				updatedAt: new Date(stat.mtimeMs).toISOString(),
 			};
+			infoCache.set(cacheKey, info);
+			return { ...info };
 		} catch {}
 	}
+	infoCache.set(cacheKey, null);
 	return null;
 }
 
@@ -99,6 +108,7 @@ export function saveAvatar(username, buffer) {
 				} catch {}
 			}
 		}
+		infoCache.delete(String(username).toLowerCase());
 		return { ok: true, info: avatarInfo(username) };
 	} catch (error) {
 		return { error: "save_failed", detail: error.message };
@@ -117,6 +127,7 @@ export function deleteAvatar(username) {
 	if (!username) return { ok: true };
 	try {
 		removeFiles(username);
+		infoCache.delete(String(username).toLowerCase());
 		return { ok: true };
 	} catch {
 		return { error: "delete_failed" };

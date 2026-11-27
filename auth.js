@@ -28,6 +28,31 @@ function isHeartbeatRequest(req) {
 }
 
 const sessions = new Map(); // tokenHash -> { id, username, createdAt, lastSeenAt, expires, absoluteExpires, ip, userAgent }
+const sessionsByUser = new Map(); // username lower -> Set(tokenHash)
+const EMPTY_SESSION_KEYS = new Set();
+
+function indexSession(key, session) {
+	const owner = String(session?.username || "").toLowerCase();
+	if (!owner) return;
+	let keys = sessionsByUser.get(owner);
+	if (!keys) {
+		keys = new Set();
+		sessionsByUser.set(owner, keys);
+	}
+	keys.add(key);
+}
+
+function unindexSession(key, session) {
+	const owner = String(session?.username || "").toLowerCase();
+	const keys = sessionsByUser.get(owner);
+	if (!keys) return;
+	keys.delete(key);
+	if (!keys.size) sessionsByUser.delete(owner);
+}
+
+function sessionKeysFor(username) {
+	return sessionsByUser.get(String(username || "").toLowerCase()) || EMPTY_SESSION_KEYS;
+}
 const loginAttempts = new Map(); // username -> { count, resetAt }
 const ipAttempts = new Map(); // ip -> { count, resetAt }
 const accountIpAttempts = new Map(); // ip:username -> { count, resetAt }
@@ -63,12 +88,41 @@ function hashToken(token) {
 /* -------------------------------- almacén -------------------------------- */
 
 let db = { users: {} };
+let userIndex = new Map();
+
+function rebuildUserIndex() {
+	userIndex = new Map(
+		Object.keys(db.users).map((name) => [name.toLowerCase(), name]),
+	);
+}
+
+function canonicalUser(username) {
+	return userIndex.get(String(username || "").toLowerCase()) || null;
+}
 
 function save() {
 	fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 	const tmp = `${USERS_FILE}.tmp`;
-	fs.writeFileSync(tmp, JSON.stringify(db, null, 2), { mode: 0o600 });
+	fs.writeFileSync(tmp, JSON.stringify(db), { mode: 0o600 });
 	fs.renameSync(tmp, USERS_FILE);
+}
+
+let usersSaveTimer = null;
+function scheduleUsersSave() {
+	if (usersSaveTimer) return;
+	usersSaveTimer = setTimeout(() => {
+		usersSaveTimer = null;
+		save();
+	}, 5000);
+	usersSaveTimer.unref?.();
+}
+
+export function flushUsers() {
+	if (usersSaveTimer) {
+		clearTimeout(usersSaveTimer);
+		usersSaveTimer = null;
+	}
+	save();
 }
 
 function migrateUsers() {
@@ -169,6 +223,7 @@ function seedIfNeeded() {
 }
 
 seedIfNeeded();
+rebuildUserIndex();
 
 function isEffectivelyBlocked(user) {
 	if (!user) return false;
@@ -215,11 +270,21 @@ export function listUsers() {
 		.sort((a, b) => a.username.localeCompare(b.username, "es"));
 }
 
+export function listUserChatMeta() {
+	return Object.keys(db.users).map((username) => {
+		const user = db.users[username];
+		return {
+			username,
+			role: user.role,
+			roles: Array.isArray(user.roles) && user.roles.length ? user.roles : [user.role],
+			icon: avatarInfo(username),
+		};
+	});
+}
+
 export function getUser(username) {
 	if (!username) return null;
-	const name = Object.keys(db.users).find(
-		(n) => n.toLowerCase() === String(username).toLowerCase(),
-	);
+	const name = canonicalUser(username);
 	if (!name) return null;
 	const user = db.users[name];
 	const until =
@@ -243,9 +308,7 @@ export function getMfa(username) {
 }
 
 export function setMfa(username, value) {
-	const name = Object.keys(db.users).find(
-		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
-	);
+	const name = canonicalUser(username);
 	if (!name) return { error: "notfound" };
 	db.users[name].mfa = value || null;
 	save();
@@ -304,6 +367,7 @@ export function createUser(username, password, role) {
 		groupOnboarded: false,
 		groupRules: true,
 	};
+	userIndex.set(name.toLowerCase(), name);
 	save();
 	return {
 		user: {
@@ -325,6 +389,7 @@ export function deleteUser(username) {
 		return { error: "last-admin" };
 	}
 	delete db.users[user.username];
+	userIndex.delete(user.username.toLowerCase());
 	save();
 	deleteAvatar(user.username);
 	destroySessionsOf(user.username);
@@ -367,9 +432,7 @@ export function setRole(username, role) {
 }
 
 export function setUserGroup(username, groupId) {
-	const name = Object.keys(db.users).find(
-		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
-	);
+	const name = canonicalUser(username);
 	if (!name) return { error: "notfound" };
 	db.users[name].group = String(groupId || "").slice(0, 64);
 	db.users[name].groupOnboarded = true;
@@ -378,9 +441,7 @@ export function setUserGroup(username, groupId) {
 }
 
 export function markGroupOnboarded(username) {
-	const name = Object.keys(db.users).find(
-		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
-	);
+	const name = canonicalUser(username);
 	if (!name) return { error: "notfound" };
 	db.users[name].groupOnboarded = true;
 	save();
@@ -388,9 +449,7 @@ export function markGroupOnboarded(username) {
 }
 
 export function setUserGroupRules(username, enabled) {
-	const name = Object.keys(db.users).find(
-		(n) => n.toLowerCase() === String(username || "").toLowerCase(),
-	);
+	const name = canonicalUser(username);
 	if (!name) return { error: "notfound" };
 	db.users[name].groupRules = !!enabled;
 	save();
@@ -647,40 +706,58 @@ export function touchUserSeen(username) {
 	if (now - last < 60_000) return;
 	lastSeenWrite.set(user.username, now);
 	db.users[user.username].lastSeenAt = new Date(now).toISOString();
-	save();
+	scheduleUsersSave();
 }
 
 /* -------------------------------- sesiones -------------------------------- */
 
 let sessionsDirty = false;
 let sessionsTimer = null;
+let sessionsWriting = false;
+
+function sessionsPayload() {
+	const entries = [...sessions.entries()].map(([tokenHash, session]) => ({
+		tokenHash,
+		...session,
+	}));
+	return JSON.stringify({ sessions: entries });
+}
 
 function saveSessionsNow() {
-	if (!sessionsDirty) return;
+	if (!sessionsDirty || sessionsWriting) return;
+	sessionsWriting = true;
+	sessionsDirty = false;
+	const tmp = `${SESSIONS_FILE}.tmp`;
+	let payload;
 	try {
-		fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
-		const entries = [...sessions.entries()].map(([tokenHash, session]) => ({
-			tokenHash,
-			...session,
-		}));
-		const tmp = `${SESSIONS_FILE}.tmp`;
-		fs.writeFileSync(tmp, JSON.stringify({ sessions: entries }, null, 2), {
-			mode: 0o600,
-		});
-		fs.renameSync(tmp, SESSIONS_FILE);
-		sessionsDirty = false;
+		payload = sessionsPayload();
 	} catch (err) {
-		console.error("No se pudo guardar sessions.json:", err.message);
+		sessionsWriting = false;
+		sessionsDirty = true;
+		console.error("No se pudo serializar sessions.json:", err.message);
+		return;
 	}
+	fs.promises
+		.mkdir(DATA_DIR, { recursive: true, mode: 0o700 })
+		.then(() => fs.promises.writeFile(tmp, payload, { mode: 0o600 }))
+		.then(() => fs.promises.rename(tmp, SESSIONS_FILE))
+		.catch((err) => {
+			sessionsDirty = true;
+			console.error("No se pudo guardar sessions.json:", err.message);
+		})
+		.finally(() => {
+			sessionsWriting = false;
+			if (sessionsDirty) scheduleSessionsSave();
+		});
 }
 
 function scheduleSessionsSave() {
 	sessionsDirty = true;
-	if (sessionsTimer) return;
+	if (sessionsTimer || sessionsWriting) return;
 	sessionsTimer = setTimeout(() => {
 		sessionsTimer = null;
 		saveSessionsNow();
-	}, 1000);
+	}, 3000);
 	sessionsTimer.unref?.();
 }
 
@@ -695,7 +772,7 @@ function loadSessions() {
 			if (entry.expires <= now) continue;
 			const user = getUser(entry.username);
 			if (!user || isEffectivelyBlocked(user)) continue;
-			sessions.set(entry.tokenHash, {
+			const session = {
 				id: entry.id || crypto.randomBytes(6).toString("hex"),
 				username: entry.username,
 				createdAt: entry.createdAt || new Date(now).toISOString(),
@@ -708,7 +785,9 @@ function loadSessions() {
 						: Math.max(entry.expires, now + ABSOLUTE_SESSION_MS),
 				ip: entry.ip || "",
 				userAgent: entry.userAgent || "",
-			});
+			};
+			sessions.set(entry.tokenHash, session);
+			indexSession(entry.tokenHash, session);
 		}
 		sessionsDirty = true;
 		saveSessionsNow();
@@ -724,14 +803,15 @@ export function createSession(username, { ip = "", userAgent = "" } = {}) {
 	const user = getUser(username);
 	const isAdmin = ["admin", "creator"].includes(user?.role);
 	const max = isAdmin ? Number.POSITIVE_INFINITY : settings.maxSessionsPerUser;
-	const wanted = String(username).toLowerCase();
-	const existing = [...sessions.entries()]
-		.filter(([, s]) => s.username.toLowerCase() === wanted && s.expires > Date.now())
+	const existing = [...sessionKeysFor(username)]
+		.map((key) => [key, sessions.get(key)])
+		.filter(([, session]) => session && session.expires > Date.now())
 		.sort((a, b) => new Date(a[1].createdAt) - new Date(b[1].createdAt));
 	const revoked = [];
 	while (existing.length >= max) {
 		const [oldHash, oldSession] = existing.shift();
 		sessions.delete(oldHash);
+		unindexSession(oldHash, oldSession);
 		revoked.push(oldSession.id);
 	}
 
@@ -740,7 +820,7 @@ export function createSession(username, { ip = "", userAgent = "" } = {}) {
 	const id = crypto.randomBytes(6).toString("hex");
 	const ttl = settings.sessionHours * 60 * 60 * 1000;
 	const expires = Math.min(now + ttl, now + ABSOLUTE_SESSION_MS);
-	sessions.set(hashToken(token), {
+	const session = {
 		id,
 		username: user ? user.username : username,
 		createdAt: new Date(now).toISOString(),
@@ -750,7 +830,10 @@ export function createSession(username, { ip = "", userAgent = "" } = {}) {
 		absoluteExpires: now + ABSOLUTE_SESSION_MS,
 		ip: String(ip || "").slice(0, 64),
 		userAgent: String(userAgent || "").slice(0, 200),
-	});
+	};
+	const tokenHash = hashToken(token);
+	sessions.set(tokenHash, session);
+	indexSession(tokenHash, session);
 	scheduleSessionsSave();
 	lastSeenWrite.set(user ? user.username : username, now);
 	return { token, id, expires, revoked };
@@ -761,6 +844,7 @@ export function destroySession(token) {
 	const session = sessions.get(key);
 	if (session) {
 		sessions.delete(key);
+		unindexSession(key, session);
 		scheduleSessionsSave();
 	}
 	return session || null;
@@ -772,6 +856,7 @@ export function destroySessionsOf(username) {
 	for (const [key, s] of sessions) {
 		if (s.username.toLowerCase() === wanted) {
 			sessions.delete(key);
+			unindexSession(key, s);
 			removed.push(s.id);
 		}
 	}
@@ -786,6 +871,7 @@ export function destroyOtherSessions(username, keepToken) {
 	for (const [key, s] of sessions) {
 		if (s.username.toLowerCase() === wanted && key !== keepHash) {
 			sessions.delete(key);
+			unindexSession(key, s);
 			removed.push(s.id);
 		}
 	}
@@ -795,14 +881,11 @@ export function destroyOtherSessions(username, keepToken) {
 
 export function sessionsForUser(username) {
 	const now = Date.now();
-	return [...sessions.values()]
-		.filter(
-			(s) =>
-				s.expires > now &&
-				s.username.toLowerCase() === String(username).toLowerCase(),
-		)
+	return [...sessionKeysFor(username)]
+		.map((key) => sessions.get(key))
+		.filter((session) => session && session.expires > now)
 		.sort((a, b) => new Date(b.lastSeenAt) - new Date(a.lastSeenAt))
-		.map((s) => ({ ...s }));
+		.map((session) => ({ ...session }));
 }
 
 export function listSessions() {
@@ -837,6 +920,7 @@ export function revokeSessionById(id) {
 	for (const [key, s] of sessions) {
 		if (s.id === id) {
 			sessions.delete(key);
+			unindexSession(key, s);
 			scheduleSessionsSave();
 			return { ...s };
 		}
@@ -850,6 +934,7 @@ export function revokeUserSessions(username, exceptId = "") {
 		if (s.username.toLowerCase() !== String(username).toLowerCase()) continue;
 		if (exceptId && s.id === exceptId) continue;
 		sessions.delete(key);
+		unindexSession(key, s);
 		count++;
 	}
 	if (count) scheduleSessionsSave();
@@ -883,18 +968,21 @@ export function getSession(req) {
 	const now = Date.now();
 	if (session.expires <= now) {
 		sessions.delete(key);
+		unindexSession(key, session);
 		scheduleSessionsSave();
 		return null;
 	}
 	const idleMs = Math.max(1, getSettings().sessionIdleHours || 12) * 60 * 60 * 1000;
 	if (now - new Date(session.lastSeenAt).getTime() > idleMs) {
 		sessions.delete(key);
+		unindexSession(key, session);
 		scheduleSessionsSave();
 		return null;
 	}
 	const user = getUser(session.username);
 	if (!user || isEffectivelyBlocked(user)) {
 		sessions.delete(key);
+		unindexSession(key, session);
 		scheduleSessionsSave();
 		return null;
 	}
@@ -951,7 +1039,20 @@ export function clearSessionCookie(req) {
 }
 
 export function flushSessions() {
-	saveSessionsNow();
+	if (sessionsTimer) {
+		clearTimeout(sessionsTimer);
+		sessionsTimer = null;
+	}
+	sessionsDirty = true;
+	try {
+		fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+		const tmp = `${SESSIONS_FILE}.flush.tmp`;
+		fs.writeFileSync(tmp, sessionsPayload(), { mode: 0o600 });
+		fs.renameSync(tmp, SESSIONS_FILE);
+		sessionsDirty = false;
+	} catch (err) {
+		console.error("No se pudo guardar sessions.json:", err.message);
+	}
 }
 
 /* --------------------- persistencia de intentos de login --------------------- */
@@ -1128,6 +1229,7 @@ setInterval(() => {
 	for (const [key, s] of sessions) {
 		if (s.expires <= now) {
 			sessions.delete(key);
+			unindexSession(key, s);
 			changed = true;
 		}
 	}

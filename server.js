@@ -46,6 +46,7 @@ import {
 	setUserLanguage,
 	addUnblockOverride,
 	recordLoginSuccess,
+	listUserChatMeta,
 	listSessions,
 	sessionsForUser,
 	sessionCount,
@@ -59,6 +60,7 @@ import {
 	recordIpFailure,
 	recordAccountIpFailure,
 	flushSessions,
+	flushUsers,
 	flushAttempts,
 } from "./auth.js";
 import {
@@ -268,11 +270,16 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+let creatorCache = { at: 0, set: new Set() };
+
 function creatorNameSet() {
+	const now = Date.now();
+	if (now - creatorCache.at < 10_000) return creatorCache.set;
 	const set = new Set();
-	for (const entry of listUsers()) {
+	for (const entry of listUserChatMeta()) {
 		if (entry.role === "creator") set.add(String(entry.username).toLowerCase());
 	}
+	creatorCache = { at: now, set };
 	return set;
 }
 
@@ -958,15 +965,20 @@ function chatOnlineCount() {
 	return users.size;
 }
 
+let chatMetaCache = { at: 0, map: new Map() };
+
 function chatUserMeta() {
+	const now = Date.now();
+	if (now - chatMetaCache.at < 5000) return chatMetaCache.map;
 	const map = new Map();
-	for (const entry of listUsers()) {
+	for (const entry of listUserChatMeta()) {
 		map.set(String(entry.username).toLowerCase(), {
 			role: entry.role,
 			roles: entry.roles,
 			icon: entry.icon,
 		});
 	}
+	chatMetaCache = { at: now, map };
 	return map;
 }
 
@@ -5256,6 +5268,16 @@ app.get(["/", "/index.html"], (req, res, next) => {
 	next();
 });
 
+app.use((req, res, next) => {
+	if (
+		req.method === "GET" &&
+		req.query.v &&
+		/\.(?:js|css|png|jpe?g|gif|webp|svg|ico|woff2?)$/i.test(req.path)
+	) {
+		res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+	}
+	next();
+});
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use((req, res) => {
@@ -5280,6 +5302,10 @@ app.use((err, req, res, next) => {
 /* --------------------------------- servidor --------------------------------- */
 
 const server = http.createServer(app);
+// Apache reutiliza conexiones hacia Node; mantenerlas más tiempo reduce el
+// coste de abrir una conexión por cada petición.
+server.keepAliveTimeout = 70_000;
+server.headersTimeout = 71_000;
 
 let lastBackupDay = "";
 function scheduledBackup() {
@@ -5324,6 +5350,7 @@ function shutdown() {
 	flushActivity();
 	flushAudit();
 	flushSessions();
+	flushUsers();
 	flushAttempts();
 	flushChat();
 	flushFriends();

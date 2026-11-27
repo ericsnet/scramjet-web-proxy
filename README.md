@@ -21,6 +21,7 @@ administración.
 - **Carga diferida en Poki y TikTok**: las imágenes fuera de pantalla se marcan como `lazy` y `async` dentro del proxy, para que no se saturen los streams al abrir la página.
 - **Panel de tráfico en tiempo real**: peticiones HTTP, usuarios/IPs, estados, rutas, sesiones, streams Wisp, destinos y bytes.
 - **Escáner de seguridad pasivo**: detecta escaneo de rutas, inyección, enumeración de API, ráfagas, bots por comportamiento y bloqueos manuales por dispositivo, usuario o IP.
+- **Escalado del servidor**: usuarios y sesiones se buscan por índice en memoria (sin recorrer todos los registros), caché de avatares y metadatos de chat, sesiones guardadas en formato compacto y de forma asíncrona, keep-alive con Apache y caché de assets versionados.
 - **Chat interno entre usuarios** con sala general, chats privados 1:1, grupos, adjuntos (imágenes/PDF/texto/audio), notas de voz grabadas, reacciones, encuestas, menciones y presencia por conversación. Para abrir chats privados o grupos hace falta ser amigos; el creador puede añadir a cualquiera.
 - **Apodos privados en chats**: en un chat privado puedes poner un apodo a la otra persona. Solo tú lo ves, en la cabecera, en la lista de conversaciones y en los mensajes; no cambia su nombre real ni lo que ella ve de ti.
 - **Chat de clase automático**: cada grupo de usuarios tiene su propio canal interno, visible solo para sus miembros y sincronizado cuando alguien entra o sale del grupo.
