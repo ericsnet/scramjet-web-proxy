@@ -1805,3 +1805,8 @@ html.sidebar-collapsed .app-nav-icon svg {
 	background: var(--surface);
 	box-shadow: var(--shadow-sm);
 }
+
+/* Entrada del panel de administración. */
+html.admin-motion-ready .app-content .wrap > * {
+	opacity: 0;
+}

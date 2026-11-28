@@ -181,6 +181,16 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false, full = 
 <title>Inici - Classroom</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 ${THEME_HEAD}
+<script>
+(() => {
+	if (!location.pathname.startsWith("/admin")) return;
+	if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+	document.documentElement.classList.add("admin-motion-ready");
+	setTimeout(() => {
+		if (!window.__adminMotion) document.documentElement.classList.remove("admin-motion-ready");
+	}, 2500);
+})();
+</script>
 <link rel="preload" href="/fonts/ibm-plex-sans-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${asset("css/tokens.css")}">
 <link rel="stylesheet" href="${asset("css/base.css")}">
@@ -189,6 +199,7 @@ ${head}
 <script src="/page-i18n.js" defer></script>
 ${topbar ? '<script src="/session-guard.js" defer></script>' : ""}
 <script src="/global-search.js?v=3" defer></script>
+${topbar && !full ? '<script src="/vendor/gsap.min.js" defer></script><script src="/admin-motion.js" defer></script>' : ""}
 </head>
 <body class="${bodyClass}">
 <div id="page-progress" class="page-progress" hidden><i></i></div>
