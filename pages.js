@@ -55,12 +55,12 @@ const THEME_HEAD = `<script>
 <script src="/theme.js" defer></script>`;
 
 const LOGO = `<svg viewBox="0 0 64 64" aria-hidden="true">
-  <rect width="64" height="64" rx="16" fill="#0b1017"/>
-  <path d="M14 19c7-3 13-2 18 2v26c-5-4-11-5-18-2z" fill="#3b82f6"/>
-  <path d="M50 19c-7-3-13-2-18 2v26c5-4 11-5 18-2z" fill="#60a5fa"/>
-  <path d="M32 21v26" stroke="#0b1017" stroke-width="3"/>
-  <path d="M18 25c4-1 8-1 11 1" stroke="#0b1017" stroke-width="2" stroke-linecap="round" opacity=".55"/>
-  <path d="M46 25c-4-1-8-1-11 1" stroke="#0b1017" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+  <rect width="64" height="64" rx="16" fill="#12110f"/>
+  <path d="M14 19c7-3 13-2 18 2v26c-5-4-11-5-18-2z" fill="#8fb6f0"/>
+  <path d="M50 19c-7-3-13-2-18 2v26c5-4 11-5 18-2z" fill="#a8c7f5"/>
+  <path d="M32 21v26" stroke="#12110f" stroke-width="3"/>
+  <path d="M18 25c4-1 8-1 11 1" stroke="#12110f" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+  <path d="M46 25c-4-1-8-1-11 1" stroke="#12110f" stroke-width="2" stroke-linecap="round" opacity=".55"/>
 </svg>`;
 
 const ICON = {
@@ -3818,14 +3818,14 @@ export function specialistWorkspacePage({
 		tool === "designer"
 			? `<div class="design-swatches">
     ${[
-			["Fondo", "#0b1017"],
-			["Superficie", "#111c2e"],
-			["Borde", "#243449"],
-			["Texto", "#e5edf7"],
-			["Muted", "#8298af"],
-			["Azul", "#3b82f6"],
-			["Éxito", "#4ade80"],
-			["Error", "#f87171"],
+			["Fondo", "#161513"],
+			["Superficie", "#1c1a18"],
+			["Borde", "#3a3733"],
+			["Texto", "#efe9de"],
+			["Muted", "#9b948a"],
+			["Acento", "#8fb6f0"],
+			["Éxito", "#5aa87a"],
+			["Error", "#e88b8b"],
 		]
 			.map(([name, color]) => `<div class="design-swatch"><span style="background:${color}"></span><strong>${esc(name)}</strong><small>${esc(color)}</small></div>`)
 			.join("")}
@@ -3847,8 +3847,8 @@ export function specialistWorkspacePage({
     <h2>Comprobador de contraste</h2>
     <p class="muted">Calcula el contraste WCAG entre texto y fondo.</p>
     <div class="tool-inline">
-      <label>Texto <input type="color" id="design-fg" value="#e5edf7"></label>
-      <label>Fondo <input type="color" id="design-bg" value="#0b1017"></label>
+      <label>Texto <input type="color" id="design-fg" value="#efe9de"></label>
+      <label>Fondo <input type="color" id="design-bg" value="#161513"></label>
     </div>
     <div class="contrast-preview" id="design-contrast-preview">Texto de ejemplo</div>
     <p class="tool-result" id="design-contrast-result"></p>
@@ -3856,7 +3856,7 @@ export function specialistWorkspacePage({
   <div class="card">
     <h2>Paleta a partir de un color</h2>
     <div class="tool-inline">
-      <label>Color base <input type="color" id="design-palette-base" value="#3b82f6"></label>
+      <label>Color base <input type="color" id="design-palette-base" value="#8fb6f0"></label>
       <button class="small" type="button" id="design-palette-copy">Copiar CSS</button>
     </div>
     <div class="design-swatches" id="design-palette"></div>
