@@ -76,6 +76,8 @@ const ICON = {
 	plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
 };
 
+const ERROR_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v5M12 18h.01"/></svg>`;
+
 const NAV_ICON = {
 	home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg>`,
 	chat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg>`,
@@ -720,22 +722,22 @@ export function mfaRecoveryPage({ user, codes = [], title = "Códigos de recuper
 }
 
 const HTTP_ERRORS = {
-	400: ["Solicitud no válida", "La petición no tiene el formato esperado.", "🧩"],
-	401: ["Necesitas iniciar sesión", "Tu sesión no es válida o ha caducado.", "🔐"],
-	403: ["Acceso restringido", "No tienes permisos para ver este contenido.", "⛔"],
-	404: ["Página no encontrada", "La dirección no existe o se ha movido.", "🧭"],
-	405: ["Método no permitido", "Esta acción no está permitida en esta ruta.", "🛑"],
-	408: ["Tiempo de espera agotado", "La petición tardó demasiado. Inténtalo de nuevo.", "⏳"],
-	413: ["Contenido demasiado grande", "El archivo o formulario supera el límite permitido.", "📦"],
-	418: ["Soy una tetera", "El servidor está haciendo café, no té.", "🫖"],
-	421: ["Destino no válido", "El dominio usado para acceder no está permitido.", "🌐"],
-	429: ["Demasiadas peticiones", "Has hecho demasiadas solicitudes en poco tiempo.", "🐢"],
-	451: ["Contenido no disponible", "Este contenido no está disponible por motivos legales.", "⚖️"],
-	500: ["Error interno", "Algo falló en el servidor. Ya se está revisando.", "🧯"],
-	501: ["Aún no implementado", "Esta función todavía no está disponible.", "🚧"],
-	502: ["Pasarela incorrecta", "Un servicio intermedio devolvió una respuesta no válida.", "🔌"],
-	503: ["Servicio no disponible", "El servicio está temporalmente fuera de línea.", "🛠️"],
-	504: ["Pasarela sin respuesta", "El servicio tardó demasiado en responder.", "📡"],
+	400: ["Solicitud no válida", "La petición no tiene el formato esperado."],
+	401: ["Necesitas iniciar sesión", "Tu sesión no es válida o ha caducado."],
+	403: ["Acceso restringido", "No tienes permisos para ver este contenido."],
+	404: ["Página no encontrada", "La dirección no existe o se ha movido."],
+	405: ["Método no permitido", "Esta acción no está permitida en esta ruta."],
+	408: ["Tiempo de espera agotado", "La petición tardó demasiado. Inténtalo de nuevo."],
+	413: ["Contenido demasiado grande", "El archivo o formulario supera el límite permitido."],
+	418: ["Soy una tetera", "El servidor está haciendo café, no té."],
+	421: ["Destino no válido", "El dominio usado para acceder no está permitido."],
+	429: ["Demasiadas peticiones", "Has hecho demasiadas solicitudes en poco tiempo."],
+	451: ["Contenido no disponible", "Este contenido no está disponible por motivos legales."],
+	500: ["Error interno", "Algo falló en el servidor. Ya se está revisando."],
+	501: ["Aún no implementado", "Esta función todavía no está disponible."],
+	502: ["Pasarela incorrecta", "Un servicio intermedio devolvió una respuesta no válida."],
+	503: ["Servicio no disponible", "El servicio está temporalmente fuera de línea."],
+	504: ["Pasarela sin respuesta", "El servicio tardó demasiado en responder."],
 };
 
 export function errorPage({
@@ -746,10 +748,9 @@ export function errorPage({
 	previewCodes = null,
 } = {}) {
 	const code = Number(status) || 500;
-	const info = HTTP_ERRORS[code] || ["Error del servidor", "No se pudo completar la operación.", "⚠️"];
+	const info = HTTP_ERRORS[code] || ["Error del servidor", "No se pudo completar la operación."];
 	const heading = title || info[0];
 	const detail = message || info[1];
-	const icon = info[2];
 	const preview = Array.isArray(previewCodes) && previewCodes.length
 		? `<div class="error-preview">
   <span>Vista previa</span>
@@ -757,7 +758,7 @@ export function errorPage({
 </div>`
 		: "";
 	const body = `<div class="error-screen">
-  <div class="error-orbit" aria-hidden="true"><span>${esc(icon)}</span></div>
+  <div class="error-orbit" aria-hidden="true">${ERROR_ICON}</div>
   <div class="error-code">${esc(code)}</div>
   <h1>${esc(heading)}</h1>
   <p>${esc(detail)}</p>
@@ -3720,7 +3721,6 @@ const TOOL_CONFIG = {
 	designer: {
 		path: "/design",
 		title: "Diseño gráfico",
-		icon: "🎨",
 		intro: "Herramientas para revisar la interfaz, el sistema visual y reportar problemas de diseño.",
 		checklist: [
 			"Contraste legible en tema oscuro y en móvil.",
@@ -3735,7 +3735,6 @@ const TOOL_CONFIG = {
 	pentester: {
 		path: "/pentest",
 		title: "Pentest",
-		icon: "🛡",
 		intro: "Checklist y resumen de exposición. Sin acceso a datos sensibles de administración.",
 		checklist: [
 			"Autenticación: login, logout, MFA y recuperación.",
@@ -3751,7 +3750,6 @@ const TOOL_CONFIG = {
 	qa: {
 		path: "/qa",
 		title: "QA / bugs",
-		icon: "🧪",
 		intro: "Casos de prueba y entorno para reproducir fallos con pasos claros.",
 		checklist: [
 			"Login, logout y cambio de contraseña.",
@@ -3905,7 +3903,7 @@ export function specialistWorkspacePage({
 	const body = `
 ${toolTabs(tool, user)}
 <div class="card">
-  <h1>${config.icon} ${esc(config.title)}</h1>
+  <h1>${esc(config.title)}</h1>
   <p class="muted">${esc(config.intro)}</p>
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
   ${error ? `<p class="msg error">${esc(error)}</p>` : ""}

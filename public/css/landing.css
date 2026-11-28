@@ -1328,3 +1328,15 @@ body.landing-body {
 		display: none;
 	}
 }
+
+.toolbar .home svg {
+	width: 18px;
+	height: 18px;
+	display: block;
+}
+
+.panic-button svg {
+	width: 14px;
+	height: 14px;
+	display: block;
+}

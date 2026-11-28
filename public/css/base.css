@@ -2885,3 +2885,10 @@ dialog button.primary {
 .role-scale li.role-moderator strong { color: var(--role-moderator-ink); }
 .role-scale li.role-admin strong { color: var(--role-admin-ink); }
 .role-scale li.role-creator strong { color: var(--role-creator-ink); }
+
+.error-orbit svg {
+	width: 34px;
+	height: 34px;
+	stroke-width: 1.25;
+	color: var(--muted);
+}
