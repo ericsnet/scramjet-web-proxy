@@ -1784,22 +1784,6 @@ html.sidebar-collapsed .app-nav-icon svg {
 .overview-hero h1 {
 	font-size: clamp(28px, 3vw, 32px);
 }
-
-/* El pánico no tapa la navegación lateral. */
-.app-body .panic-button-form {
-	left: calc(var(--sidebar-w) + 16px);
-}
-
-html.sidebar-collapsed .app-body .panic-button-form {
-	left: 100px;
-}
-
-@media (max-width: 980px) {
-	.app-body .panic-button-form {
-		left: 12px;
-	}
-}
-
 /* El pánico vive al final del sidebar, sin tapar contenido. */
 .app-sidebar {
 	display: flex;
@@ -1816,21 +1800,6 @@ html.sidebar-collapsed .app-body .panic-button-form {
 	width: 100%;
 	justify-content: center;
 }
-
-.topbar-panic-form {
-	display: inline-flex;
-}
-
-.topbar-panic:hover {
-	border-color: color-mix(in srgb, var(--danger) 40%, transparent);
-	background: var(--danger-soft);
-	color: var(--danger);
-}
-
-body.layout-chat .topbar-panic-form {
-	display: none;
-}
-
 .auth-shell .card {
 	border-color: var(--border);
 	background: var(--surface);

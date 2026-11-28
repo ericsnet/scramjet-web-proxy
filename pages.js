@@ -177,6 +177,7 @@ ${topbar ? appSidebar(user) : ""}
 </div>
 </div>`}
 ${topbar ? '<button type="button" class="nav-backdrop" id="nav-backdrop" aria-label="Cerrar menú" tabindex="-1"></button>' : ""}
+${topbar ? '<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">Pánico</button></form>' : ""}
 ${topbar && chatFab ? `<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="${asset("chat-notify.js")}" defer></script>` : ""}
 <script>
 (() => {
@@ -356,11 +357,6 @@ function topbar(user) {
       ${avatar}
       <span class="who"><strong>${esc(user?.username || "")}</strong><small>${esc(roleText)}</small></span>
     </a>
-    <form method="post" action="/api/panic" class="inline-form topbar-panic-form">
-      <button class="icon-btn topbar-panic" type="submit" title="Pánico: ir a Classroom durante 5 minutos" aria-label="Pánico">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v5M12 18h.01"/></svg>
-      </button>
-    </form>
     <form method="post" action="/logout" class="inline-form">
       <button class="icon-btn" type="submit" title="Cerrar sesión" aria-label="Cerrar sesión">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
