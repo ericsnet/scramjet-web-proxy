@@ -46,6 +46,7 @@ import {
 	isWithinSchedule,
 	setUserLanguage,
 	setUserTheme,
+	isSecureRequest,
 	addUnblockOverride,
 	recordLoginSuccess,
 	listUserChatMeta,
@@ -342,6 +343,17 @@ app.set("trust proxy", "loopback");
 app.disable("x-powered-by");
 app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 app.use(express.json({ limit: "64kb" }));
+
+app.use((req, res, next) => {
+	res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+	res.setHeader("X-Content-Type-Options", "nosniff");
+	res.setHeader("X-Frame-Options", "DENY");
+	res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+	res.setHeader("Permissions-Policy", "geolocation=(), microphone=(self), camera=()");
+	res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+	res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+	next();
+});
 app.use((req, res, next) => {
 	const host = hostName(req);
 	if (
@@ -1135,13 +1147,13 @@ function hashMfaToken(token) {
 }
 
 function mfaCookie(req, token, maxAge = MFA_PENDING_MS / 1000) {
-	const secure = !!req.secure;
+	const secure = isSecureRequest(req);
 	const name = secure ? MFA_COOKIE : LEGACY_MFA_COOKIE;
 	return `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
 }
 
 function clearMfaCookie(req) {
-	const secure = !!req.secure;
+	const secure = isSecureRequest(req);
 	const suffix = secure ? "; Secure" : "";
 	return [
 		`${MFA_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${suffix}`,
@@ -1174,6 +1186,10 @@ function readMfaPending(req) {
 	const entry = mfaPending.get(key);
 	if (!entry) return null;
 	if (entry.expires <= Date.now()) {
+		mfaPending.delete(key);
+		return null;
+	}
+	if (entry.ip !== clientIp(req) || entry.userAgent !== clientUa(req)) {
 		mfaPending.delete(key);
 		return null;
 	}
@@ -1652,7 +1668,7 @@ function ensureCsrf(req, res) {
 	let token = cookieValue(req, HOST_CSRF_COOKIE) || cookieValue(req, CSRF_COOKIE);
 	if (!/^[a-f0-9]{48}$/.test(token)) {
 		token = crypto.randomBytes(24).toString("hex");
-		const secure = !!req.secure;
+		const secure = isSecureRequest(req);
 		const name = secure ? HOST_CSRF_COOKIE : CSRF_COOKIE;
 		const cookie = `${name}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${secure ? "; Secure" : ""}`;
 		try {
@@ -1948,11 +1964,12 @@ app.post("/api/login", sameOrigin, async (req, res) => {
 	const settings = getSettings();
 	const ip = clientIp(req);
 
-	if (isIpRateLimited(ip) || isAccountIpRateLimited(ip, username)) {
+	const accountLocked = isRateLimited(username);
+	if (isIpRateLimited(ip) || isAccountIpRateLimited(ip, username) || accountLocked) {
 		metric("logins_failed_total");
 		addAudit({
 			actor: username || "desconocido",
-			action: "login.rate",
+			action: accountLocked ? "login.lockout" : "login.rate",
 			ip,
 			userAgent: clientUa(req),
 		});
@@ -3394,7 +3411,7 @@ app.get("/api/chat/files/:id", (req, res) => {
 	res.type(attachment.type || "application/octet-stream");
 	res.set(
 		"Content-Disposition",
-		`inline; filename*=UTF-8''${encodeURIComponent(attachment.name || "archivo")}`,
+		`${attachment.type === "application/pdf" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(attachment.name || "archivo")}`,
 	);
 	res.sendFile(file.path);
 });
@@ -3914,7 +3931,7 @@ app.post("/api/account/theme", sameOrigin, (req, res) => {
 	setUserTheme(req.user.username, theme);
 	res.setHeader(
 		"Set-Cookie",
-		`pw_theme=${theme}; Path=/; SameSite=Lax; Max-Age=31536000${req.secure ? "; Secure" : ""}`,
+		`pw_theme=${theme}; Path=/; SameSite=Lax; Max-Age=31536000${isSecureRequest(req) ? "; Secure" : ""}`,
 	);
 	res.set("Cache-Control", "no-store").status(204).end();
 });
@@ -3925,7 +3942,7 @@ app.post("/api/account/language", sameOrigin, (req, res) => {
 	const value = ["es", "en", "ca"].includes(lang) ? lang : "es";
 	res.setHeader(
 		"Set-Cookie",
-		`pw_lang=${value}; Path=/; SameSite=Lax; Max-Age=31536000${req.secure ? "; Secure" : ""}`,
+		`pw_lang=${value}; Path=/; SameSite=Lax; Max-Age=31536000${isSecureRequest(req) ? "; Secure" : ""}`,
 	);
 	res.redirect(303, safeNext(req.body.next || "/account"));
 });
@@ -3994,7 +4011,7 @@ app.post("/api/account/password", sameOrigin, async (req, res) => {
 	if (!validatePassword(password)) return res.redirect(303, "/account?error=short");
 	if (password === current) return res.redirect(303, "/account?error=same");
 
-	setPassword(req.user.username, password);
+	setPassword(req.user.username, password, req.user.role);
 	setMustChangePassword(req.user.username, false);
 	audit(req, "user.password_self");
 	const revoked = destroyOtherSessions(req.user.username, req.user.token);
@@ -4190,7 +4207,7 @@ app.get("/admin", requireStaff, (req, res) => {
 			user: req.user,
 			users,
 			counts,
-			canManage: isAdminRole(req.user.role),
+			canManage: req.user.role === "creator",
 			blockTemplates: listTemplates("block"),
 			groups: listGroups(),
 			error,
@@ -4855,16 +4872,38 @@ app.get("/admin/settings", requireAdmin, (req, res) => {
 
 app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 	const arr = (value) => (Array.isArray(value) ? value : value ? [value] : []);
+	const has = (name) => Object.prototype.hasOwnProperty.call(req.body, name);
+	const flag = (name) => (has(name) ? req.body[name] === "on" : undefined);
 	const labels = arr(req.body.linkLabel);
 	const urls = arr(req.body.linkUrl);
 	const icons = arr(req.body.linkIcon);
-	const quickLinks = labels
-		.map((label, i) => ({
-			label,
-			url: urls[i] || "",
-			icon: icons[i] || "",
-		}))
-		.filter((link) => String(link.label).trim() || String(link.url).trim());
+	const quickLinks =
+		has("linkLabel") || has("linkUrl") || has("linkIcon")
+			? labels
+					.map((label, i) => ({
+						label,
+						url: urls[i] || "",
+						icon: icons[i] || "",
+					}))
+					.filter((link) => String(link.label).trim() || String(link.url).trim())
+			: undefined;
+	const categories = has("categories")
+		? Array.isArray(req.body.categories)
+			? req.body.categories
+			: req.body.categories
+				? [req.body.categories]
+				: []
+		: undefined;
+	const categoryMessages =
+		has("categoryMessageAdult") ||
+		has("categoryMessageGambling") ||
+		has("categoryMessageSocial")
+			? {
+					adult: req.body.categoryMessageAdult,
+					gambling: req.body.categoryMessageGambling,
+					social: req.body.categoryMessageSocial,
+				}
+			: undefined;
 
 	const wasMaintenance = getSettings().maintenanceMode;
 	const wasQuarantine = getSettings().quarantineMode;
@@ -4881,12 +4920,12 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		maxLoginAttempts: req.body.maxLoginAttempts,
 		loginAttemptsPerMinute: req.body.loginAttemptsPerMinute,
 		lockoutMinutes: req.body.lockoutMinutes,
-		activityEnabled: req.body.activityEnabled === "on",
+		activityEnabled: flag("activityEnabled"),
 		activityPerUser: req.body.activityPerUser,
 		activityTotal: req.body.activityTotal,
-		chatEnabled: req.body.chatEnabled === "on",
-		chatShowOnline: req.body.chatShowOnline === "on",
-		chatAllowUserDelete: req.body.chatAllowUserDelete === "on",
+		chatEnabled: flag("chatEnabled"),
+		chatShowOnline: flag("chatShowOnline"),
+		chatAllowUserDelete: flag("chatAllowUserDelete"),
 		chatTitle: req.body.chatTitle,
 		chatWelcome: req.body.chatWelcome,
 		chatMaxLength: req.body.chatMaxLength,
@@ -4897,43 +4936,35 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		chatUploadMaxPerMinute: req.body.chatUploadMaxPerMinute,
 		chatUploadMaxTotalMB: req.body.chatUploadMaxTotalMB,
 		chatUploadMaxPerUserMB: req.body.chatUploadMaxPerUserMB,
-		maintenanceMode: req.body.maintenanceMode === "on",
+		maintenanceMode: flag("maintenanceMode"),
 		maintenanceMessage: req.body.maintenanceMessage,
-		quarantineMode: req.body.quarantineMode === "on",
+		quarantineMode: flag("quarantineMode"),
 		quarantineMessage: req.body.quarantineMessage,
 		defaultSearchEngine: req.body.defaultSearchEngine,
 		landingTitle: req.body.landingTitle,
 		landingSubtitle: req.body.landingSubtitle,
 		quickLinks,
-		allowUserPasswordChange: req.body.allowUserPasswordChange === "on",
+		allowUserPasswordChange: flag("allowUserPasswordChange"),
 		blockedSites: req.body.blockedSites,
 		allowedSites: req.body.allowedSites,
 		accessMode: req.body.accessMode,
-		categories: req.body.categories
-			? Array.isArray(req.body.categories)
-				? req.body.categories
-				: [req.body.categories]
-			: [],
+		categories,
 		defaultBlockMessage: req.body.defaultBlockMessage,
 		allowlistMessage: req.body.allowlistMessage,
-		categoryMessages: {
-			adult: req.body.categoryMessageAdult,
-			gambling: req.body.categoryMessageGambling,
-			social: req.body.categoryMessageSocial,
-		},
+		categoryMessages,
 		language: req.body.language,
 		timezone: req.body.timezone,
-		backupEnabled: req.body.backupEnabled === "on",
+		backupEnabled: flag("backupEnabled"),
 		backupRetentionDays: req.body.backupRetentionDays,
 		metricsToken: req.body.metricsToken,
-		allowUserHistoryClear: req.body.allowUserHistoryClear === "on",
+		allowUserHistoryClear: flag("allowUserHistoryClear"),
 		proxyBandwidthPerUserKbps: req.body.proxyBandwidthPerUserKbps,
 		proxyMaxStreamsPerUser: req.body.proxyMaxStreamsPerUser,
 		proxyMaxConnectionsPerUser: req.body.proxyMaxConnectionsPerUser,
 		proxyWispBufferMB: req.body.proxyWispBufferMB,
-		blockAds: req.body.blockAds === "on",
-		proxyAllowStaffBrowsing: req.body.proxyAllowStaffBrowsing === "on",
-		requireMfaForStaff: req.body.requireMfaForStaff === "on",
+		blockAds: flag("blockAds"),
+		proxyAllowStaffBrowsing: flag("proxyAllowStaffBrowsing"),
+		requireMfaForStaff: flag("requireMfaForStaff"),
 		revision: req.body.revision,
 	};
 	const result = saveSettings(payload);
@@ -5051,7 +5082,7 @@ app.get("/admin/audit.csv", requireAdmin, (req, res) => {
 	res.send(auditToCsv(filters));
 });
 
-app.post("/api/admin/audit/clear", requireAdmin, sameOrigin, (req, res) => {
+app.post("/api/admin/audit/clear", requireCreator, sameOrigin, (req, res) => {
 	clearAudit();
 	audit(req, "audit.clear");
 	res.redirect(303, "/admin/audit?ok=cleared");
@@ -5249,7 +5280,7 @@ app.post("/api/admin/users/:username/password", requireAdmin, sameOrigin, (req, 
 	const target = req.params.username;
 	const targetUser = getUser(target);
 	if (!targetUser) return res.redirect(303, "/admin?error=notfound");
-	const result = setPassword(target, String(req.body.password || ""));
+	const result = setPassword(target, String(req.body.password || ""), req.user.role);
 	if (result.error) return res.redirect(303, `/admin?error=${result.error}`);
 	audit(req, "user.password", targetUser.username);
 	if (targetUser.username.toLowerCase() === req.user.username.toLowerCase()) {

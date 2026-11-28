@@ -3053,6 +3053,7 @@ ${adminTabs("settings")}
 
   <div class="section settings-block" id="settings-security" data-settings-search="seguridad sesiones login contraseña inactividad bloqueo zona horaria intentos">
     <h3>Seguridad y sesiones</h3>
+    ${settings.requireMfaForStaff ? "" : '<p class="warn">Recomendado: exige MFA al personal antes de dar acceso al panel.</p>'}
     <div class="field-grid">
       <div>
         <label for="sessionHours">Duración de sesión (horas)</label>
@@ -3071,7 +3072,7 @@ ${adminTabs("settings")}
         <input id="loginAttemptsPerMinute" name="loginAttemptsPerMinute" type="number" min="5" max="100" value="${settings.loginAttemptsPerMinute || 20}" required>
       </div>
       <div>
-        <label for="maxLoginAttempts">Intentos fallidos por usuario (referencia)</label>
+        <label for="maxLoginAttempts">Intentos fallidos por usuario antes del bloqueo</label>
         <input id="maxLoginAttempts" name="maxLoginAttempts" type="number" min="3" max="20" value="${settings.maxLoginAttempts}" required>
       </div>
       <div>
@@ -3378,6 +3379,7 @@ export function auditPage({
 	actions = [],
 	filters = {},
 	canManage = false,
+	canClear = false,
 	integrity = { ok: true, count: 0 },
 	notice = "",
 } = {}) {
@@ -3431,7 +3433,7 @@ ${adminTabs("audit", user.role)}
     <a href="/admin/audit">Quitar filtros</a>
     ${canManage ? `<a class="small" href="/admin/audit.csv${csvQuery}" style="margin-left:auto">Exportar CSV</a>` : ""}
   </form>
-  ${canManage ? `<form method="post" action="/api/admin/audit/clear" class="filter" onsubmit="return confirm('¿Vaciar toda la auditoría?')">
+  ${canClear ? `<form method="post" action="/api/admin/audit/clear" class="filter" onsubmit="return confirm('¿Vaciar toda la auditoría?')">
     <button class="small danger" type="submit">Vaciar auditoría</button>
   </form>` : ""}
   ${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
@@ -3965,6 +3967,7 @@ export function vaultPage({ user } = {}) {
     <div>
       <h1>Bóveda de contraseñas</h1>
       <p class="muted">Cifrada en tu navegador con AES-GCM. La contraseña maestra no se envía al servidor y no se guarda.</p>
+  <p class="warn">Por seguridad, la bóveda no autocompleta dentro del contenido proxificado. Abre la bóveda y copia las credenciales manualmente.</p>
     </div>
     <span class="vault-badge">Privada</span>
   </div>

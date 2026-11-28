@@ -488,31 +488,9 @@
 	}
 
 	function setupFrame() {
-		let doc;
-		try {
-			doc = frame.contentDocument;
-		} catch {
-			return;
-		}
-		if (!doc) return;
-		currentDoc = doc;
-		if (observedDocs.has(doc)) return;
-		observedDocs.add(doc);
-		doc.addEventListener("focusin", (event) => {
-			const target = event.target;
-			if (target instanceof doc.defaultView.HTMLInputElement && target.type === "password") {
-				showBubble(target);
-			}
-		}, true);
-		doc.addEventListener("submit", (event) => {
-			captureForm(event.target);
-		}, true);
-		doc.addEventListener("click", (event) => {
-			const button = event.target.closest?.('button, input[type="submit"]');
-			if (!button) return;
-			const form = button.form || button.closest("form");
-			if (form) setTimeout(() => captureForm(form), 80);
-		}, true);
+		// El contenido proxificado comparte origen con el panel. Por seguridad no
+		// se autocompleta ni se capturan credenciales dentro del iframe; la bóveda
+		// queda disponible solo desde el botón y /vault para copiar a mano.
 	}
 
 	frame.addEventListener("load", () => {

@@ -140,6 +140,10 @@ npm start
 # escucha en http://127.0.0.1:3030
 ```
 
+Las cookies de sesión se emiten como `Secure` y `__Host-` por defecto. Para probar
+en HTTP local sin TLS, arranca con `COOKIE_SECURE=0 npm start`; en producción no
+definas esa variable.
+
 Para desarrollo en local, `http://localhost:3030` es un origen seguro y los
 service workers funcionan. Para acceso por IP o dominio hace falta HTTPS.
 

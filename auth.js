@@ -16,6 +16,9 @@ const ATTEMPTS_FILE = path.join(DATA_DIR, "login-attempts.json");
 const ABSOLUTE_SESSION_MS = 7 * 24 * 60 * 60 * 1000; // 7 días como máximo
 
 export const SESSION_COOKIE = "__Host-pw_session";
+export function isSecureRequest(req) {
+	return process.env.COOKIE_SECURE !== "0" || !!req?.secure;
+}
 const LEGACY_SESSION_COOKIE = "pw_session";
 const HEARTBEAT_PATH =
 	/^\/(?:api\/(?:chat\/(?:notifications|messages|channels|unread|read|typing)|me|lang|config|admin\/(?:monitor|traffic)))$/;
@@ -397,9 +400,10 @@ export function deleteUser(username) {
 	return { ok: true };
 }
 
-export function setPassword(username, password) {
+export function setPassword(username, password, actorRole = "") {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
+	if (user.role === "creator" && String(actorRole) !== "creator") return { error: "protected" };
 	if (!validatePassword(password)) return { error: "invalid-password" };
 	db.users[user.username].password = hashPassword(password);
 	save();
@@ -1029,7 +1033,7 @@ export function getSession(req) {
 }
 
 export function sessionCookie(req, token, expires) {
-	const secure = !!req.secure;
+	const secure = isSecureRequest(req);
 	const settings = getSettings();
 	const maxAge = Math.max(
 		0,
@@ -1040,7 +1044,7 @@ export function sessionCookie(req, token, expires) {
 }
 
 export function clearSessionCookie(req) {
-	const secure = !!req.secure;
+	const secure = isSecureRequest(req);
 	const suffix = secure ? "; Secure" : "";
 	return [
 		`${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${suffix}`,

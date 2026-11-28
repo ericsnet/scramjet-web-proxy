@@ -16,7 +16,7 @@ export const DEFAULTS = Object.freeze({
 	maxLoginAttempts: 8,
 	loginAttemptsPerMinute: 60,
 	lockoutMinutes: 10,
-	requireMfaForStaff: false,
+	requireMfaForStaff: true,
 	chatEnabled: true,
 	chatTitle: "Chat de usuarios",
 	chatWelcome: "Escribe un mensaje. Sé respetuoso.",

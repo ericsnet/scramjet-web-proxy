@@ -12,7 +12,7 @@
 	function store(theme) {
 		root.dataset.theme = theme;
 		try {
-			document.cookie = `pw_theme=${theme}; Path=/; SameSite=Lax; Max-Age=31536000`;
+			document.cookie = `pw_theme=${theme}; Path=/; SameSite=Lax; Max-Age=31536000${location.protocol === "https:" ? "; Secure" : ""}`;
 			localStorage.setItem("pw-theme", theme);
 		} catch {}
 		for (const button of buttons()) {
