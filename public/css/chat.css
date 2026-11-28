@@ -3844,3 +3844,11 @@ body.chat-body .chat-meta .badge + .badge::before {
 	margin-right: 5px;
 	color: var(--chat-muted);
 }
+
+body.chat-body .chat-app .badge.role-user { color: var(--role-user-ink); }
+body.chat-body .chat-app .badge.role-designer { color: var(--role-designer-ink); }
+body.chat-body .chat-app .badge.role-pentester { color: var(--role-pentester-ink); }
+body.chat-body .chat-app .badge.role-qa { color: var(--role-qa-ink); }
+body.chat-body .chat-app .badge.role-moderator { color: var(--role-moderator-ink); }
+body.chat-body .chat-app .badge.role-admin { color: var(--role-admin-ink); }
+body.chat-body .chat-app .badge.role-creator { color: var(--role-creator-ink); }

@@ -686,10 +686,16 @@
 		wrap.appendChild(menu);
 		return wrap;
 	}
-	function makeUserAvatar(name, icon, className) {
+	function makeUserAvatar(name, icon, className, role = "user") {
 		const avatar = document.createElement("span");
 		avatar.className = className;
-		avatar.style.background = avatarColor(name);
+		const roleKey = ["user", "designer", "pentester", "qa", "moderator", "admin", "creator"].includes(
+			String(role || ""),
+		)
+			? String(role)
+			: "user";
+		avatar.dataset.role = roleKey;
+		avatar.style.background = `var(--role-${roleKey})`;
 		if (icon?.url) {
 			const image = document.createElement("img");
 			image.src = icon.url;
@@ -752,6 +758,7 @@
 					message.displayName || message.username,
 					message.icon,
 					"chat-msg-avatar",
+					message.role,
 				),
 			);
 		} else if (!own) {

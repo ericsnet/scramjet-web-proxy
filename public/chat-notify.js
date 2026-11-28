@@ -95,14 +95,20 @@
 		return `hsl(${hash} 42% 34%)`;
 	}
 
-	function showToast({ title, text, href = "/chat", tone = "", icon = "", name = "" }) {
+	function showToast({ title, text, href = "/chat", tone = "", icon = "", name = "", role = "user" }) {
 		const box = ensureStack();
 		const toast = document.createElement("div");
 		toast.className = `chat-toast${tone ? ` ${tone}` : ""}`;
 
 		const avatar = document.createElement("span");
 		avatar.className = "chat-toast-avatar";
-		avatar.style.background = avatarColor(name || title);
+		const roleKey = ["user", "designer", "pentester", "qa", "moderator", "admin", "creator"].includes(
+			String(role || ""),
+		)
+			? String(role)
+			: "user";
+		avatar.dataset.role = roleKey;
+		avatar.style.background = `var(--role-${roleKey})`;
 		if (icon) {
 			const image = document.createElement("img");
 			image.src = icon;
@@ -183,6 +189,7 @@
 				tone: mentioned ? "mention" : "",
 				icon: message.icon?.url || "",
 				name: displayName,
+				role: message.role || "user",
 				href: `/chat?channel=${encodeURIComponent(message.channelId || "general")}`,
 			});
 		}

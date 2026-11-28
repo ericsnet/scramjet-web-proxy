@@ -92,9 +92,9 @@ body.landing-body {
 	overflow: hidden;
 	border-radius: 7px;
 	background: var(--gradient);
-	color: #fff;
-	font-size: 10px;
-	font-weight: 700;
+	color: var(--on-accent);
+	font-size: 11px;
+	font-weight: 600;
 }
 
 .session-bar .avatar img {
@@ -157,9 +157,7 @@ body.landing-body {
 	height: 420px;
 	transform: translateX(-50%);
 	border-radius: 50%;
-	background: radial-gradient(circle, rgba(99, 102, 241, 0.18), transparent 66%);
-	pointer-events: none;
-	z-index: -1;
+	display: none;
 }
 
 .brand-mark {
@@ -171,7 +169,7 @@ body.landing-body {
 	border: 1px solid var(--accent-line);
 	border-radius: 19px;
 	background: var(--surface-2);
-	box-shadow: var(--glow), var(--shadow-md);
+	box-shadow: var(--shadow-md);
 }
 
 .brand-mark svg {
@@ -189,10 +187,7 @@ body.landing-body {
 }
 
 .hero h1 span {
-	background: var(--gradient);
-	-webkit-background-clip: text;
-	background-clip: text;
-	color: transparent;
+	color: var(--accent);
 }
 
 .subtitle {
@@ -214,14 +209,14 @@ body.landing-body {
 	padding: 7px;
 	border: 1px solid var(--border-strong);
 	border-radius: var(--r-lg);
-	background: linear-gradient(180deg, var(--surface-2), var(--bg-2));
-	box-shadow: var(--shadow-md), 0 24px 60px -28px rgba(99, 102, 241, 0.5);
+	background: var(--surface);
+	box-shadow: var(--shadow-md);
 	transition: border-color var(--ease), box-shadow var(--ease);
 }
 
 .search:focus-within {
 	border-color: var(--accent-strong);
-	box-shadow: var(--ring), var(--shadow-md), 0 26px 64px -26px rgba(99, 102, 241, 0.62);
+	box-shadow: var(--ring), var(--shadow-md);
 }
 
 .search-icon {
@@ -255,7 +250,7 @@ body.landing-body {
 }
 
 .search input::placeholder {
-	color: var(--dim);
+	color: var(--muted);
 }
 
 .search button {
@@ -265,13 +260,13 @@ body.landing-body {
 	padding: 0 22px;
 	border: 1px solid color-mix(in srgb, var(--accent-strong) 50%, transparent);
 	border-radius: var(--r-sm);
-	background: var(--gradient);
-	color: #fff;
+	background: var(--accent);
+	color: var(--on-accent);
 	font-family: inherit;
 	font-size: 13.5px;
-	font-weight: 650;
+	font-weight: 500;
 	cursor: pointer;
-	box-shadow: var(--glow);
+	box-shadow: none;
 }
 
 .search button:hover {
@@ -360,7 +355,7 @@ body.landing-body {
 	margin-top: 3px;
 	overflow: hidden;
 	color: var(--muted);
-	font-size: 10.5px;
+	font-size: 11px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -374,8 +369,7 @@ body.landing-body {
 	padding: 18px;
 	border: 1px solid var(--border);
 	border-radius: var(--r-md);
-	background: color-mix(in srgb, var(--surface) 62%, transparent);
-	backdrop-filter: blur(8px);
+	background: var(--surface);
 }
 
 .recent-wrap[hidden],
@@ -395,10 +389,10 @@ body.landing-body {
 .favorites-title {
 	margin: 0;
 	color: var(--muted);
-	font-size: 10.5px;
-	font-weight: 650;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
 }
 
 .recent-head a {
@@ -789,9 +783,9 @@ body.landing-body {
 
 .dialog-actions .primary {
 	border-color: color-mix(in srgb, var(--accent-strong) 50%, transparent);
-	background: var(--gradient);
-	color: #fff;
-	box-shadow: var(--glow);
+	background: var(--accent);
+	color: var(--on-accent);
+	box-shadow: none;
 }
 
 .dialog-actions .primary:hover {

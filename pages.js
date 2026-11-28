@@ -76,6 +76,34 @@ const ICON = {
 	plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
 };
 
+const NAV_ICON = {
+	home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg>`,
+	chat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg>`,
+	star: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8L6.6 19.6l1-6L3.3 9.4l6-.9Z"/></svg>`,
+	clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+	lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`,
+	user: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`,
+	mail: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`,
+	grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+	users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+	monitor: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>`,
+	shield: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v6c0 4.6 3.2 7.6 7.5 9 4.3-1.4 7.5-4.4 7.5-9V6Z"/></svg>`,
+	activity: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>`,
+	eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>`,
+	list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>`,
+	file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v5h5"/></svg>`,
+	inbox: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4Z"/><path d="M4 14h4l2 2h4l2-2h4"/></svg>`,
+	flag: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2 5 2 5H5"/></svg>`,
+	chart: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-5M13 16V7M18 16v-8"/></svg>`,
+	settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg>`,
+	cpu: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>`,
+	terminal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 7 5 5-5 5"/><path d="M12 19h8"/></svg>`,
+	layers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg>`,
+	calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>`,
+	pen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+	check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12 5 5L20 6"/></svg>`,
+};
+
 
 function avatarColor(name) {
 	let hash = 0;
@@ -83,12 +111,20 @@ function avatarColor(name) {
 	return `hsl(${hash} 42% 32%)`;
 }
 
-function userAvatar(name, icon, className = "user-avatar") {
+function userAvatar(name, icon, className = "user-avatar", role = "user") {
 	const initial = esc(String(name || "?").slice(0, 1).toUpperCase());
+	const requested = Array.isArray(role)
+		? role.find((value) => value && value !== "user") || "user"
+		: role;
+	const roleKey = ["user", "designer", "pentester", "qa", "moderator", "admin", "creator"].includes(
+		String(requested || ""),
+	)
+		? String(requested)
+		: "user";
 	const image = icon?.url
 		? `<img src="${esc(icon.url)}" alt="" loading="lazy">`
 		: initial;
-	return `<span class="${esc(className)}" style="background:${avatarColor(name)}">${image}</span>`;
+	return `<span class="${esc(className)}" data-role="${roleKey}" style="background:var(--role-${roleKey})">${image}</span>`;
 }
 
 function profileLink(name, className = "profile-link", label = name) {
@@ -116,10 +152,10 @@ function shell(title, body, { topbar = "", chatFab = true, wide = false, full = 
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#070b12">
-<title>${esc(title || "Proxy Web")}</title>
+<title>Inici - Classroom</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 ${THEME_HEAD}
-<link rel="preload" href="/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-sans-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${asset("css/tokens.css")}">
 <link rel="stylesheet" href="${asset("css/base.css")}">
 <link rel="stylesheet" href="${asset("css/app.css")}">
@@ -141,7 +177,6 @@ ${topbar ? appSidebar(user) : ""}
 </div>
 </div>`}
 ${topbar ? '<button type="button" class="nav-backdrop" id="nav-backdrop" aria-label="Cerrar menú" tabindex="-1"></button>' : ""}
-${topbar ? `<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">⚠ Pánico</button></form>` : ""}
 ${topbar && chatFab ? `<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="${asset("chat-notify.js")}" defer></script>` : ""}
 <script>
 (() => {
@@ -225,53 +260,53 @@ function appSidebar(user) {
 	const isCreator = roles.includes("creator");
 	const alertCount = isAdmin ? countOpenAlerts() : 0;
 	const principal = [
-		navLink("/", "Inicio", "◉"),
-		navLink("/chat", "Chat", "◌"),
-		navLink("/bookmarks", "Favoritos", "★"),
-		navLink("/history", "Historial", "◷"),
-		navLink("/vault", "Bóveda", "🔒"),
-		navLink("/account", "Mi cuenta", "◍"),
+		navLink("/", "Inicio", NAV_ICON.home),
+		navLink("/chat", "Chat", NAV_ICON.chat),
+		navLink("/bookmarks", "Favoritos", NAV_ICON.star),
+		navLink("/history", "Historial", NAV_ICON.clock),
+		navLink("/vault", "Bóveda", NAV_ICON.lock),
+		navLink("/account", "Mi cuenta", NAV_ICON.user),
 	];
-	if (canCreateInvites(user)) principal.push(navLink("/invites", "Invitaciones", "✉"));
+	if (canCreateInvites(user)) principal.push(navLink("/invites", "Invitaciones", NAV_ICON.mail));
 	const admin = [];
 	if (isAdmin) {
-		admin.push(navLink("/admin/overview", "Resumen", "▤"));
+		admin.push(navLink("/admin/overview", "Resumen", NAV_ICON.grid));
 	}
 	if (isStaff) {
-		admin.push(navLink("/admin", "Usuarios", "◫"));
-		admin.push(navLink("/admin/sessions", "Sesiones", "⧉"));
+		admin.push(navLink("/admin", "Usuarios", NAV_ICON.users));
+		admin.push(navLink("/admin/sessions", "Sesiones", NAV_ICON.monitor));
 	}
 	if (isAdmin) {
-		admin.push(navLink("/admin/security", `Seguridad${alertCount ? ` (${alertCount})` : ""}`, "⚠"));
-		admin.push(navLink("/admin/traffic", "Tráfico", "↯"));
-		admin.push(navLink("/admin/monitor", "Vigilancia", "◉"));
+		admin.push(navLink("/admin/security", `Seguridad${alertCount ? ` (${alertCount})` : ""}`, NAV_ICON.shield));
+		admin.push(navLink("/admin/traffic", "Tráfico", NAV_ICON.activity));
+		admin.push(navLink("/admin/monitor", "Vigilancia", NAV_ICON.eye));
 	}
 	if (isStaff) {
-		admin.push(navLink("/admin/activity", "Actividad", "≡"));
-		admin.push(navLink("/admin/audit", "Auditoría", "▦"));
-		admin.push(navLink("/admin/requests", "Solicitudes", "✎"));
+		admin.push(navLink("/admin/activity", "Actividad", NAV_ICON.list));
+		admin.push(navLink("/admin/audit", "Auditoría", NAV_ICON.file));
+		admin.push(navLink("/admin/requests", "Solicitudes", NAV_ICON.inbox));
 	}
-	if (isAdmin) admin.push(navLink("/admin/reports", "Informes", "⚑"));
-	if (isStaff) admin.push(navLink("/admin/stats", "Estadísticas", "∿"));
+	if (isAdmin) admin.push(navLink("/admin/reports", "Informes", NAV_ICON.flag));
+	if (isStaff) admin.push(navLink("/admin/stats", "Estadísticas", NAV_ICON.chart));
 
 	const system = [];
 	if (isAdmin) {
-		system.push(navLink("/admin/settings", "Ajustes", "⚙"));
-		system.push(navLink("/admin/system", "Sistema", "⌘"));
-		system.push(navLink("/admin/logs", "Logs", "▤"));
-		system.push(navLink("/admin/templates", "Plantillas", "◇"));
-		system.push(navLink("/admin/schedules", "Programaciones", "◷"));
+		system.push(navLink("/admin/settings", "Ajustes", NAV_ICON.settings));
+		system.push(navLink("/admin/system", "Sistema", NAV_ICON.cpu));
+		system.push(navLink("/admin/logs", "Logs", NAV_ICON.terminal));
+		system.push(navLink("/admin/templates", "Plantillas", NAV_ICON.layers));
+		system.push(navLink("/admin/schedules", "Programaciones", NAV_ICON.calendar));
 	}
 
 	const tools = [];
 	if (isCreator) {
-		tools.push(navLink("/design", "Herramientas", "✧"));
+		tools.push(navLink("/design", "Herramientas", NAV_ICON.pen));
 	} else {
-		if (roles.includes("designer")) tools.push(navLink("/design", "Diseño", "✧"));
-		if (roles.includes("pentester")) tools.push(navLink("/pentest", "Pentest", "⌁"));
-		if (roles.includes("qa")) tools.push(navLink("/qa", "QA", "✓"));
+		if (roles.includes("designer")) tools.push(navLink("/design", "Diseño", NAV_ICON.pen));
+		if (roles.includes("pentester")) tools.push(navLink("/pentest", "Pentest", NAV_ICON.terminal));
+		if (roles.includes("qa")) tools.push(navLink("/qa", "QA", NAV_ICON.check));
 		if (roles.some((role) => ["designer", "pentester", "qa"].includes(role))) {
-			tools.push(navLink("/reports", "Mis informes", "⚑"));
+			tools.push(navLink("/reports", "Mis informes", NAV_ICON.flag));
 		}
 	}
 
@@ -295,7 +330,7 @@ function topbar(user) {
 	const roles = Array.isArray(user?.roles) && user.roles.length ? user.roles : [user?.role];
 	const roleNames = roles.map(roleLabel);
 	const roleText = `${roleNames.slice(0, 2).join(" + ")}${roleNames.length > 2 ? ` +${roleNames.length - 2}` : ""}`;
-	const avatar = user ? userAvatar(user.username, user.icon, "topbar-avatar") : "";
+	const avatar = user ? userAvatar(user.username, user.icon, "topbar-avatar", user.role) : "";
 	return `<header class="topbar">
   <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="app-sidebar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -321,6 +356,11 @@ function topbar(user) {
       ${avatar}
       <span class="who"><strong>${esc(user?.username || "")}</strong><small>${esc(roleText)}</small></span>
     </a>
+    <form method="post" action="/api/panic" class="inline-form topbar-panic-form">
+      <button class="icon-btn topbar-panic" type="submit" title="Pánico: ir a Classroom durante 5 minutos" aria-label="Pánico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v5M12 18h.01"/></svg>
+      </button>
+    </form>
     <form method="post" action="/logout" class="inline-form">
       <button class="icon-btn" type="submit" title="Cerrar sesión" aria-label="Cerrar sesión">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
@@ -348,13 +388,13 @@ function roleBadges(roles, fallback = "user") {
 }
 
 const ROLE_META = {
-	user: { icon: "👤", desc: "Navegación, chat y cuenta" },
-	moderator: { icon: "🛡", desc: "Moderación y consulta" },
-	designer: { icon: "🎨", desc: "Interfaz y sistema visual" },
-	pentester: { icon: "🕵", desc: "Seguridad y pentest" },
-	qa: { icon: "🧪", desc: "Pruebas y bugs" },
-	admin: { icon: "⚙", desc: "Gestión completa" },
-	creator: { icon: "👑", desc: "Cuenta propietaria" },
+	user: { icon: "", desc: "Navegación, chat y cuenta" },
+	moderator: { icon: "", desc: "Moderación y consulta" },
+	designer: { icon: "", desc: "Interfaz y sistema visual" },
+	pentester: { icon: "", desc: "Seguridad y pentest" },
+	qa: { icon: "", desc: "Pruebas y bugs" },
+	admin: { icon: "", desc: "Gestión completa" },
+	creator: { icon: "", desc: "Cuenta propietaria" },
 };
 
 function toolTabs(active, user) {
@@ -378,7 +418,7 @@ function roleOption(role, checked = false) {
 	const meta = ROLE_META[role] || { icon: "•", desc: "" };
 	return `<label class="role-option${checked ? " selected" : ""}">
   <input type="checkbox" name="roles" value="${esc(role)}"${checked ? " checked" : ""}>
-  <span class="role-option-icon">${esc(meta.icon)}</span>
+  ${meta.icon ? `<span class="role-option-icon">${esc(meta.icon)}</span>` : ""}
   <span class="role-option-text"><strong>${esc(roleLabel(role))}</strong><small>${esc(meta.desc)}</small></span>
 </label>`;
 }
@@ -856,7 +896,7 @@ ${adminTabs("users", user.role)}
 
 <div class="card" style="margin-bottom:22px" id="rules">
   <div class="section-title-row">
-    <h2>⚙ Reglas del grupo</h2>
+    <h2>Reglas del grupo</h2>
     ${canEditRules ? '<span class="hint">Solo administradores y creador</span>' : ""}
   </div>
   ${
@@ -971,7 +1011,7 @@ export function groupOnboardingPage({
 		.join("");
 	const body = `<div class="card" style="max-width:720px;margin:0 auto">
   <div class="account-head">
-    ${userAvatar(user.username, user.icon, "account-avatar")}
+    ${userAvatar(user.username, user.icon, "account-avatar", user.role)}
     <div>
       <h1>¿Cuál es tu grupo?</h1>
       <p class="muted">Hola, <strong>${esc(user.username)}</strong>. Elige tu clase y curso para que tu profesor pueda organizarte.</p>
@@ -1013,7 +1053,7 @@ export function profilePage({
 	const roleNames = roles.map((role) => roleLabel(role)).join(" · ");
 	const body = `<div class="card profile-card">
   <div class="profile-head">
-    ${userAvatar(target.username, target.icon, "profile-avatar")}
+    ${userAvatar(target.username, target.icon, "profile-avatar", target.role)}
     <div>
       <h1>${esc(target.username)}</h1>
       <p class="profile-subtitle">${isSelf ? "Tu perfil público" : "Perfil de usuario"}</p>
@@ -1082,7 +1122,7 @@ ${
 }
 <div class="card" style="max-width:620px;margin:0 auto">
   <div class="account-head">
-    ${userAvatar(user.username, user.icon, "account-avatar")}
+    ${userAvatar(user.username, user.icon, "account-avatar", user.role)}
     <div>
       <h1>Mi cuenta</h1>
       <p class="muted">
@@ -1149,7 +1189,7 @@ ${
 <div class="card" style="max-width:620px;margin:18px auto 0">
   <h2>Icono de perfil</h2>
   <div class="account-icon-row">
-    ${userAvatar(user.username, user.icon, "account-avatar")}
+    ${userAvatar(user.username, user.icon, "account-avatar", user.role)}
     <div class="account-icon-actions">
       <button type="button" class="small primary-small" id="account-icon-pick">Subir icono</button>
       <input id="account-icon-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
@@ -1464,7 +1504,7 @@ export function chatPage({
 		.join("");
 	const dmResults = dmCandidates
 		.map((entry) => `<button type="button" class="friend-result dm-result" data-dm-user="${esc(entry.username)}" data-dm-name="${esc(entry.username.toLowerCase())}">
-      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar", entry.role)}
       <span class="friend-name">${esc(entry.username)}</span>
       <span class="badge">Privado</span>
     </button>`)
@@ -1473,7 +1513,7 @@ export function chatPage({
 		.map(
 			(entry) => `<label class="chat-member-option" data-member-name="${esc(entry.username.toLowerCase())}">
       <input type="checkbox" name="members" value="${esc(entry.username)}">
-      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar", entry.role)}
       <span>${esc(entry.username)}</span>
     </label>`,
 		)
@@ -1482,21 +1522,21 @@ export function chatPage({
 		.map((entry) => `<form method="post" action="/api/friends/request" class="friend-result" data-friend-name="${esc(entry.username.toLowerCase())}">
       <input type="hidden" name="username" value="${esc(entry.username)}">
       <input type="hidden" name="next" value="${esc(returnTo)}">
-      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar", entry.role)}
       <span class="friend-name">${profileLink(entry.username)}</span>
       <button class="small primary-small" type="submit">Enviar solicitud</button>
     </form>`)
 		.join("");
 	const friendRows = friends
 		.map((entry) => `<div class="friend-row">
-      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar", entry.role)}
       <span class="friend-name">${profileLink(entry.username)}</span>
       <form method="post" action="/api/friends/remove"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small danger" type="submit">Quitar</button></form>
     </div>`)
 		.join("");
 	const incomingRows = incomingEntries
 		.map((entry) => `<div class="friend-row">
-      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar", entry.role)}
       <span class="friend-name">${profileLink(entry.username)}</span>
       <div class="actions">
         <form method="post" action="/api/friends/accept"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small primary-small" type="submit">Aceptar</button></form>
@@ -1506,7 +1546,7 @@ export function chatPage({
 		.join("");
 	const outgoingRows = outgoingEntries
 		.map((entry) => `<div class="friend-row">
-      ${userAvatar(entry.username, entry.icon, "chat-member-avatar")}
+      ${userAvatar(entry.username, entry.icon, "chat-member-avatar", entry.role)}
       <span class="friend-name">${profileLink(entry.username)}</span>
       <span class="badge">pendiente</span>
       <form method="post" action="/api/friends/cancel"><input type="hidden" name="username" value="${esc(entry.username)}"><input type="hidden" name="next" value="${esc(returnTo)}"><button class="small" type="submit">Cancelar</button></form>
@@ -1592,7 +1632,7 @@ export function chatPage({
         ${canDeleteMessage ? `<button type="button" class="chat-tool danger" data-chat-delete="${esc(m.id)}" title="Eliminar" aria-label="Eliminar">${ICON.trash}</button>` : ""}
       </div>`;
 			return `<article class="chat-message${own ? " own" : ""}${grouped ? " grouped" : ""}${m.pinned ? " pinned" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
-  ${own ? "" : grouped ? '<span class="chat-msg-avatar-spacer"></span>' : userAvatar(m.displayName || m.username, m.icon, "chat-msg-avatar")}
+  ${own ? "" : grouped ? '<span class="chat-msg-avatar-spacer"></span>' : userAvatar(m.displayName || m.username, m.icon, "chat-msg-avatar", m.role)}
   <div class="chat-bubble">
     ${replyQuote}
     <div class="chat-meta">
@@ -1641,7 +1681,7 @@ export function chatPage({
 		.map((name) => {
 			const entry = entryFor(name);
 			const online = onlineSet.has(String(name).toLowerCase());
-			return `<div class="chat-member-row">${userAvatar(entry.username, entry.icon, "chat-member-avatar")}<span>${esc(entry.username)}</span><span class="presence-dot${online ? " online" : ""}" title="${online ? "En línea" : "Desconectado"}"></span></div>`;
+			return `<div class="chat-member-row">${userAvatar(entry.username, entry.icon, "chat-member-avatar", entry.role)}<span>${esc(entry.username)}</span><span class="presence-dot${online ? " online" : ""}" title="${online ? "En línea" : "Desconectado"}"></span></div>`;
 		})
 		.join("");
 	const detailPinsHtml = pinned.length
@@ -2050,7 +2090,7 @@ export function adminPage({
 </div>`
 						: "";
 				const summaryMain = `<span class="user-summary-main">
-      ${userAvatar(u.username, u.icon, "user-avatar")}
+      ${userAvatar(u.username, u.icon, "user-avatar", u.role)}
       <strong class="user-name">${profileLink(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
       ${groupBadge(u.group)}
@@ -2181,7 +2221,7 @@ export function adminPage({
 			return `<details class="user admin-user">
   <summary class="user-summary">
     <span class="user-summary-main">
-      ${userAvatar(u.username, u.icon, "user-avatar")}
+      ${userAvatar(u.username, u.icon, "user-avatar", u.role)}
       <strong class="user-name">${profileLink(u.username)}</strong>
       ${roleBadges(u.roles, u.role)}
       ${groupBadge(u.group)}
@@ -2815,19 +2855,19 @@ export function overviewPage({ user, data = {} } = {}) {
 		.join("");
 	const actionCards = actions
 		.map(
-			(action) => `<a class="overview-action${action.danger ? " danger" : ""}" href="${esc(action.href)}"><span class="overview-action-icon">${esc(action.icon || "→")}</span><span><strong>${esc(action.label)}</strong><small>${esc(action.detail || "")}</small></span></a>`,
+			(action) => `<a class="overview-action${action.danger ? " danger" : ""}" href="${esc(action.href)}"><span><strong>${esc(action.label)}</strong><small>${esc(action.detail || "")}</small></span></a>`,
 		)
 		.join("");
 	const controlCards = `
 <form method="post" action="/api/admin/maintenance" class="overview-action-form">
   <input type="hidden" name="enabled" value="${status.maintenance ? "0" : "1"}">
   <input type="hidden" name="next" value="/admin/overview">
-  <button class="overview-action${status.maintenance ? " danger" : ""}" type="submit"><span class="overview-action-icon">🛠</span><span><strong>${status.maintenance ? "Desactivar mantenimiento" : "Activar mantenimiento"}</strong><small>${status.maintenance ? "Los usuarios ya pueden entrar" : "Solo administradores podrán entrar"}</small></span></button>
+  <button class="overview-action${status.maintenance ? " danger" : ""}" type="submit"><span><strong>${status.maintenance ? "Desactivar mantenimiento" : "Activar mantenimiento"}</strong><small>${status.maintenance ? "Los usuarios ya pueden entrar" : "Solo administradores podrán entrar"}</small></span></button>
 </form>
 <form method="post" action="/api/admin/quarantine" class="overview-action-form">
   <input type="hidden" name="enabled" value="${status.quarantine ? "0" : "1"}">
   <input type="hidden" name="next" value="/admin/overview">
-  <button class="overview-action${status.quarantine ? " danger" : ""}" type="submit"><span class="overview-action-icon">🧪</span><span><strong>${status.quarantine ? "Desactivar cuarentena" : "Activar cuarentena"}</strong><small>${status.quarantine ? "Volver a permitir conexiones" : "Cortar conexiones y bloquear webs"}</small></span></button>
+  <button class="overview-action${status.quarantine ? " danger" : ""}" type="submit"><span><strong>${status.quarantine ? "Desactivar cuarentena" : "Activar cuarentena"}</strong><small>${status.quarantine ? "Volver a permitir conexiones" : "Cortar conexiones y bloquear webs"}</small></span></button>
 </form>`;
 	const recentRows = recent
 		.map(
@@ -2879,7 +2919,7 @@ export function monitorPage({ user, snapshot = {} } = {}) {
 			.join("");
 		return `<div class="monitor-user">
   <div class="monitor-user-head">
-    ${userAvatar(entry.username, entry.icon, "user-avatar")}
+    ${userAvatar(entry.username, entry.icon, "user-avatar", entry.role)}
     <div class="monitor-user-title">
       <strong>${profileLink(entry.username)}</strong>
       <span class="badge role-${esc(entry.role)}">${esc(roleLabel(entry.role))}</span>
@@ -2959,21 +2999,21 @@ ${adminTabs("settings")}
   <p class="hint">Se guardan al pulsar “Guardar ajustes” o con <kbd>Ctrl</kbd> + <kbd>S</kbd>. Si otra pestaña ha cambiado los ajustes, se mostrará un aviso en vez de sobrescribirlos.</p>
 
   <div class="settings-toolbar">
-    <label class="settings-search"><span>🔎</span><input id="settings-search" type="search" placeholder="Buscar ajuste: chat, sesiones, bloqueo…" aria-label="Buscar ajuste"></label>
+    <label class="settings-search"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span><input id="settings-search" type="search" placeholder="Buscar ajuste: chat, sesiones, bloqueo…" aria-label="Buscar ajuste"></label>
     <span class="settings-dirty" id="settings-dirty" aria-live="polite">Sin cambios</span>
     <button class="primary" type="submit">Guardar ajustes</button>
   </div>
   <div class="settings-jump">
-    <a href="#settings-security">🛡 Seguridad</a>
-    <a href="#settings-performance">⚡ Rendimiento</a>
-    <a href="#settings-activity">📊 Actividad</a>
+    <a href="#settings-security">Seguridad</a>
+    <a href="#settings-performance">Rendimiento</a>
+    <a href="#settings-activity">Actividad</a>
     <a href="#settings-chat">Chat</a>
-    <a href="#settings-maintenance">🚧 Mantenimiento</a>
-    <a href="#settings-quarantine">🧪 Cuarentena</a>
-    <a href="#settings-sites">🌐 Sitios</a>
-    <a href="#settings-language">🌍 Idioma</a>
-    <a href="#settings-backups">💾 Copias</a>
-    <a href="#settings-landing">🏠 Portada</a>
+    <a href="#settings-maintenance">Mantenimiento</a>
+    <a href="#settings-quarantine">Cuarentena</a>
+    <a href="#settings-sites">Sitios</a>
+    <a href="#settings-language">Idioma</a>
+    <a href="#settings-backups">Copias</a>
+    <a href="#settings-landing">Portada</a>
   </div>
   <div class="settings-status">
     <span class="badge">Sesión: ${esc(settings.sessionHours)} h</span>
@@ -2986,7 +3026,7 @@ ${adminTabs("settings")}
   <p class="empty" id="settings-empty" hidden>No hay ajustes que coincidan con la búsqueda.</p>
 
   <div class="section settings-block" id="settings-security" data-settings-search="seguridad sesiones login contraseña inactividad bloqueo zona horaria intentos">
-    <h3>🛡 Seguridad y sesiones</h3>
+    <h3>Seguridad y sesiones</h3>
     <div class="field-grid">
       <div>
         <label for="sessionHours">Duración de sesión (horas)</label>
@@ -3023,7 +3063,7 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-activity" data-settings-search="actividad historial navegación usuarios límites">
-    <h3>📊 Actividad</h3>
+    <h3>Actividad</h3>
     <label class="check"><input type="checkbox" name="activityEnabled"${settings.activityEnabled ? " checked" : ""}> Registrar actividad de navegación</label>
     <label class="check"><input type="checkbox" name="allowUserHistoryClear"${settings.allowUserHistoryClear ? " checked" : ""}> Permitir que los usuarios vacíen su propio historial</label>
     <div class="field-grid">
@@ -3039,7 +3079,7 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-performance" data-settings-search="rendimiento ancho banda wisp streams conexiones buffer latencia juegos">
-    <h3>⚡ Rendimiento del proxy</h3>
+    <h3>Rendimiento del proxy</h3>
     <div class="field-grid">
       <div>
         <label for="proxyBandwidthPerUserKbps">Ancho de banda por usuario (Kbps, 0 = sin límite)</label>
@@ -3116,14 +3156,14 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-maintenance" data-settings-search="mantenimiento aviso acceso administradores">
-    <h3>🚧 Mantenimiento</h3>
+    <h3>Mantenimiento</h3>
     <label class="check"><input type="checkbox" name="maintenanceMode"${settings.maintenanceMode ? " checked" : ""}> Activar modo mantenimiento (solo administradores)</label>
     <label for="maintenanceMessage">Mensaje para los usuarios</label>
     <textarea id="maintenanceMessage" name="maintenanceMessage" maxlength="300" style="min-height:60px">${esc(settings.maintenanceMessage)}</textarea>
   </div>
 
   <div class="section settings-block" id="settings-quarantine" data-settings-search="cuarentena seguridad bloqueo conexiones">
-    <h3>🧪 Cuarentena</h3>
+    <h3>Cuarentena</h3>
     <label class="check"><input type="checkbox" name="quarantineMode"${settings.quarantineMode ? " checked" : ""}> Activar cuarentena (solo administradores)</label>
     <label for="quarantineMessage">Mensaje para los usuarios</label>
     <textarea id="quarantineMessage" name="quarantineMessage" maxlength="300" style="min-height:60px">${esc(settings.quarantineMessage || "")}</textarea>
@@ -3132,7 +3172,7 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-sites" data-settings-search="sitios dominios permitidos prohibidos lista negra blanca categorías adultos apuestas social">
-    <h3>🌐 Sitios y modo de acceso</h3>
+    <h3>Sitios y modo de acceso</h3>
     <label class="check"><input type="checkbox" name="proxyAllowStaffBrowsing"${settings.proxyAllowStaffBrowsing ? " checked" : ""}> Permitir que administradores y moderadores naveguen por webs de terceros (no recomendado)</label>
     <p class="hint">Por seguridad, las cuentas de gestión no navegan por el proxy. Si lo activas, una web maliciosa podría intentar actuar con los permisos de esa cuenta.</p>
     <label for="accessMode">Modo</label>
@@ -3175,7 +3215,7 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-language" data-settings-search="idioma español inglés catalán language">
-    <h3>🌍 Idioma de la interfaz</h3>
+    <h3>Idioma de la interfaz</h3>
     <label for="language">Idioma por defecto</label>
     <select id="language" name="language">
       <option value="es"${settings.language === "es" ? " selected" : ""}>Español</option>
@@ -3185,7 +3225,7 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-backups" data-settings-search="copias backup métricas token retención">
-    <h3>💾 Copias y métricas</h3>
+    <h3>Copias y métricas</h3>
     <label class="check"><input type="checkbox" name="backupEnabled"${settings.backupEnabled ? " checked" : ""}> Copia automática diaria (sobre las 03:00)</label>
     <div class="field-grid">
       <div>
@@ -3200,7 +3240,7 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-landing" data-settings-search="portada título subtítulo buscador enlaces rápidos favoritos">
-    <h3>🏠 Portada y búsqueda</h3>
+    <h3>Portada y búsqueda</h3>
     <div class="field-grid">
       <div>
         <label for="landingTitle">Título</label>
