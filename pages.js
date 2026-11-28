@@ -199,6 +199,7 @@ ${head}
 <script src="/page-i18n.js" defer></script>
 ${topbar ? '<script src="/session-guard.js" defer></script>' : ""}
 <script src="/global-search.js?v=3" defer></script>
+<script src="${asset("custom-select.js")}" defer></script>
 ${topbar && !full ? '<script src="/vendor/gsap.min.js" defer></script><script src="/admin-motion.js" defer></script>' : ""}
 </head>
 <body class="${bodyClass}">
@@ -3121,7 +3122,7 @@ ${adminTabs("settings")}
     <div class="field-grid">
       <div>
         <label for="proxyBandwidthPerUserKbps">Ancho de banda por usuario (Kbps, 0 = sin límite)</label>
-        <input id="proxyBandwidthPerUserKbps" name="proxyBandwidthPerUserKbps" type="number" min="0" max="100000" step="250" value="${esc(settings.proxyBandwidthPerUserKbps ?? 8000)}" required>
+        <input id="proxyBandwidthPerUserKbps" name="proxyBandwidthPerUserKbps" type="number" min="0" max="100000" step="250" value="${esc(settings.proxyBandwidthPerUserKbps ?? 25000)}" required>
       </div>
       <div>
         <label for="proxyMaxStreamsPerUser">Máximo de streams por usuario</label>
@@ -3133,11 +3134,11 @@ ${adminTabs("settings")}
       </div>
       <div>
         <label for="proxyWispBufferMB">Búfer de descarga por conexión (MB)</label>
-        <input id="proxyWispBufferMB" name="proxyWispBufferMB" type="number" min="1" max="32" value="${esc(settings.proxyWispBufferMB ?? 4)}" required>
+        <input id="proxyWispBufferMB" name="proxyWispBufferMB" type="number" min="1" max="32" value="${esc(settings.proxyWispBufferMB ?? 8)}" required>
       </div>
     </div>
     <label class="check"><input type="checkbox" name="blockAds"${settings.blockAds ? " checked" : ""}> Bloquear anuncios y rastreadores (mejora Poki y webs con mucha publicidad)</label>
-    <p class="hint">El límite de ancho de banda es por usuario y suma subida y bajada; 8000 Kbps ≈ 8 Mbps. Un stream es una conexión de red de la web (imágenes, vídeo, juegos…). Si hay muchos usuarios, baja el ancho de banda o los streams antes que el búfer.</p>
+    <p class="hint">El límite de ancho de banda es por usuario y suma subida y bajada; ${esc(settings.proxyBandwidthPerUserKbps ?? 25000)} Kbps ≈ ${esc(Math.round((settings.proxyBandwidthPerUserKbps ?? 25000) / 1000))} Mbps (0 = sin límite). El vídeo de los CDN conocidos usa un cupo aparte para que las miniaturas no le quiten velocidad al reproductor. Un stream es una conexión de red de la web (imágenes, vídeo, juegos…). Si hay muchos usuarios, baja el ancho de banda o los streams antes que el búfer.</p>
     <p class="hint">Lista real de bloqueo: <b>${esc(adblock.count || 0)}</b> dominios${adblock.updatedAt ? ` · actualizada ${esc(fmtDate(adblock.updatedAt))}` : " · pendiente de descargar"}.</p>
     <form method="post" action="/api/admin/adblock/update" style="margin-top:8px">
       <button class="small" type="submit">Actualizar lista de anuncios</button>

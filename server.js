@@ -403,6 +403,35 @@ const wispUserConnections = new Map();
 const wispUserStreams = new Map();
 const wispBuckets = new Map();
 
+// CDN de vídeo y streaming. Su tráfico usa un cubo de ancho de banda propio
+// para que las miniaturas y los scripts de una página cargada de imágenes
+// (Pornhub, YouTube, TikTok…) no dejen sin velocidad al reproductor.
+const MEDIA_HOSTS = new Set([
+	"phncdn.com", // Pornhub: vídeo (ev/phncdn), miniaturas y estáticos
+	"phprcdn.com",
+	"pornhub.com",
+	"googlevideo.com",
+	"video.twimg.com",
+	"tiktokcdn.com",
+	"tiktokcdn-us.com",
+	"ttvnw.net",
+	"twitch.tv",
+	"vimeocdn.com",
+	"fbcdn.net",
+	"cdninstagram.com",
+]);
+
+function isMediaHost(hostname) {
+	let candidate = String(hostname || "").toLowerCase().replace(/\.$/, "");
+	while (candidate) {
+		if (MEDIA_HOSTS.has(candidate)) return true;
+		const dot = candidate.indexOf(".");
+		if (dot < 0) break;
+		candidate = candidate.slice(dot + 1);
+	}
+	return false;
+}
+
 function wispUserKey(username) {
 	return String(username || "anónimo").toLowerCase().slice(0, 64);
 }
@@ -461,13 +490,15 @@ function wispStreamRemove(key) {
 	else wispUserStreams.delete(key);
 }
 
-async function throttleWisp(username, bytes, bandwidthKbps = 0) {
+async function throttleWisp(username, bytes, bandwidthKbps = 0, channel = "") {
 	const kbps = Math.max(0, Number(bandwidthKbps) || 0);
 	const amount = Math.max(0, Number(bytes) || 0);
 	if (!kbps || !amount) return;
 	const rate = kbps * 125; // Kbps -> bytes/s
 	const burst = Math.max(64 * 1024, rate);
-	const key = wispUserKey(username);
+	const key = channel
+		? `${wispUserKey(username)}|${channel}`
+		: wispUserKey(username);
 	let bucket = wispBuckets.get(key);
 	if (!bucket) {
 		bucket = { tokens: burst, last: Date.now(), chain: Promise.resolve() };
@@ -497,20 +528,21 @@ function patchWispStream(stream, limits = null) {
 	socket.__wispRatePatched = true;
 	const username = stream.conn?.username;
 	const bandwidthKbps = limits?.bandwidthKbps || 0;
+	const channel = limits?.channel || "";
 	const recv = typeof socket.recv === "function" ? socket.recv.bind(socket) : null;
 	const send = typeof socket.send === "function" ? socket.send.bind(socket) : null;
 	if (recv) {
 		socket.recv = async (...args) => {
 			const data = await recv(...args);
 			const bytes = data?.length || data?.byteLength || 0;
-			if (bytes) await throttleWisp(username, bytes, bandwidthKbps);
+			if (bytes) await throttleWisp(username, bytes, bandwidthKbps, channel);
 			return data;
 		};
 	}
 	if (send) {
 		socket.send = async (data) => {
 			const bytes = data?.length || data?.byteLength || 0;
-			if (bytes) await throttleWisp(username, bytes, bandwidthKbps);
+			if (bytes) await throttleWisp(username, bytes, bandwidthKbps, channel);
 			return send(data);
 		};
 	}
@@ -536,6 +568,7 @@ function instrumentWispTraffic() {
 	const createStream = connection.create_stream;
 	connection.create_stream = function (streamId, type, hostname, port) {
 		const limits = effectiveWispLimits(this.username);
+		if (isMediaHost(hostname)) limits.channel = "media";
 		const limit = wispStreamLimit(this.username);
 		if (!limit.allowed) {
 			metric("wisp_streams_throttled_total");
@@ -2521,6 +2554,10 @@ app.use("/fonts", express.static(path.join(__dirname, "public/fonts"), { maxAge:
 app.get("/theme.js", (req, res) => {
 	res.set("Cache-Control", "no-cache");
 	res.type("application/javascript").sendFile(path.join(__dirname, "public/theme.js"));
+});
+app.get("/custom-select.js", (req, res) => {
+	res.set("Cache-Control", "no-cache");
+	res.type("application/javascript").sendFile(path.join(__dirname, "public/custom-select.js"));
 });
 app.get("/password-manager.css", (req, res) => {
 	res.set("Cache-Control", "public, max-age=3600");

@@ -2990,3 +2990,191 @@ dialog button.primary {
 		font-size: 64px;
 	}
 }
+
+/* ------------------------------ select propio ---------------------------- */
+
+.cselect {
+	position: relative;
+	display: block;
+	width: 100%;
+	min-width: 0;
+}
+
+.cselect-native {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	overflow: hidden !important;
+	clip-path: inset(50%) !important;
+	opacity: 0 !important;
+	pointer-events: none !important;
+}
+
+.cselect-button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 42px;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: var(--r-sm);
+	background: var(--input);
+	color: var(--text);
+	font: inherit;
+	font-size: 14px;
+	text-align: left;
+	cursor: pointer;
+	transition: border-color var(--ease), box-shadow var(--ease), background var(--ease);
+}
+
+.cselect-button:hover {
+	border-color: var(--border-strong);
+}
+
+.cselect-button[aria-expanded="true"] {
+	border-color: var(--accent-strong);
+	box-shadow: var(--ring);
+}
+
+.cselect-button:focus-visible {
+	outline: 2px solid var(--accent-strong);
+	outline-offset: 2px;
+}
+
+.cselect-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cselect-chevron {
+	display: grid;
+	place-items: center;
+	flex: 0 0 16px;
+	width: 16px;
+	height: 16px;
+	color: var(--muted);
+	transition: transform var(--ease);
+}
+
+.cselect-chevron svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 1.5;
+}
+
+.cselect.is-open .cselect-chevron {
+	transform: rotate(180deg);
+}
+
+.cselect-menu {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 0;
+	z-index: 120;
+	display: none;
+	width: max-content;
+	min-width: 100%;
+	max-width: min(380px, calc(100vw - 24px));
+	max-height: 280px;
+	padding: 4px;
+	overflow-y: auto;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--r-sm);
+	background: var(--surface);
+	box-shadow: var(--shadow-md);
+}
+
+.cselect.is-open .cselect-menu {
+	display: block;
+}
+
+.cselect.drop-up .cselect-menu {
+	top: auto;
+	bottom: calc(100% + 6px);
+}
+
+.cselect-option {
+	display: block;
+	width: 100%;
+	padding: 8px 10px;
+	overflow: hidden;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-soft);
+	font: inherit;
+	font-size: 13px;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.cselect-option:hover,
+.cselect-option.is-active {
+	background: var(--surface-2);
+	color: var(--text);
+}
+
+.cselect-option.is-selected {
+	background: var(--surface-3);
+	color: var(--text);
+}
+
+.cselect-option:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.cselect-group {
+	padding: 8px 10px 3px;
+	color: var(--muted);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.cselect.is-disabled {
+	opacity: 0.6;
+}
+
+.cselect.is-disabled .cselect-button {
+	cursor: not-allowed;
+}
+
+.cselect.chat-mobile-channel {
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+
+.cselect.chat-mobile-channel .cselect-button {
+	min-height: 36px;
+	padding: 7px 9px;
+	font-size: 11.5px;
+}
+
+.actions .cselect,
+.filter .cselect,
+.tool-inline .cselect,
+.user-group-form .cselect {
+	width: auto;
+	min-width: 160px;
+}
+
+.user-group-form .cselect {
+	min-width: 190px;
+}
+
+@media (max-width: 860px) {
+	.cselect-button {
+		min-height: 44px;
+		font-size: 16px;
+	}
+}
