@@ -981,7 +981,7 @@ quickLinks?.addEventListener("click", (event) => {
 });
 
 function renderQuickLinks(links) {
-	if (!quickLinks || !Array.isArray(links)) return;
+	if (!quickLinks || !Array.isArray(links) || !links.length) return;
 	quickLinks.replaceChildren();
 	for (const link of links) {
 		const a = document.createElement("a");

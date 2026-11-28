@@ -421,3 +421,13 @@
 		padding: var(--s-3);
 	}
 }
+
+
+.vault-badge {
+	text-transform: none;
+}
+
+#vault-setup,
+#vault-unlock {
+	margin: 0 auto;
+}

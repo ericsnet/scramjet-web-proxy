@@ -3940,7 +3940,7 @@ export function vaultPage({ user } = {}) {
 <div class="card vault-shell" id="vault-app">
   <div class="vault-head">
     <div>
-      <h1>🔐 Bóveda de contraseñas</h1>
+      <h1>Bóveda de contraseñas</h1>
       <p class="muted">Cifrada en tu navegador con AES-GCM. La contraseña maestra no se envía al servidor y no se guarda.</p>
     </div>
     <span class="vault-badge">Privada</span>
