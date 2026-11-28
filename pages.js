@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { countOpenAlerts } from "./security.js";
 import { adblockStats } from "./adblock.js";
+import { getSettings } from "./settings.js";
 import {
 	canAssignRole,
 	canCreateInvites,
@@ -171,6 +172,7 @@ function groupAvatar(name, className = "group-avatar") {
 
 function shell(title, body, { topbar = "", chatFab = true, wide = false, full = false, head = "", user = null } = {}) {
 	const bodyClass = `app-body${topbar ? "" : " auth-shell"}${full ? " layout-chat chat-body" : ""}`;
+	const usageOn = !!topbar && !!user && getSettings().usageAnalytics !== false && !user.usageOptOut;
 	return `<!doctype html>
 <html lang="es">
 <head>
@@ -200,9 +202,10 @@ ${head}
 ${topbar ? '<script src="/session-guard.js" defer></script>' : ""}
 <script src="/global-search.js?v=3" defer></script>
 <script src="${asset("custom-select.js")}" defer></script>
+${usageOn ? `<script src="${asset("usage.js")}" defer></script>` : ""}
 ${topbar && !full ? '<script src="/vendor/gsap.min.js" defer></script><script src="/admin-motion.js" defer></script>' : ""}
 </head>
-<body class="${bodyClass}">
+<body class="${bodyClass}" data-usage-enabled="${usageOn ? "1" : "0"}">
 <div id="page-progress" class="page-progress" hidden><i></i></div>
 ${topbar}
 ${full
@@ -210,13 +213,13 @@ ${full
   : `<div class="app-frame">
 ${topbar ? appSidebar(user) : ""}
 <div class="app-content">
-<main class="wrap${wide ? " wide" : ""}">${body}</main>
-<footer class="app-footer">Proxy Web</footer>
+<main class="wrap${wide ? " wide" : ""}" data-zone="content">${body}</main>
+<footer class="app-footer" data-zone="footer">Proxy Web</footer>
 </div>
 </div>`}
 ${topbar ? '<button type="button" class="nav-backdrop" id="nav-backdrop" aria-label="Cerrar menú" tabindex="-1"></button>' : ""}
-${topbar ? '<form method="post" action="/api/panic" class="panic-button-form"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">Pánico</button></form>' : ""}
-${topbar && chatFab ? `<a class="chat-fab" href="/chat" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="${asset("chat-notify.js")}" defer></script>` : ""}
+${topbar ? '<form method="post" action="/api/panic" class="panic-button-form" data-zone="panic"><button class="panic-button" type="submit" title="Redirigir este dispositivo a Classroom durante 5 minutos">Pánico</button></form>' : ""}
+${topbar && chatFab ? `<a class="chat-fab" href="/chat" data-zone="fab" aria-label="Abrir chat" title="Abrir chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg></a><script src="${asset("chat-notify.js")}" defer></script>` : ""}
 <script>
 (() => {
   const bar = document.getElementById("page-progress");
@@ -287,8 +290,14 @@ ${topbar && chatFab ? `<a class="chat-fab" href="/chat" aria-label="Abrir chat" 
 </html>`;
 }
 
+function navFeature(href) {
+	const clean = String(href || "/").split(/[?#]/)[0].replace(/\/+$/, "") || "/";
+	if (clean === "/") return "nav.home";
+	return `nav.${clean.replace(/^\//, "").replace(/\//g, ".")}`;
+}
+
 function navLink(href, label, icon = "•") {
-	return `<a href="${href}" data-nav="${href}" title="${esc(label)}"><span class="app-nav-icon" aria-hidden="true">${icon}</span><span>${esc(label)}</span></a>`;
+	return `<a href="${href}" data-nav="${href}" data-usage="${esc(navFeature(href))}" title="${esc(label)}"><span class="app-nav-icon" aria-hidden="true">${icon}</span><span>${esc(label)}</span></a>`;
 }
 
 function appSidebar(user) {
@@ -327,6 +336,7 @@ function appSidebar(user) {
 	}
 	if (isAdmin) admin.push(navLink("/admin/reports", "Informes", NAV_ICON.flag));
 	if (isStaff) admin.push(navLink("/admin/stats", "Estadísticas", NAV_ICON.chart));
+	if (isAdmin) admin.push(navLink("/admin/usage", "Uso", NAV_ICON.chart));
 
 	const system = [];
 	if (isAdmin) {
@@ -353,7 +363,7 @@ function appSidebar(user) {
 		links.length
 			? `<nav class="app-nav" aria-label="${esc(label)}"><p class="app-nav-label">${esc(label)}</p>${links.join("")}</nav>`
 			: "";
-	return `<aside class="app-sidebar" id="app-sidebar">
+	return `<aside class="app-sidebar" id="app-sidebar" data-zone="sidebar">
   <div class="chat-sidebar-head">
     <div class="chat-sidebar-brand"><span class="chat-sidebar-mark">◉</span><div><strong>Navegación</strong><small>Proxy Web</small></div></div>
     <button type="button" class="chat-sidebar-close" id="app-sidebar-close" aria-label="Cerrar menú">×</button>
@@ -370,7 +380,7 @@ function topbar(user) {
 	const roleNames = roles.map(roleLabel);
 	const roleText = `${roleNames.slice(0, 2).join(" + ")}${roleNames.length > 2 ? ` +${roleNames.length - 2}` : ""}`;
 	const avatar = user ? userAvatar(user.username, user.icon, "topbar-avatar", user.role) : "";
-	return `<header class="topbar">
+	return `<header class="topbar" data-zone="topbar">
   <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="app-sidebar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
   </button>
@@ -469,6 +479,7 @@ const ADMIN_TABS = [
 	["requests", "/admin/requests", "Solicitudes"],
 	["reports", "/admin/reports", "Informes"],
 	["stats", "/admin/stats", "Estadísticas"],
+	["usage", "/admin/usage", "Uso"],
 	["settings", "/admin/settings", "Ajustes"],
 	["system", "/admin/system", "Sistema"],
 ];
@@ -476,7 +487,7 @@ const ADMIN_TABS = [
 function adminTabs(active, role = "admin") {
 	const visible = ["admin", "creator"].includes(role)
 		? ADMIN_TABS.filter(([key]) => role === "creator" || key !== "reports")
-		: ADMIN_TABS.filter(([key]) => !["overview", "settings", "system", "security", "traffic", "monitor", "reports"].includes(key));
+		: ADMIN_TABS.filter(([key]) => !["overview", "usage", "settings", "system", "security", "traffic", "monitor", "reports"].includes(key));
 	const separators = new Set(["security", "activity", "settings"]);
 	const links = visible
 		.map(
@@ -1127,7 +1138,18 @@ export function accountPage({
 	forced = false,
 	notice = "",
 	error = "",
+	usage = null,
 } = {}) {
+	const usageTop = Array.isArray(usage?.top) ? usage.top : [];
+	const usageBars = usageTop
+		.map(
+			(item) => `<li>
+      <span class="usage-bar-label">${esc(item.label)}</span>
+      <span class="usage-bar" aria-hidden="true"><i style="width:${Math.max(4, Math.min(100, Number(item.percent) || 4))}%"></i></span>
+      <span class="usage-bar-value">${esc(item.count)}</span>
+    </li>`,
+		)
+		.join("");
 	const sessionItems = sessions
 		.map((s) => {
 			const current = s.id === currentId;
@@ -1251,6 +1273,22 @@ ${
     </select>
     <button class="small" type="submit">Guardar idioma</button>
   </form>
+</div>
+
+<div class="card" style="max-width:620px;margin:18px auto 0">
+  <h2>Uso del panel</h2>
+  ${
+		usage && usage.enabled
+			? `<p class="muted">Estas son las funciones del panel que más usas. El peso baja con el tiempo, así que refleja tus últimas semanas.</p>
+  ${usageBars ? `<ul class="usage-bars">${usageBars}</ul>` : '<p class="empty">Todavía no hay suficientes datos.</p>'}
+  ${usage.note ? `<p class="hint">${esc(usage.note)}</p>` : ""}
+  <form method="post" action="/api/account/usage" class="actions">
+    <label class="check"><input type="checkbox" name="usageAnalytics"${usage.optOut ? "" : " checked"}> Guardar mi uso del panel para personalizar la experiencia</label>
+    <button class="small" type="submit">Guardar</button>
+  </form>
+  <p class="hint">Solo se registra lo que pulsas en el panel: nunca el contenido de las webs, las direcciones que visitas ni lo que escribes. Si lo desactivas, se borra tu perfil de uso.</p>`
+			: `<p class="muted">La analítica de uso del panel está desactivada por el administrador.</p>`
+	}
 </div>
 
 <div class="card" style="max-width:620px;margin:18px auto 0">
@@ -3010,6 +3048,140 @@ ${adminTabs("monitor", user.role)}
 	return shell("Vigilancia · Administración", body, { user, topbar: topbar(user), wide: true });
 }
 
+export function usagePage({ user, snapshot = {}, days = 30, notice = "", error = "" } = {}) {
+	const features = Array.isArray(snapshot.features) ? snapshot.features : [];
+	const used = features.filter((f) => f.count > 0);
+	const unused = features.filter((f) => f.count === 0);
+	const max = used[0]?.count || 1;
+	const pct = (count) => Math.max(3, Math.round((count / max) * 100));
+	const featureRows = used
+		.map(
+			(f) => `<tr>
+      <td><strong>${esc(f.label)}</strong><br><span class="muted mono">${esc(f.key)}</span></td>
+      <td class="usage-cell"><span class="usage-bar" aria-hidden="true"><i style="width:${pct(f.count)}%"></i></span></td>
+      <td class="num">${esc(f.count)}</td>
+      <td class="num muted">${esc(f.total)}</td>
+      <td class="muted">${f.lastAt ? esc(fmtDate(f.lastAt)) : "—"}</td>
+    </tr>`,
+		)
+		.join("");
+	const pages = (snapshot.pages || []).slice(0, 12);
+	const pageMax = pages[0]?.count || 1;
+	const pageRows = pages
+		.map(
+			(p) => `<tr>
+      <td class="mono">${esc(p.key)}</td>
+      <td class="usage-cell"><span class="usage-bar" aria-hidden="true"><i style="width:${Math.max(3, Math.round((p.count / pageMax) * 100))}%"></i></span></td>
+      <td class="num">${esc(p.count)}</td>
+    </tr>`,
+		)
+		.join("");
+	const users = (snapshot.users || []).slice(0, 20);
+	const userRows = users
+		.map(
+			(u) => `<tr>
+      <td><a href="/u/${encodeURIComponent(u.username)}">${esc(u.username)}</a></td>
+      <td class="num">${esc(u.events || 0)}</td>
+      <td class="muted">${u.lastAt ? esc(fmtDate(u.lastAt)) : "—"}</td>
+      <td>${(u.top || []).map((t) => `<span class="badge">${esc(t.label)}</span>`).join(" ") || '<span class="muted">Sin datos</span>'}</td>
+    </tr>`,
+		)
+		.join("");
+	const roleRows = Object.entries(snapshot.roles || {})
+		.map(([role, counts]) => {
+			const entries = Object.entries(counts)
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 5)
+				.map(([key, count]) => `<span class="badge">${esc(features.find((f) => f.key === key)?.label || key)} · ${esc(count)}</span>`)
+				.join(" ");
+			return `<tr><td><span class="badge role-${esc(role)}">${esc(roleLabel(role))}</span></td><td>${entries || '<span class="muted">—</span>'}</td></tr>`;
+		})
+		.join("");
+	const zoneTotals = (snapshot.zones || []).map((z) => `${z.key}: ${z.count}`).join(" · ") || "Sin datos";
+	const unusedChips = unused.slice(0, 24).map((f) => `<span class="badge muted-badge">${esc(f.label)}</span>`).join(" ");
+	const windowLink = (value, label) =>
+		`<a class="small${value === days ? " active" : ""}" href="/admin/usage?days=${value}">${label}</a>`;
+
+	const body = `
+${adminTabs("usage", user.role)}
+<div class="page-head">
+  <div>
+    <h1>Uso del panel</h1>
+    <p class="muted">Qué funciones se usan de verdad, medidas solo dentro del proxy. Los perfiles decaen con el tiempo: lo reciente pesa más que lo antiguo.</p>
+  </div>
+  <div class="actions">${windowLink(7, "7 días")} ${windowLink(30, "30 días")} ${windowLink(90, "90 días")}</div>
+</div>
+${notice ? `<p class="msg ok">${esc(notice)}</p>` : ""}
+${error ? `<p class="msg error">${esc(error)}</p>` : ""}
+
+<div class="stat-grid">
+  <div class="stat"><span class="stat-label">Acciones registradas</span><strong>${esc(snapshot.actions || 0)}</strong><small>últimos ${esc(days)} días</small></div>
+  <div class="stat"><span class="stat-label">Usuarios activos</span><strong>${esc(snapshot.activeUsers || 0)}</strong><small>con actividad en la ventana</small></div>
+  <div class="stat"><span class="stat-label">Funciones usadas</span><strong>${esc(used.length)}</strong><small>de ${esc(features.length)} instrumentadas</small></div>
+  <div class="stat"><span class="stat-label">Sin uso</span><strong>${esc(unused.length)}</strong><small>candidatas a revisar</small></div>
+</div>
+
+<div class="card">
+  <h2>Funciones más usadas</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Función</th><th>Peso</th><th class="num">${esc(days)} días</th><th class="num">Total</th><th>Último uso</th></tr></thead>
+      <tbody>${featureRows || '<tr><td colspan="5" class="empty">Todavía no hay datos.</td></tr>'}</tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Páginas más vistas</h2>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Página</th><th>Peso</th><th class="num">Vistas</th></tr></thead>
+        <tbody>${pageRows || '<tr><td colspan="3" class="empty">Sin datos.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <p class="hint">Zonas de clic: ${esc(zoneTotals)}</p>
+  </div>
+
+  <div class="card">
+    <h2>Uso por rol</h2>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rol</th><th>Funciones principales</th></tr></thead>
+        <tbody>${roleRows || '<tr><td colspan="2" class="empty">Sin datos.</td></tr>'}</tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Funciones sin uso en ${esc(days)} días</h2>
+  <p class="muted">Si algo lleva meses a cero, probablemente sobra o no se descubre. También puede ser una pista de que la interfaz lo esconde.</p>
+  <p>${unusedChips || '<span class="muted">Todo se ha usado al menos una vez.</span>'}</p>
+</div>
+
+<div class="card">
+  <h2>Perfil por usuario</h2>
+  <p class="muted">Ranking con decaimiento: cada acción pesa menos a medida que pasa el tiempo. Solo administradores.</p>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Usuario</th><th class="num">Acciones</th><th>Última</th><th>Funciones con más peso</th></tr></thead>
+      <tbody>${userRows || '<tr><td colspan="4" class="empty">Sin datos.</td></tr>'}</tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Qué se guarda y qué no</h2>
+  <ul class="plain-list">
+    <li>Se guarda: función pulsada, zona de la interfaz, tipo de control, página del panel y tiempo en tramos.</li>
+    <li>No se guarda: contenido de las webs, direcciones visitadas, texto escrito, teclas, movimientos del ratón ni nada dentro del iframe.</li>
+    <li>Retención: 90 días. El peso decae con semivida de 7 días. Cada usuario puede desactivarlo y borrar su perfil desde Mi cuenta.</li>
+  </ul>
+</div>`;
+	return shell("Uso del panel · Proxy Web", body, { user, topbar: topbar(user), wide: true });
+}
+
 export function settingsPage({
 	user,
 	settings,
@@ -3045,6 +3217,7 @@ ${adminTabs("settings")}
     <a href="#settings-security">Seguridad</a>
     <a href="#settings-performance">Rendimiento</a>
     <a href="#settings-activity">Actividad</a>
+    <a href="#settings-usage">Uso</a>
     <a href="#settings-chat">Chat</a>
     <a href="#settings-maintenance">Mantenimiento</a>
     <a href="#settings-quarantine">Cuarentena</a>
@@ -3115,6 +3288,12 @@ ${adminTabs("settings")}
         <input id="activityTotal" name="activityTotal" type="number" min="100" max="10000" value="${settings.activityTotal}" required>
       </div>
     </div>
+  </div>
+
+  <div class="section settings-block" id="settings-usage" data-settings-search="uso analítica analitica preferencias clics funciones algoritmo">
+    <h3>Uso del panel</h3>
+    <label class="check"><input type="checkbox" name="usageAnalytics"${settings.usageAnalytics !== false ? " checked" : ""}> Registrar qué funciones del panel se usan</label>
+    <p class="hint">Guarda clics, envíos de formularios y tiempo por página dentro del panel. No guarda el contenido de las webs, las direcciones visitadas ni lo que se escribe. El perfil de cada usuario decae con el tiempo y se borra a los 90 días. Cada usuario puede desactivarlo en su cuenta.</p>
   </div>
 
   <div class="section settings-block" id="settings-performance" data-settings-search="rendimiento ancho banda wisp streams conexiones buffer latencia juegos">

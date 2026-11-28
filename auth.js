@@ -595,6 +595,14 @@ export function setUserLanguage(username, lang) {
 	return { ok: true };
 }
 
+export function setUserUsageOptOut(username, optOut) {
+	const user = getUser(username);
+	if (!user) return { error: "notfound" };
+	db.users[user.username].usageOptOut = !!optOut;
+	save();
+	return { ok: true };
+}
+
 export function addUnblockOverride(username, host) {
 	const user = getUser(username);
 	if (!user) return { error: "notfound" };
@@ -1029,6 +1037,7 @@ export function getSession(req) {
 		expires: session.expires,
 		mustChangePassword: !!user.mustChangePassword,
 		lang: user.lang || "",
+		usageOptOut: !!user.usageOptOut,
 	};
 }
 

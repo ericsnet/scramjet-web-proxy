@@ -46,6 +46,7 @@ import {
 	isWithinSchedule,
 	setUserLanguage,
 	setUserTheme,
+	setUserUsageOptOut,
 	isSecureRequest,
 	addUnblockOverride,
 	recordLoginSuccess,
@@ -102,6 +103,7 @@ import {
 	quarantinePage,
 	requestsPage,
 	statsPage,
+	usagePage,
 	bookmarksPage,
 	historyPage,
 	chatPage,
@@ -133,6 +135,16 @@ import {
 	flushAudit,
 } from "./audit.js";
 import { getSettings, saveSettings, resetSettings } from "./settings.js";
+import {
+	affinityFor,
+	clearUsage,
+	flushUsage,
+	recordUsage,
+	usageEnabled,
+	usageEnabledFor,
+	usageSnapshot,
+	userUsageEvents,
+} from "./usage.js";
 import { listTemplates, addTemplate, deleteTemplate } from "./templates.js";
 import { listSchedules, addSchedule, deleteSchedule, activeJob } from "./schedules.js";
 import {
@@ -1854,6 +1866,29 @@ app.get("/api/config", requireAuth, (req, res) => {
 	res.json(payload);
 });
 
+app.post("/api/usage", requireAuth, sameOrigin, (req, res) => {
+	if (!usageEnabledFor(req.user)) return res.set("Cache-Control", "no-store").status(204).end();
+	const events = Array.isArray(req.body?.events) ? req.body.events.slice(0, 40) : [];
+	recordUsage({
+		user: req.user,
+		role: req.user.role,
+		page: req.body?.page,
+		view: req.body?.view === true,
+		events,
+	});
+	res.set("Cache-Control", "no-store").status(204).end();
+});
+
+app.get("/api/usage/affinity", requireAuth, (req, res) => {
+	const enabled = usageEnabledFor(req.user);
+	res.set("Cache-Control", "no-store");
+	res.json({
+		enabled,
+		events: enabled ? userUsageEvents(req.user.username) : 0,
+		top: enabled ? affinityFor(req.user.username, 8) : [],
+	});
+});
+
 app.get("/metrics", (req, res) => {
 	const settings = getSettings();
 	const token = settings.metricsToken;
@@ -2559,6 +2594,10 @@ app.get("/custom-select.js", (req, res) => {
 	res.set("Cache-Control", "no-cache");
 	res.type("application/javascript").sendFile(path.join(__dirname, "public/custom-select.js"));
 });
+app.get("/usage.js", (req, res) => {
+	res.set("Cache-Control", "no-cache");
+	res.type("application/javascript").sendFile(path.join(__dirname, "public/usage.js"));
+});
 app.get("/password-manager.css", (req, res) => {
 	res.set("Cache-Control", "public, max-age=3600");
 	res.type("text/css").sendFile(path.join(__dirname, "public/password-manager.css"));
@@ -2849,6 +2888,7 @@ app.get("/api/search", (req, res) => {
 			["Seguridad", "/admin/security"],
 			["Tráfico", "/admin/traffic"],
 			["Vigilancia", "/admin/monitor"],
+			["Uso del panel", "/admin/usage"],
 			["Ajustes", "/admin/settings"],
 			["Sistema", "/admin/system"],
 		);
@@ -3598,12 +3638,20 @@ app.get("/account", (req, res) => {
 							? "MFA desactivada."
 							: req.query.mfa === "required"
 								? "Debes activar la verificación en dos pasos para usar el panel de administración."
-								: "";
+								: req.query.ok === "usage"
+									? "Preferencias de uso guardadas."
+									: "";
 	const error = ACCOUNT_ERRORS[req.query.error] || "";
+	const usage = {
+		enabled: usageEnabled(),
+		optOut: !!req.user.usageOptOut,
+		top: usageEnabledFor(req.user) ? affinityFor(req.user.username, 6) : [],
+	};
 	res.set("Cache-Control", "no-store");
 	res.type("html").send(
 		accountPage({
 			user: req.user,
+			usage,
 			sessions,
 			currentId: req.user.id,
 			allowPasswordChange: settings.allowUserPasswordChange || isAdminRole(req.user.role),
@@ -3971,6 +4019,14 @@ app.post("/api/account/theme", sameOrigin, (req, res) => {
 		`pw_theme=${theme}; Path=/; SameSite=Lax; Max-Age=31536000${isSecureRequest(req) ? "; Secure" : ""}`,
 	);
 	res.set("Cache-Control", "no-store").status(204).end();
+});
+
+app.post("/api/account/usage", sameOrigin, (req, res) => {
+	const value = req.body?.usageAnalytics;
+	const enabled = value === "on" || value === "1" || value === true;
+	setUserUsageOptOut(req.user.username, !enabled);
+	if (!enabled) clearUsage(req.user.username);
+	res.redirect(303, "/account?ok=usage");
 });
 
 app.post("/api/account/language", sameOrigin, (req, res) => {
@@ -4898,6 +4954,25 @@ app.post("/api/admin/adblock/update", requireAdmin, sameOrigin, async (req, res)
 	res.redirect(303, "/admin/settings?ok=adblock");
 });
 
+app.get("/admin/usage", requireAdmin, (req, res) => {
+	const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+	const snapshot = usageSnapshot({ days });
+	if (req.user.role !== "creator") {
+		const creators = creatorNameSet();
+		snapshot.users = snapshot.users.filter((u) => !creators.has(String(u.username).toLowerCase()));
+	}
+	res.set("Cache-Control", "no-store");
+	res.type("html").send(
+		usagePage({
+			user: req.user,
+			snapshot,
+			days,
+			notice: req.query.ok === "cleared" ? "Datos de uso borrados." : "",
+			error: req.query.error || "",
+		}),
+	);
+});
+
 app.get("/admin/settings", requireAdmin, (req, res) => {
 	const notice = ADMIN_OK[req.query.ok] || "";
 	const error = req.query.error ? String(req.query.error) : "";
@@ -4960,6 +5035,7 @@ app.post("/api/admin/settings", requireAdmin, sameOrigin, async (req, res) => {
 		activityEnabled: flag("activityEnabled"),
 		activityPerUser: req.body.activityPerUser,
 		activityTotal: req.body.activityTotal,
+		usageAnalytics: flag("usageAnalytics"),
 		chatEnabled: flag("chatEnabled"),
 		chatShowOnline: flag("chatShowOnline"),
 		chatAllowUserDelete: flag("chatAllowUserDelete"),
@@ -5846,6 +5922,7 @@ function shutdown() {
 	flushFriends();
 	flushPanic();
 	flushSecurity();
+	flushUsage();
 	process.exit(0);
 }
 process.on("SIGTERM", shutdown);

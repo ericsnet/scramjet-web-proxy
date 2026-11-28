@@ -33,10 +33,11 @@ export const DEFAULTS = Object.freeze({
 	activityEnabled: true,
 	activityPerUser: 500,
 	activityTotal: 3000,
-	proxyBandwidthPerUserKbps: 8000,
+	usageAnalytics: true,
+	proxyBandwidthPerUserKbps: 25000,
 	proxyMaxStreamsPerUser: 64,
 	proxyMaxConnectionsPerUser: 6,
-	proxyWispBufferMB: 4,
+	proxyWispBufferMB: 8,
 	blockAds: true,
 	maintenanceMode: false,
 	maintenanceMessage:
@@ -203,6 +204,12 @@ function normalize(input, silent = false) {
 
 	if (input.activityEnabled !== undefined) {
 		next.activityEnabled = input.activityEnabled === true || input.activityEnabled === "1" || input.activityEnabled === "on";
+	}
+	if (input.usageAnalytics !== undefined) {
+		next.usageAnalytics =
+			input.usageAnalytics === true ||
+			input.usageAnalytics === "1" ||
+			input.usageAnalytics === "on";
 	}
 	if (input.maintenanceMode !== undefined) {
 		next.maintenanceMode = input.maintenanceMode === true || input.maintenanceMode === "1" || input.maintenanceMode === "on";

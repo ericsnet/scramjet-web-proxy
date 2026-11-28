@@ -1242,6 +1242,24 @@ window.addEventListener("keydown", (event) => {
 
 loadBookmarks();
 
+// "Tu espacio" se ordena con el peso de uso del panel: lo reciente manda.
+fetch("/api/usage/affinity", { cache: "no-store" })
+	.then((r) => (r.ok ? r.json() : null))
+	.then((data) => {
+		if (!data?.enabled || !Array.isArray(data.top) || !data.top.length) return;
+		const box = document.querySelector(".home-actions");
+		if (!box) return;
+		const weight = (href) => {
+			const path = String(href || "/").split(/[?#]/)[0].replace(/\/+$/, "") || "/";
+			const key = path === "/" ? "nav.home" : `nav.${path.replace(/^\//, "").replace(/\//g, ".")}`;
+			return data.top.find((item) => item.key === key)?.score || 0;
+		};
+		const items = [...box.children];
+		const sorted = items.slice().sort((a, b) => weight(b.getAttribute("href")) - weight(a.getAttribute("href")));
+		if (sorted.some((item, i) => item !== items[i])) box.append(...sorted);
+	})
+	.catch(() => {});
+
 fetch("/api/config", { cache: "no-store" })
 	.then((r) => (r.ok ? r.json() : null))
 	.then((config) => {
