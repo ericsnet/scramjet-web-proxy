@@ -76,7 +76,13 @@
 				optionEls[i].classList.toggle("is-active", active);
 				if (active) {
 					button.setAttribute("aria-activedescendant", optionEls[i].id);
-					optionEls[i].scrollIntoView({ block: "nearest" });
+					const item = optionEls[i];
+					const top = item.offsetTop;
+					const bottom = top + item.offsetHeight;
+					if (top < menu.scrollTop) menu.scrollTop = top;
+					else if (bottom > menu.scrollTop + menu.clientHeight) {
+						menu.scrollTop = bottom - menu.clientHeight;
+					}
 				}
 			}
 		}
@@ -128,21 +134,42 @@
 
 		function place() {
 			if (!wrapper.classList.contains("is-open")) return;
-			const rect = menu.getBoundingClientRect();
-			wrapper.classList.toggle(
-				"drop-up",
-				rect.bottom > window.innerHeight - 8 && rect.top > rect.height,
+			const buttonRect = button.getBoundingClientRect();
+			const width = Math.min(Math.max(buttonRect.width, 180), window.innerWidth - 16);
+			menu.style.position = "fixed";
+			menu.style.width = `${width}px`;
+			menu.style.minWidth = "0";
+			menu.style.maxHeight = `${Math.min(280, window.innerHeight - 24)}px`;
+			const menuHeight = menu.offsetHeight;
+			const spaceBelow = window.innerHeight - buttonRect.bottom - 8;
+			const spaceAbove = buttonRect.top - 8;
+			const top =
+				menuHeight > spaceBelow && spaceAbove > spaceBelow
+					? Math.max(8, buttonRect.top - menuHeight - 6)
+					: Math.min(window.innerHeight - menuHeight - 8, buttonRect.bottom + 6);
+			const left = Math.min(
+				Math.max(8, buttonRect.left),
+				Math.max(8, window.innerWidth - width - 8),
 			);
+			menu.style.top = `${Math.max(8, top)}px`;
+			menu.style.left = `${left}px`;
+		}
+
+		function onScroll(event) {
+			if (event.target instanceof Node && menu.contains(event.target)) return;
+			close();
 		}
 
 		function close() {
 			wrapper.classList.remove("is-open", "drop-up");
+			menu.removeAttribute("style");
 			button.setAttribute("aria-expanded", "false");
 			button.removeAttribute("aria-activedescendant");
 			activeIndex = -1;
 			if (openInstance === instance) openInstance = null;
 			document.removeEventListener("pointerdown", outside, true);
 			window.removeEventListener("resize", close);
+			window.removeEventListener("scroll", onScroll, true);
 		}
 
 		function outside(event) {
@@ -161,6 +188,7 @@
 			place();
 			document.addEventListener("pointerdown", outside, true);
 			window.addEventListener("resize", close);
+			window.addEventListener("scroll", onScroll, true);
 		}
 
 		function commit(value) {

@@ -3074,7 +3074,7 @@ dialog button.primary {
 	position: absolute;
 	top: calc(100% + 6px);
 	left: 0;
-	z-index: 120;
+	z-index: 220;
 	display: none;
 	width: max-content;
 	min-width: 100%;
