@@ -178,7 +178,7 @@
 				title: mentioned ? `${displayName} te mencionó` : displayName,
 				text: String(
 					message.text ||
-						(audio ? "🎤 Audio" : message.attachment ? "Archivo adjunto" : ""),
+						(audio ? "Audio" : message.attachment ? "Archivo adjunto" : ""),
 				).slice(0, 180),
 				tone: mentioned ? "mention" : "",
 				icon: message.icon?.url || "",

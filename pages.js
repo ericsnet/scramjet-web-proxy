@@ -63,6 +63,19 @@ const LOGO = `<svg viewBox="0 0 64 64" aria-hidden="true">
   <path d="M46 25c-4-1-8-1-11 1" stroke="#0b1017" stroke-width="2" stroke-linecap="round" opacity=".55"/>
 </svg>`;
 
+const ICON = {
+	chat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg>`,
+	pin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v7"/></svg>`,
+	smile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9h.01M15 9h.01"/></svg>`,
+	reply: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17 4 12l5-5"/><path d="M4 12h9a7 7 0 0 1 7 7"/></svg>`,
+	edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+	trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m6 6 1 14h10l1-14"/></svg>`,
+	poll: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>`,
+	users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+	user: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`,
+	plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
+};
+
 
 function avatarColor(name) {
 	let hash = 0;
@@ -409,9 +422,9 @@ function fmtAudioTime(seconds) {
 
 function attachmentLabel(attachment) {
 	const type = String(attachment?.type || "");
-	if (type.startsWith("audio/")) return "🎤 Audio";
-	if (type.startsWith("image/")) return "🖼 Imagen";
-	if (attachment) return "📎 Archivo";
+	if (type.startsWith("audio/")) return "Audio";
+	if (type.startsWith("image/")) return "Imagen";
+	if (attachment) return "Archivo";
 	return "Adjunto";
 }
 
@@ -1370,6 +1383,8 @@ export function chatPage({
 } = {}) {
 	const current = String(user?.username || "");
 	const enabled = !!settings.chatEnabled;
+	const chatDisplayTitle =
+		settings.chatTitle === "Chat de usuarios" ? "Chat" : settings.chatTitle || "Chat";
 	const allowDelete = !!settings.chatAllowUserDelete;
 	const userByName = new Map();
 	for (const entry of users) {
@@ -1391,9 +1406,9 @@ export function chatPage({
 		channel.type === "public"
 			? "#"
 			: channel.type === "class"
-				? "🏫"
+				? "C"
 				: channel.type === "group"
-					? "◆"
+					? "G"
 					: channel.name.slice(0, 1).toUpperCase();
 	const onlineSet = new Set(
 		(Array.isArray(onlineUsers) ? onlineUsers : []).map((name) =>
@@ -1418,8 +1433,8 @@ export function chatPage({
 	const channelItems = channels
 		.map(
 			(channel) => `<button type="button" class="chat-channel-item${channel.id === currentChannel ? " active" : ""}" data-channel-id="${esc(channel.id)}">
-  <span class="chat-channel-avatar" style="background:${avatarColor(channel.name)}">${esc(channelIcon(channel))}</span>
-  <span class="chat-channel-text"><strong>${esc(channel.name)}</strong><small>${channel.type === "public" ? "Sala general" : channel.type === "class" ? "Grupo de clase" : channel.type === "group" ? "Grupo" : "Privado"}${channelPresence(channel) ? ` · <span class="chat-channel-presence">${esc(channelPresence(channel))}</span>` : ""}</small></span>
+  <span class="chat-channel-avatar">${esc(channelIcon(channel))}</span>
+  <span class="chat-channel-text"><strong>${esc(channel.name)}</strong><small>${channel.type === "public" ? "Canal público" : channel.type === "class" ? "Grupo de clase" : channel.type === "group" ? "Grupo" : "Privado"}${channelPresence(channel) ? ` · <span class="chat-channel-presence">${esc(channelPresence(channel))}</span>` : ""}</small></span>
   ${channel.unread ? `<span class="chat-unread">${channel.unread > 99 ? "99+" : channel.unread}</span>` : ""}
 </button>`,
 		)
@@ -1427,7 +1442,7 @@ export function chatPage({
 	const currentInfo = channels.find((channel) => channel.id === currentChannel) || channels[0] || { name: "General", type: "public" };
 	const channelMeta =
 		currentInfo.type === "public"
-			? "Sala pública"
+			? "Canal público"
 			: currentInfo.type === "class"
 				? `Grupo de clase · ${currentInfo.members?.length || 0} miembros`
 				: currentInfo.type === "group"
@@ -1518,9 +1533,14 @@ export function chatPage({
 	};
 
 	const rows = messages
-		.map((m) => {
+		.map((m, index) => {
 			const role = String(m.role || "user");
 			const own = String(m.username).toLowerCase() === current.toLowerCase();
+			const previous = messages[index - 1];
+			const grouped =
+				!!previous &&
+				String(previous.username).toLowerCase() === String(m.username).toLowerCase() &&
+				new Date(m.at).getTime() - new Date(previous.at).getTime() < 5 * 60 * 1000;
 			const canDeleteMessage =
 				enabled &&
 				(canDelete || (!isStaffRole(user?.role) && allowDelete && own));
@@ -1549,7 +1569,7 @@ export function chatPage({
 							`<button type="button" class="chat-reaction${votes.some((v) => String(v).toLowerCase() === current.toLowerCase()) ? " mine" : ""}" data-chat-reaction="${esc(emoji)}">${esc(emoji)} ${votes.length}</button>`,
 					)
 					.join("");
-			const picker = `<details class="chat-reaction-menu"><summary title="Reaccionar" aria-label="Reaccionar">☺</summary><div class="chat-reaction-picker">${reactionSet
+			const picker = `<details class="chat-reaction-menu"><summary title="Reaccionar" aria-label="Reaccionar">${ICON.smile}</summary><div class="chat-reaction-picker">${reactionSet
 				.map(
 					(emoji) =>
 						`<button type="button" data-chat-react="${esc(emoji)}" aria-label="Reaccionar con ${esc(emoji)}">${esc(emoji)}</button>`,
@@ -1564,20 +1584,20 @@ export function chatPage({
 			const seen = m.seen
 				? `<span class="chat-seen${m.seen.all ? "" : " unseen"}">${esc(seenText(m.seen))}</span>`
 				: "";
-			const pinBadge = m.pinned ? '<span class="chat-pin-badge" title="Mensaje fijado">📌</span>' : "";
+			const pinBadge = m.pinned ? `<span class="chat-pin-badge" title="Mensaje fijado">${ICON.pin}</span>` : "";
 			const tools = `<div class="chat-msg-tools">
-        <button type="button" class="chat-tool" data-chat-reply="${esc(m.id)}" title="Responder">↩</button>
-        ${m.canEdit ? `<button type="button" class="chat-tool" data-chat-edit="${esc(m.id)}" title="Editar">✎</button>` : ""}
-        ${m.canPin ? `<button type="button" class="chat-tool" data-chat-pin="${esc(m.id)}" data-pinned="${m.pinned ? "1" : "0"}" title="${m.pinned ? "Desfijar" : "Fijar"}">📌</button>` : ""}
-        ${canDeleteMessage ? `<button type="button" class="chat-tool danger" data-chat-delete="${esc(m.id)}" title="Eliminar">🗑</button>` : ""}
+        <button type="button" class="chat-tool" data-chat-reply="${esc(m.id)}" title="Responder" aria-label="Responder">${ICON.reply}</button>
+        ${m.canEdit ? `<button type="button" class="chat-tool" data-chat-edit="${esc(m.id)}" title="Editar" aria-label="Editar">${ICON.edit}</button>` : ""}
+        ${m.canPin ? `<button type="button" class="chat-tool" data-chat-pin="${esc(m.id)}" data-pinned="${m.pinned ? "1" : "0"}" title="${m.pinned ? "Desfijar" : "Fijar"}" aria-label="${m.pinned ? "Desfijar" : "Fijar"}">${ICON.pin}</button>` : ""}
+        ${canDeleteMessage ? `<button type="button" class="chat-tool danger" data-chat-delete="${esc(m.id)}" title="Eliminar" aria-label="Eliminar">${ICON.trash}</button>` : ""}
       </div>`;
-			return `<article class="chat-message${own ? " own" : ""}${m.pinned ? " pinned" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
-  ${own ? "" : userAvatar(m.displayName || m.username, m.icon, "chat-msg-avatar")}
+			return `<article class="chat-message${own ? " own" : ""}${grouped ? " grouped" : ""}${m.pinned ? " pinned" : ""}" data-chat-message data-chat-id="${esc(m.id)}" data-chat-seq="${esc(m.seq)}">
+  ${own ? "" : grouped ? '<span class="chat-msg-avatar-spacer"></span>' : userAvatar(m.displayName || m.username, m.icon, "chat-msg-avatar")}
   <div class="chat-bubble">
     ${replyQuote}
     <div class="chat-meta">
-      ${own ? "" : `<a class="chat-author profile-link" href="/u/${encodeURIComponent(m.username)}">${esc(m.displayName || m.username)}</a>`}
-      ${roleBadge(role, m.roles)}
+      ${own || grouped ? "" : `<a class="chat-author profile-link" href="/u/${encodeURIComponent(m.username)}">${esc(m.displayName || m.username)}</a>`}
+      ${grouped ? "" : roleBadge(role, m.roles)}
       ${pinBadge}
       <time datetime="${esc(m.at)}">${esc(fmtChatDate(m.at, settings.timezone))}</time>
       ${edited}
@@ -1598,7 +1618,7 @@ export function chatPage({
 				.slice(0, 3)
 				.map(
 					(message) =>
-						`<button type="button" class="chat-pin-chip" data-chat-jump="${esc(message.id)}" title="${esc(message.text || "")}"><span>📌</span><strong>${esc(message.displayName || message.username)}</strong><small>${esc((message.text || "").slice(0, 80) || attachmentLabel(message.attachment))}</small></button>`,
+						`<button type="button" class="chat-pin-chip" data-chat-jump="${esc(message.id)}" title="${esc(message.text || "")}">${ICON.pin}<strong>${esc(message.displayName || message.username)}</strong><small>${esc((message.text || "").slice(0, 80) || attachmentLabel(message.attachment))}</small></button>`,
 				)
 				.join("")
 		: "";
@@ -1637,7 +1657,7 @@ export function chatPage({
   <button type="button" class="chat-backdrop" id="chat-backdrop" aria-label="Cerrar panel" tabindex="-1"></button>
   <aside class="chat-sidebar">
     <div class="chat-sidebar-head">
-      <div class="chat-sidebar-brand"><span class="chat-sidebar-mark">◉</span><div><strong>${esc(settings.chatTitle || "Chat")}</strong><small>Mensajería interna</small></div></div>
+      <div class="chat-sidebar-brand"><span class="chat-sidebar-mark">${ICON.chat}</span><div><strong>${esc(chatDisplayTitle)}</strong><small>Canales y mensajes</small></div></div>
       <button type="button" class="chat-sidebar-close" id="chat-sidebar-close" aria-label="Cerrar canales">×</button>
     </div>
     <div class="chat-sidebar-label">Conversaciones</div>
@@ -1646,7 +1666,7 @@ export function chatPage({
   <section class="chat-main">
     <header class="chat-header">
       <div class="chat-header-info">
-        <span class="chat-channel-avatar large" style="background:${avatarColor(currentInfo.name)}">${esc(channelIcon(currentInfo))}</span>
+        <span class="chat-channel-avatar large">${esc(channelIcon(currentInfo))}</span>
         <div>
           <h1 id="chat-channel-name">${esc(currentInfo.name)}</h1>
           <p><span id="chat-channel-meta">${esc(channelMeta)}</span></p>
@@ -1658,25 +1678,24 @@ export function chatPage({
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Canales</span>
         </button>
         <button class="chat-action" type="button" id="chat-alias-open" title="Poner un apodo privado"${currentInfo.type === "dm" ? "" : " hidden"}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Apodo</span>
+          ${ICON.edit}<span>Apodo</span>
         </button>
         <button class="chat-action" type="button" id="chat-search-open" title="Buscar mensajes">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Buscar</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Buscar</span>
         </button>
         <button class="chat-action" type="button" id="chat-friends" title="Amigos">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Amigos</span>${pendingCount ? `<b class="friend-badge">${pendingCount}</b>` : ""}
+          ${ICON.users}<span>Amigos</span>${pendingCount ? `<b class="friend-badge">${pendingCount}</b>` : ""}
         </button>
-        <button class="chat-action" type="button" id="chat-new-dm" title="Nuevo chat privado">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Privado</span>
-        </button>
-        <button class="chat-action" type="button" id="chat-new-group" title="Nuevo grupo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Grupo</span>
-        </button>
-        <button class="chat-action" type="button" id="chat-new-poll" title="Nueva encuesta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Encuesta</span>
-        </button>
+        <details class="chat-new-menu">
+          <summary class="chat-action chat-new-trigger" title="Crear">${ICON.plus}<span>Nuevo</span></summary>
+          <div class="chat-new-list">
+            <button type="button" id="chat-new-dm">${ICON.user}<span>Chat privado</span></button>
+            <button type="button" id="chat-new-group">${ICON.users}<span>Grupo</span></button>
+            <button type="button" id="chat-new-poll">${ICON.poll}<span>Encuesta</span></button>
+          </div>
+        </details>
         <button class="chat-action chat-details-open-btn" type="button" id="chat-details-open" title="Detalles del canal" aria-label="Abrir detalles del canal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span>Detalles</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg><span>Detalles</span>
         </button>
         <a class="chat-action chat-exit" href="/" title="Salir del chat" aria-label="Salir del chat">×</a>
       </div>
@@ -1685,10 +1704,10 @@ export function chatPage({
     ${error ? `<p class="msg error">${esc(error)}</p>` : ""}
     <p class="msg error" id="chat-error" hidden></p>
     <div class="chat-pinned-bar" id="chat-pinned-bar"${pinned.length ? "" : " hidden"}>
-      <span class="chat-pinned-label">📌 Fijados</span>
+      <span class="chat-pinned-label">${ICON.pin}Fijados</span>
       <div class="chat-pinned-list" id="chat-pinned-list">${pinnedHtml}</div>
     </div>
-    <button type="button" class="chat-load-older" id="chat-load-older"${hasMore ? "" : " hidden"}>Cargar mensajes anteriores</button>
+    <button type="button" class="chat-load-older" id="chat-load-older"${hasMore ? "" : " hidden"}>Mensajes anteriores</button>
     <div class="chat-messages" id="chat-messages"
       data-channel="${esc(currentChannel)}"
       data-last-seq="${esc(latestSeq)}"
@@ -1700,7 +1719,7 @@ export function chatPage({
       data-max-length="${esc(settings.chatMaxLength)}"
       data-can-moderate="${canModerate ? "1" : "0"}"
       data-allow-delete="${allowDelete ? "1" : "0"}">
-      ${rows || '<div class="chat-empty"><span class="chat-empty-icon">💬</span><strong>Todavía no hay mensajes</strong><span>Escribe el primero en este canal.</span></div>'}
+      ${rows || '<div class="chat-empty"><span class="chat-empty-icon">${ICON.chat}</span><strong>Todavía no hay mensajes</strong><span>Escribe el primero en este canal.</span></div>'}
     </div>
     <div class="chat-typing" id="chat-typing" hidden></div>
     <div class="chat-context-bar" id="chat-context" hidden>
@@ -1728,7 +1747,7 @@ export function chatPage({
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/></svg>
       </button>
       <div class="chat-compose-input">
-        <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje"></textarea>
+        <textarea id="chat-input" name="text" maxlength="${esc(settings.chatMaxLength)}" rows="1" placeholder="Mensaje" aria-label="Mensaje"></textarea>
         <div class="chat-compose-meta"><span id="chat-file-name" class="muted"></span><span class="chat-counter"><span id="chat-counter">0</span>/${esc(settings.chatMaxLength)}</span></div>
       </div>
       <button class="chat-send" type="submit" id="chat-send" title="Enviar" aria-label="Enviar">
@@ -1851,7 +1870,7 @@ export function chatPage({
     ${["admin", "creator"].includes(user?.role) ? '<a class="small" href="/admin/settings">Activar en Ajustes</a>' : '<a class="small" href="/">Volver al proxy</a>'}
   </div>
 </div>`;
-	return shell(`${settings.chatTitle || "Chat"} · Proxy Web`, body, {
+	return shell(`${chatDisplayTitle} · Proxy Web`, body, {
 		user, topbar: topbar(user),
 		chatFab: false,
 		wide: true,
@@ -2948,7 +2967,7 @@ ${adminTabs("settings")}
     <a href="#settings-security">🛡 Seguridad</a>
     <a href="#settings-performance">⚡ Rendimiento</a>
     <a href="#settings-activity">📊 Actividad</a>
-    <a href="#settings-chat">💬 Chat</a>
+    <a href="#settings-chat">Chat</a>
     <a href="#settings-maintenance">🚧 Mantenimiento</a>
     <a href="#settings-quarantine">🧪 Cuarentena</a>
     <a href="#settings-sites">🌐 Sitios</a>
@@ -3048,7 +3067,7 @@ ${adminTabs("settings")}
   </div>
 
   <div class="section settings-block" id="settings-chat" data-settings-search="chat mensajes usuarios grupos privados retención adjuntos">
-    <h3>💬 Chat de usuarios</h3>
+    <h3>Chat</h3>
     <label class="check"><input type="checkbox" name="chatEnabled"${settings.chatEnabled ? " checked" : ""}> Activar el chat entre usuarios</label>
     <label class="check"><input type="checkbox" name="chatShowOnline"${settings.chatShowOnline ? " checked" : ""}> Mostrar cuántos usuarios están conectados</label>
     <label class="check"><input type="checkbox" name="chatAllowUserDelete"${settings.chatAllowUserDelete ? " checked" : ""}> Permitir que cada usuario borre sus propios mensajes</label>

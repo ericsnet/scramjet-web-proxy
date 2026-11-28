@@ -84,6 +84,14 @@
 	const channelMeta = document.getElementById("chat-channel-meta");
 
 	const allowedReactions = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+	const ICON = {
+		chat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.9 8.9 0 0 1-3.6-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5Z"/></svg>`,
+		pin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v7"/></svg>`,
+		smile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9h.01M15 9h.01"/></svg>`,
+		reply: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17 4 12l5-5"/><path d="M4 12h9a7 7 0 0 1 7 7"/></svg>`,
+		edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+		trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m6 6 1 14h10l1-14"/></svg>`,
+	};
 	const avatarColor = (name) => {
 		let hash = 0;
 		for (const char of String(name || "?")) hash = (hash * 31 + char.charCodeAt(0)) % 360;
@@ -93,9 +101,9 @@
 		channel.type === "public"
 			? "#"
 			: channel.type === "class"
-				? "🏫"
+				? "C"
 				: channel.type === "group"
-					? "◆"
+					? "G"
 					: String(channel.name || "?").slice(0, 1).toUpperCase();
 
 	function showError(text) {
@@ -248,28 +256,30 @@
 	function makeTools(message) {
 		const tools = document.createElement("div");
 		tools.className = "chat-msg-tools";
-		const add = (label, title, action, dataset) => {
+		const add = (icon, title, action, dataset) => {
 			const button = document.createElement("button");
 			button.type = "button";
 			button.className = `chat-tool${action === "delete" ? " danger" : ""}`;
 			button.title = title;
-			button.textContent = label;
+			button.setAttribute("aria-label", title);
+			button.innerHTML = icon;
 			button.dataset[dataset] = String(message.id);
 			tools.appendChild(button);
 		};
-		add("↩", "Responder", "reply", "chatReply");
-		if (message.canEdit) add("✎", "Editar", "edit", "chatEdit");
+		add(ICON.reply, "Responder", "reply", "chatReply");
+		if (message.canEdit) add(ICON.edit, "Editar", "edit", "chatEdit");
 		if (message.canPin) {
 			const pin = document.createElement("button");
 			pin.type = "button";
 			pin.className = "chat-tool";
 			pin.title = message.pinned ? "Desfijar" : "Fijar";
-			pin.textContent = "📌";
+			pin.setAttribute("aria-label", pin.title);
+			pin.innerHTML = ICON.pin;
 			pin.dataset.chatPin = String(message.id);
 			pin.dataset.pinned = message.pinned ? "1" : "0";
 			tools.appendChild(pin);
 		}
-		if (message.canDelete) add("🗑", "Eliminar", "delete", "chatDelete");
+		if (message.canDelete) add(ICON.trash, "Eliminar", "delete", "chatDelete");
 		return tools;
 	}
 	function renderPinned(list) {
@@ -283,7 +293,7 @@
 			button.className = "chat-pin-chip";
 			button.dataset.chatJump = String(message.id);
 			const icon = document.createElement("span");
-			icon.textContent = "📌";
+			icon.innerHTML = ICON.pin;
 			const author = document.createElement("strong");
 			author.textContent = message.displayName || message.username;
 			const text = document.createElement("small");
@@ -360,9 +370,9 @@
 	}
 	function attachmentLabel(attachment) {
 		const type = String(attachment?.type || "");
-		if (type.startsWith("audio/")) return "🎤 Audio";
-		if (type.startsWith("image/")) return "🖼 Imagen";
-		if (attachment) return "📎 Archivo";
+		if (type.startsWith("audio/")) return "Audio";
+		if (type.startsWith("image/")) return "Imagen";
+		if (attachment) return "Archivo";
 		return "Adjunto";
 	}
 	function makeAttachment(attachment) {
@@ -662,7 +672,7 @@
 		menu.className = "chat-reaction-menu";
 		const summary = document.createElement("summary");
 		summary.title = "Reaccionar";
-		summary.textContent = "☺";
+		summary.innerHTML = ICON.smile;
 		const picker = document.createElement("div");
 		picker.className = "chat-reaction-picker";
 		for (const emoji of allowedReactions) {
@@ -764,12 +774,12 @@
 			meta.appendChild(author);
 		}
 		const badge = roleBadge(message.role, message.roles);
-		if (badge) meta.appendChild(badge);
+		if (badge && !grouped) meta.appendChild(badge);
 		if (message.pinned) {
 			const pin = document.createElement("span");
 			pin.className = "chat-pin-badge";
 			pin.title = "Mensaje fijado";
-			pin.textContent = "📌";
+			pin.innerHTML = ICON.pin;
 			meta.appendChild(pin);
 		}
 		const time = document.createElement("time");
@@ -1088,7 +1098,7 @@
 		if (channelMeta) {
 			channelMeta.textContent =
 				channel.type === "public"
-					? "Sala pública"
+					? "Canal público"
 					: channel.type === "class"
 						? `Grupo de clase · ${channel.members?.length || 0} miembros`
 						: channel.type === "group"
@@ -1131,7 +1141,6 @@
 			button.dataset.channelId = channel.id;
 			const avatar = document.createElement("span");
 			avatar.className = "chat-channel-avatar";
-			avatar.style.background = avatarColor(channel.name);
 			avatar.textContent = channelIcon(channel);
 			const text = document.createElement("span");
 			text.className = "chat-channel-text";
@@ -1140,7 +1149,7 @@
 			const kind = document.createElement("small");
 			const baseKind =
 				channel.type === "public"
-					? "Sala general"
+					? "Canal público"
 					: channel.type === "class"
 						? "Grupo de clase"
 						: channel.type === "group"
@@ -1930,6 +1939,13 @@
 	bindDialog("chat-new-poll", "chat-poll-dialog");
 	bindDialog("chat-friends", "chat-friends-dialog");
 	bindDialog("chat-alias-open", "chat-alias-dialog");
+	document.querySelectorAll(".chat-new-list button").forEach((button) => {
+		button.addEventListener("click", () => button.closest("details")?.removeAttribute("open"));
+	});
+	document.addEventListener("click", (event) => {
+		if (event.target.closest?.(".chat-new-menu")) return;
+		document.querySelector(".chat-new-menu[open]")?.removeAttribute("open");
+	});
 	aliasOpen?.addEventListener("click", () => {
 		syncAliasUi();
 		setTimeout(() => aliasInput?.focus(), 30);
@@ -2240,6 +2256,21 @@
 		if (event.key !== "Escape") return;
 		if (chatApp?.classList.contains("details-open")) setDetailsHidden(true);
 		setChatPanel("");
+	});
+	const closeMessageTools = () => {
+		for (const message of box.querySelectorAll(".chat-message.tools-open")) {
+			message.classList.remove("tools-open");
+		}
+	};
+	box.addEventListener("click", (event) => {
+		if (event.target.closest("a,button,summary,details,input,textarea,label")) return;
+		const message = event.target.closest("[data-chat-message]");
+		const shouldOpen = message && !message.classList.contains("tools-open");
+		closeMessageTools();
+		if (shouldOpen) message.classList.add("tools-open");
+	});
+	document.addEventListener("click", (event) => {
+		if (!event.target.closest?.("[data-chat-message]")) closeMessageTools();
 	});
 	document.addEventListener("visibilitychange", () => {
 		if (!document.hidden) {
