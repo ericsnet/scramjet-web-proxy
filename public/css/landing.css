@@ -1340,3 +1340,15 @@ body.landing-body {
 	height: 14px;
 	display: block;
 }
+
+/* Entrada de portada. Solo se activa si el navegador permite movimiento. */
+html.motion-ready .hero .brand-mark,
+html.motion-ready #hero-title,
+html.motion-ready .hero .subtitle,
+html.motion-ready #sj-form,
+html.motion-ready #quick-links,
+html.motion-ready .hero .notice,
+html.motion-ready .hero-side,
+html.motion-ready #landing-tab-bar {
+	opacity: 0;
+}
