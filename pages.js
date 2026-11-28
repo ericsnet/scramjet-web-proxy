@@ -77,6 +77,30 @@ const ICON = {
 };
 
 const ERROR_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20Z"/><path d="M12 9v5M12 18h.01"/></svg>`;
+const ERROR_ICONS = {
+	401: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`,
+	403: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v6c0 4.6 3.2 7.6 7.5 9 4.3-1.4 7.5-4.4 7.5-9V6Z"/></svg>`,
+	404: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15 9-2 4-4 2 2-4Z"/></svg>`,
+	408: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+	413: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4Z"/><path d="M4 14h4l2 2h4l2-2h4"/></svg>`,
+	418: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><path d="M4 9h13v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3Z"/><path d="M17 10h2a2 2 0 0 1 0 4h-2"/><path d="M7 3v2M11 3v2"/></svg>`,
+	421: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>`,
+	429: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+	451: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7h14M7 7l-3 6h6ZM17 7l-3 6h6Z"/></svg>`,
+	500: ERROR_ICON,
+	501: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6 4 4-8 8H6v-4Z"/><path d="m12 8 4 4"/></svg>`,
+	502: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><path d="M9 7V3M15 7V3M7 7h10v5a5 5 0 0 1-10 0Z"/><path d="M12 17v4"/></svg>`,
+	503: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7h.01M7 16h.01"/></svg>`,
+	504: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M7 12a5 5 0 0 1 10 0"/><path d="M10 12a2 2 0 0 1 4 0"/><path d="M12 12v6"/></svg>`,
+};
+function errorFamily(code) {
+	if (code === 401) return "Autenticación";
+	if (code === 403) return "Permisos";
+	if (code === 404) return "Página";
+	if (code === 408 || code === 429 || code === 504) return "Tiempo";
+	if (code >= 500) return "Servidor";
+	return "Solicitud";
+}
 
 const NAV_ICON = {
 	home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg>`,
@@ -758,18 +782,23 @@ export function errorPage({
 </div>`
 		: "";
 	const body = `<div class="error-screen">
-  <div class="error-orbit" aria-hidden="true">${ERROR_ICON}</div>
-  <div class="error-code">${esc(code)}</div>
-  <h1>${esc(heading)}</h1>
-  <p>${esc(detail)}</p>
-  <div class="error-actions">
-    <a class="small primary-small" href="/">Volver al inicio</a>
-    ${user ? '<a class="small" href="/account">Mi cuenta</a>' : '<a class="small" href="/login">Iniciar sesión</a>'}
-    ${code >= 500 ? '<button class="small" type="button" onclick="location.reload()">Reintentar</button>' : ""}
-    <button class="small" type="button" onclick="history.back()">Volver atrás</button>
+  <div class="error-card" role="alert">
+    <div class="error-top">
+      <div class="error-orbit" aria-hidden="true">${ERROR_ICONS[code] || ERROR_ICON}</div>
+      <span class="error-family">${esc(errorFamily(code))}</span>
+    </div>
+    <div class="error-code">${esc(code)}</div>
+    <h1>${esc(heading)}</h1>
+    <p>${esc(detail)}</p>
+    <div class="error-actions">
+      <a class="small primary-small" href="${user ? "/" : "/login"}">${user ? "Volver al inicio" : "Iniciar sesión"}</a>
+      ${user ? '<a class="small" href="/account">Mi cuenta</a>' : '<a class="small" href="/">Ir al inicio</a>'}
+      ${code >= 500 ? '<button class="small" type="button" onclick="location.reload()">Reintentar</button>' : ""}
+      <button class="small" type="button" onclick="if (history.length > 1) history.back(); else location.href='/'">Volver atrás</button>
+    </div>
+    ${code >= 500 ? '<p class="hint">Si el problema continúa, contacta con el administrador.</p>' : ""}
+    ${preview}
   </div>
-  ${code >= 500 ? '<p class="hint">Si el problema continúa, contacta con el administrador.</p>' : ""}
-  ${preview}
 </div>`;
 	return shell(`${code} · ${heading}`, body, { user, topbar: user ? topbar(user) : "", chatFab: false });
 }
